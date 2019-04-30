@@ -1,0 +1,413 @@
+position startpos moves
+ignore_moves 7g7f
+go
+stop
+
+
+position startpos moves 5i5h
+ignore_moves 8c8d
+go
+stop
+
+position startpos moves 5i5h 5a5b
+ignore_moves 7g7f 2g2f
+go
+stop
+
+position startpos moves 5i5h 5a5b
+ignore_moves 7g7f 2g2f 5h6h 5h4h
+
+
+
+position startpos moves 7g7f 8c8d 2g2f 8d8e 5i5h 8e8f 8g8f 8b8f 6i7h 1c1d 2f2e 8f8d P*8g 5a6b 3i3h
+
+後手の持駒：歩　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂v銀v金 ・v金v銀v桂v香|一
+| ・ ・ ・v玉 ・ ・ ・v角 ・|二
+|v歩 ・v歩v歩v歩v歩v歩v歩 ・|三
+| ・v飛 ・ ・ ・ ・ ・ ・v歩|四
+| ・ ・ ・ ・ ・ ・ ・ 歩 ・|五   手数=15  ▲38銀
+| ・ ・ 歩 ・ ・ ・ ・ ・ ・|六
+| 歩 歩 ・ 歩 歩 歩 歩 ・ 歩|七
+| ・ 角 金 ・ 玉 ・ 銀 飛 ・|八
+| 香 桂 銀 ・ ・ 金 ・ 桂 香|九
++---------------------------+
+先手の持駒：
+
+
+position startpos moves 7g7f 3c3d 3i4h 7a6b 2g2f 4c4d 4g4f 4a3b 4h4g 3a4b 4g5f 4b3c 2h4h 5c5d 5i6h 6b5c 3g3f 5c6d 4f4e 4d4e 5f4e 5d5e 4e5d 6a5b 6g6f 3c4d P*4e 4d5c 5d5c+ 6d5c 4i5h 8c8d 9g9f 5c4d 6h7h 4d3c 5h6g 5b5c 7i6h 8d8e 6h7g 1c1d 1g1f 9c9d S*6e 5c5b 5g5f 5e5f 6e5f 3c4b 8h7i 4b4c 3f3e 3d3e 7i3e P*4d 4e4d 4c4d 3e6h 8b8d 5f4e P*3d 4e4d S*4c 4d5c+ 5b5c 4h4g 5c5b 4g4h 4c4d 4h4i P*4g 4i4h 5b4b 4h4i 4b4a 4i4h 4a5b 4h5h 4d5e 2i3g S*3f P*3c 2b3c 3g2e 3c4d P*3c 2a3c 2e3c+ 3b3c N*2e 3c3b P*3c 3b4b S*3b N*4f 6h4f 5e4f N*6e 5b5c 6i6h 5c5d
+
+後手の持駒：角　歩三　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂 ・ ・v玉 ・ ・ ・v香|一
+| ・ ・ ・ ・ ・v金 銀 ・ ・|二
+| ・ ・v歩v歩 ・ ・ 歩v歩 ・|三
+|v歩v飛 ・ ・v金v角v歩 ・v歩|四
+| ・v歩 ・ 桂 ・ ・ ・ 桂 ・|五   手数=102  △54金
+| 歩 ・ 歩 歩 ・v銀v銀 歩 歩|六
+| ・ 歩 銀 金 ・v歩 ・ ・ ・|七
+| ・ ・ 玉 金 飛 ・ ・ ・ ・|八
+| 香 桂 ・ ・ ・ ・ ・ ・ 香|九
++---------------------------+
+先手の持駒：
+
+
+position startpos moves 7g7f 8c8d 2g2f 8d8e 2f2e 4a3b 6i7h 3c3d 2e2d 2c2d 2h2d 8e8f 8g8f 8b8f 2d3d 2b3c 3d3f 8f8d 3f2f 3a2b P*8g 5a6b 8h3c+ 2a3c B*2a
+
+後手の持駒：角　歩二　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂v銀v金 ・ ・ ・ 角v香|一
+| ・ ・ ・v玉 ・ ・v金v銀 ・|二
+|v歩 ・v歩v歩v歩v歩v桂 ・v歩|三
+| ・v飛 ・ ・ ・ ・ ・ ・ ・|四
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|五   手数=25  ▲21角打
+| ・ ・ 歩 ・ ・ ・ ・ 飛 ・|六
+| 歩 歩 ・ 歩 歩 歩 歩 ・ 歩|七
+| ・ ・ 金 ・ ・ ・ ・ ・ ・|八
+| 香 桂 銀 ・ 玉 金 銀 桂 香|九
++---------------------------+
+先手の持駒：歩二　
+
+
+position startpos moves 7g7f 8c8d 3i3h 3c3d 3g3f 8d8e 3h3g 4a3b 8h2b+ 3a2b 7i8h 7a6b 8h7g 6c6d 2h8h 5a4b 4i3h 2b3c 5i4h 6b6c 6i5h 7c7d 4h3i 8a7c 3i2h 8b8a 1g1f 1c1d 4g4f 6a6b 5h4g 4c4d 5g5f 3b4c 7g6f 6d6e 6f5g 4b3b 5f5e 6c6d 5g5f 9c9d 9g9f 2c2d 3g2f 3c4b 3f3e 2d2e 2f2e 3d3e 7f7e 6d7e 1f1e 1d1e P*1c 1a1c 2e2d P*2b 2d3e 1e1f 3e2d 1f1g+ 1i1g P*1f 1g1f 1c1f P*1g 4c3d P*3c 2a3c 2d3c+ 4b3c 1g1f L*2c P*3e 3d3e L*3g P*3d 3g3e 3d3e N*1e B*7b 5e5d L*2d 1e2c+ 2b2c 4f4e S*3f 4e4d 3c4d L*4f P*4e 5f4e 3f4e 4f4e 4d4e G*4d N*3f 4g3f 4e3f B*4c 3b2b 4c3d+ L*3a S*3c 2b1c 1f1e P*4h 8h4h P*4g 4h4g S*5f 4g4f G*4g 4f4g P*1d 3c2d+
+
+後手の持駒：
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v飛 ・ ・ ・ ・v香 ・ ・|一
+| ・ ・v角v金 ・ ・ ・ ・ ・|二
+| ・ ・v桂 ・v歩 ・ ・v歩v玉|三
+|v歩 ・v歩 ・ 歩 金 馬 全v歩|四
+| ・v歩v銀v歩 ・ ・v歩 ・ 歩|五   手数=117,IsSenteTurn()=0  ▲24銀成
+| 歩 ・ ・ ・v銀 ・v銀 ・ ・|六
+| ・ 歩 ・ 歩 ・ 飛 ・ 歩 ・|七
+| ・ ・ ・ ・ ・ ・ 金 玉 ・|八
+| 香 桂 ・ ・ ・ ・ ・ 桂 ・|九
++---------------------------+
+先手の持駒：金　桂　香　歩四
+
+
+詰み上がり
+position startpos moves 7g7f 8c8d 3i3h 3c3d 3g3f 8d8e 3h3g 4a3b 8h2b+ 3a2b 7i8h 7a6b 8h7g 6c6d 2h8h 5a4b 4i3h 2b3c 5i4h 6b6c 6i5h 7c7d 4h3i 8a7c 3i2h 8b8a 1g1f 1c1d 4g4f 6a6b 5h4g 4c4d 5g5f 3b4c 7g6f 6d6e 6f5g 4b3b 5f5e 6c6d 5g5f 9c9d 9g9f 2c2d 3g2f 3c4b 3f3e 2d2e 2f2e 3d3e 7f7e 6d7e 1f1e 1d1e P*1c 1a1c 2e2d P*2b 2d3e 1e1f 3e2d 1f1g+ 1i1g P*1f 1g1f 1c1f P*1g 4c3d P*3c 2a3c 2d3c+ 4b3c 1g1f L*2c P*3e 3d3e L*3g P*3d 3g3e 3d3e N*1e B*7b 5e5d L*2d 1e2c+ 2b2c 4f4e S*3f 4e4d 3c4d L*4f P*4e 5f4e 3f4e 4f4e 4d4e G*4d N*3f 4g3f 4e3f B*4c 3b2b 4c3d+ L*3a S*3c 2b1c 1f1e P*4h 8h4h P*4g 4h4g S*5f 4g4f G*4g 4f4g P*1d 3c2d+ 1c2b 3d2c 2b2a G*2b
+
+後手の持駒：
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v飛 ・ ・ ・ ・v香v玉 ・|一
+| ・ ・v角v金 ・ ・ ・ 金 ・|二
+| ・ ・v桂 ・v歩 ・ ・ 馬 ・|三
+|v歩 ・v歩 ・ 歩 金 ・ 全v歩|四
+| ・v歩v銀v歩 ・ ・v歩 ・ 歩|五   手数=121,IsSenteTurn()=0  ▲22金打
+| 歩 ・ ・ ・v銀 ・v銀 ・ ・|六
+| ・ 歩 ・ 歩 ・ 飛 ・ 歩 ・|七
+| ・ ・ ・ ・ ・ ・ 金 玉 ・|八
+| 香 桂 ・ ・ ・ ・ ・ 桂 ・|九
++---------------------------+
+先手の持駒：桂　香　歩五　
+
+
+後手が駒損で負けだけと3手で詰ました。
+position startpos moves 7g7f 5c5d 5g5f 5d5e 5f5e 8b5b 2g2f 5b5e 5i6h 5e5i+ 6h7h 3c3d 8h2b+ 4a4b 2b3a 4b3b 3a3b 1c1d 7i8h P*5g 6i6h 5g5h+ 8h7g 7a7b 7g6f 9c9d 8g8f 9d9e 3b4c 5i6h 7h8g G*8h
+
+後手の持駒：
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂 ・v金v玉 ・ ・v桂v香|一
+| ・ ・v銀 ・ ・ ・ ・ ・ ・|二
+| ・v歩v歩v歩 ・ 馬 ・v歩 ・|三
+| ・ ・ ・ ・ ・ ・v歩 ・v歩|四
+|v歩 ・ ・ ・ ・ ・ ・ ・ ・|五   手数=32,IsSenteTurn()=1  △88金打
+| ・ 歩 歩 銀 ・ ・ ・ 歩 ・|六
+| 歩 玉 ・ 歩 ・ 歩 歩 ・ 歩|七
+| ・v金 ・v龍vと ・ ・ 飛 ・|八
+| 香 桂 ・ ・ ・ 金 銀 桂 香|九
++---------------------------+
+先手の持駒：角　金　銀　歩二　
+
+
+
+
+
+
+
+打ち歩詰
+
+position startpos moves 7g7f 8c8d 3i3h 3c3d 3g3f 8d8e 3h3g 4a3b 8h2b+ 3a2b 7i8h 7a6b 8h7g 6c6d 2h8h 5a4b 4i3h 2b3c 5i4h 6b6c 6i5h 7c7d 4h3i 8a7c 3i2h 8b8a 1g1f 1c1d 4g4f 6a6b 5h4g 4c4d 5g5f 3b4c 7g6f 6d6e 6f5g 4b3b 5f5e 6c6d 5g5f 9c9d 9g9f 2c2d 3g2f 3c4b 3f3e 2d2e 2f2e 3d3e 7f7e 6d7e 1f1e 1d1e P*1c 1a1c 2e2d P*2b 2d3e 1e1f 3e2d 1f1g+ 1i1g P*1f 1g1f 1c1f P*1g 4c3d P*3c 2a3c 2d3c+ 4b3c 1g1f L*2c P*3e 3d3e L*3g P*3d 3g3e 3d3e N*1e B*7b 5e5d L*2d 1e2c+ 2b2c 4f4e S*3f 4e4d 3c4d L*4f P*4e 5f4e 3f4e 4f4e 4d4e G*4d N*3f 4g3f 4e3f B*4c 3b2b 4c3d+ L*3a S*3c 2b1c 1f1e P*4h 8h4h P*4g 1e1d 1c1d N*2f 1d1c 3c2b+ 4g4h+ 4d3c
+
+後手：
+後手の持駒：飛　金　銀　歩二　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v飛 ・ ・ ・ ・v香 ・ ・|一
+| ・ ・v角v金 ・ ・ ・ 全 ・|二
+| ・ ・v桂 ・v歩 ・ 金v歩v玉|三
+|v歩 ・v歩 ・ 歩 ・ 馬v香 ・|四
+| ・v歩v銀v歩 ・ ・v歩 ・ ・|五   手数=117,IsSenteTurn()=0  ▲33金
+| 歩 ・ ・ ・ ・ ・v銀 桂 ・|六
+| ・ 歩 ・ 歩 ・ ・ ・ 歩 ・|七
+| ・ ・ ・ ・ ・vと 金 玉 ・|八
+| 香 桂 ・ ・ ・ ・ ・ 桂 ・|九
++---------------------------+
+先手の持駒：歩三　
+先手：
+
+
+打ち歩詰
+
+position startpos moves 7g7f 8c8d 3i3h 3c3d 3g3f 8d8e 3h3g 4a3b 8h2b+ 3a2b 7i8h 7a6b 8h7g 6c6d 2h8h 5a4b 4i3h 2b3c 5i4h 6b6c 6i5h 7c7d 4h3i 8a7c 3i2h 8b8a 1g1f 1c1d 4g4f 6a6b 5h4g 4c4d 5g5f 3b4c 7g6f 6d6e 6f5g 4b3b 5f5e 6c6d 5g5f 9c9d 9g9f 2c2d 3g2f 3c4b 3f3e 2d2e 2f2e 3d3e 7f7e 6d7e 1f1e 1d1e P*1c 1a1c 2e2d P*2b 2d3e 1e1f 3e2d 1f1g+ 1i1g P*1f 1g1f 1c1f P*1g 4c3d P*3c 2a3c 2d3c+ 4b3c 1g1f L*2c P*3e 3d3e L*3g P*3d 3g3e 3d3e N*1e B*7b 5e5d L*2d 1e2c+ 2b2c 4f4e S*3f 4e4d 3c4d L*4f P*4e 5f4e 3f4e 4f4e 4d4e G*4d N*3f 4g3f 4e3f B*4c 3b2b 4c3d+ L*3a S*3c 2b1c 1f1e P*4h 8h4h P*4g 1e1d 1c1d N*2f 1d1c 3c2b+ 4g4h+ 4d3c P*1g
+
+後手：
+後手の持駒：飛　金　銀　歩　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v飛 ・ ・ ・ ・v香 ・ ・|一
+| ・ ・v角v金 ・ ・ ・ 全 ・|二
+| ・ ・v桂 ・v歩 ・ 金v歩v玉|三
+|v歩 ・v歩 ・ 歩 ・ 馬v香 ・|四
+| ・v歩v銀v歩 ・ ・v歩 ・ ・|五   手数=118,IsSenteTurn()=1  △17歩打
+| 歩 ・ ・ ・ ・ ・v銀 桂 ・|六
+| ・ 歩 ・ 歩 ・ ・ ・ 歩v歩|七
+| ・ ・ ・ ・ ・vと 金 玉 ・|八
+| 香 桂 ・ ・ ・ ・ ・ 桂 ・|九
++---------------------------+
+先手の持駒：歩三　
+先手：
+
+
+
+手数=108,同形 = 2 回 ---> 100手目,104手目,
+手数=109,同形 = 2 回 ---> 101手目,105手目,
+手数=110,同形 = 2 回 ---> 102手目,106手目,
+手数=111,同形 = 3 回 ---> 99手目,103手目,107手目,
+手数=112,同形 = 3 回 ---> 100手目,104手目,108手目,
+111手目で4回出現。112手目まで。
+position startpos moves 6i5h 3c3d 1g1f 8c8d 5h6h 8d8e 6h7h 8e8f 8g8f 8b8f P*8g 8f8e 1f1e 4a3b 2h1h 5a4a 1h1f 8e8b 5i4h 7a6b 1f3f 8b8d 3i3h 2b3c 4h3i 3a2b 7i6h 4a3a 9g9f 2c2d 3i2h 9c9d 6g6f 2b2c 7g7f 6a5a 8h7g 5a4b 6f6e 3c7g+ 8i7g B*4e 3f5f 4e5f 5g5f 8d8b 7f7e 2a3c B*4f 4c4d 7e7d 4d4e 4f5e 5c5d 7d7c+ 8a7c 5e4d P*7f P*7d 7f7g+ 7d7c+ 6b7c 6h7g N*5c B*7a 8b5b 4d5c 4b5c N*4d 5c4d 7a4d+ B*6b 4d6f 5b4b 6f7e 3a2b P*7d 7c7d 7e7d 4e4f 4g4f P*4h 4i4h R*6i 7d7e 4b4f P*4g N*1f 1i1f 4f1f 4h4i L*1g 2h3i 6i8i+ P*7i 1g1h+ N*3f P*4c S*4a 3b3a 4a5b 3a3b 5b4a 3b3a 4a5b 3a3b 5b4a 3b3a 4a5b 3a3b 5b4a 3b3a
+
+後手：YSS 12.65 
+後手の持駒：歩二　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香 ・ ・ ・ ・ 銀v金 ・v香|一
+| ・ ・ ・v角 ・ ・ ・v玉 ・|二
+| ・ ・ ・v歩 ・v歩v桂v銀v歩|三
+|v歩 ・ ・ ・v歩 ・v歩v歩 ・|四
+| ・ ・ 馬 歩 ・ ・ ・ ・ 歩|五   手数=112,IsSenteTurn()=1  △31金
+| 歩 ・ ・ ・ 歩 ・ 桂 ・v飛|六
+| ・ 歩 銀 ・ ・ 歩 歩 歩 ・|七
+| ・ ・ 金 ・ ・ ・ 銀 ・v杏|八
+| 香v龍 歩 ・ ・ 金 玉 桂 ・|九
++---------------------------+
+先手の持駒：金　桂　
+先手：detective konan 
+
+
+手数=187,同形 = 2 回 ---> 179手目,183手目,
+手数=188,同形 = 3 回 ---> 176手目,180手目,184手目,
+連続王手の千日手、188手目で4回目
+
+position startpos moves 7g7f 3c3d 8h2b+ 3a2b B*4e B*5d 4e5d 5c5d 2g2f 4a3b 6i7h 2b3c 3i4h 5a4b 7i8h 7a6b 4i5h 6b5c 8h7g 6a5b 4g4f 8c8d 5i6i 8d8e 2f2e 4b3a 4h4g 3a2b 3g3f 4c4d 6i7i 5b4c 2i3g 7c7d 6g6f 5c6d 7i8h 7d7e 7f7e 6d7e P*7f 7e6d 5h6g 1c1d 1g1f 9c9d 4g5f 3d3e 5f4g B*6i 4g5h 6i7h+ 8h7h 3e3f 2h2g G*4h 5h6i 4h3h 7h8h 3f3g+ 2g1g P*3f 4f4e 4d4e 6i6h P*7a 6g5f 3h2h 6f6e 6d5c B*4i 5c4d B*7d 4c5c 5f6f N*6b 7f7e 6b7d 7e7d 2h1i 1g1i 3g2h 1i1g B*2f G*1h 8e8f 8g8f 2h1h 1g1h L*1g 1h2h 2f3g+ 2h3h 3g4f 4i7f 3f3g+ 3h3i 3g4h 3i2i 4d5e 6f5e 4f5e S*6f 5e6f 7g6f 8b8f B*8g S*8e 6f7g 8f7f 8g7f 8e7f 7g7f B*4g 2i7i 4h5h 6h7g G*6h 7i3i P*3h 3i2i G*7h 8h8g 7h7g 8i7g B*7h 8g8f 4g3f+ 2e2d S*9e 8f7e 2c2d P*3d 3c4b R*4a 3b3a 4a7a+ 1g1h+ 2i2d P*2c 3d3c+ 4b3c 7a3a 2b3a 2d2c+ 9e8f 7e8f R*2b N*2d 3c2d G*4a 3a4a 2c2b P*8e 8f8e G*3b R*6a 4a4b 6a3a+ 4b4c 2b3b 4c4d 3b3d 4d5e S*6f 5e6f 3d3f 7h5f+ 3f5f 6f7g B*6f 7g7h B*8g 7h7i S*8h 7i8i 8g9h 8i7h 9h8g 7h8i 8g9h 8i7h 9h8g 7h8i 8g9h 8i7h 9h8g 7h8i
+
+後手：
+後手の持駒：銀　桂二　歩　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂 ・ ・ ・ ・ 龍v桂v香|一
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|二
+| ・ ・ ・v歩v金 ・ ・ ・ ・|三
+|v歩 ・ 歩 ・v歩 ・ ・v銀v歩|四
+| ・ 玉 ・ 歩 ・v歩 ・ ・ ・|五   手数=188,IsSenteTurn()=1  △89玉
+| ・ ・ 銀 角 龍 ・ ・ ・ 歩|六
+| 歩 角 ・ ・ 歩 ・ ・ ・ ・|七
+| ・ 銀 ・v金vと ・v歩 ・v杏|八
+| 香v玉 ・ ・ ・ ・ ・ ・ ・|九
++---------------------------+
+先手の持駒：金二　歩五　
+先手：
+
+
+連続王手の千日手、51手目で4回目
+position startpos moves 7g7f 7c7d 2g2f 8a7c 2f2e 3a3b 3i3h 3c3d 2e2d 2b6f 2d2c+ 6f7e 2c3b 5a6b 7f7e 3d3e 7e7d 4a5b 7d7c+ 6b5a 7c8b 7a7b R*8a 1a1b 2h2a+ 5a6b 3b4b 5c5d 4b5b 6a5b B*7a 6b7c 8b7b 7c8d S*7c 8d7e G*8f 7e7d S*7e 7d6e 7e6f 6e7d 6f7e 7d6e 7e6f 6e7d 6f7e 7d6e 7e6f 6e7d 6f7e
+
+後手：kifuwarabe2018 
+後手の持駒：歩　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香 飛 角 ・ ・ ・ ・ 龍 ・|一
+| ・ ・ と ・v金 ・ ・ ・v香|二
+|v歩v歩 銀v歩 ・v歩 ・ ・v歩|三
+| ・ ・v玉 ・v歩 ・ ・ ・ ・|四
+| ・ ・ 銀 ・ ・ ・v歩 ・ ・|五   手数=51,IsSenteTurn()=0  ▲75銀
+| ・ 金 ・ ・ ・ ・ ・ ・ ・|六
+| 歩 歩 ・ 歩 歩 歩 歩 ・ 歩|七
+| ・ 角 ・ ・ ・ ・ 銀 ・ ・|八
+| 香 桂 銀 金 玉 金 ・ 桂 香|九
++---------------------------+
+先手の持駒：桂二　歩二　
+先手：YssZ1392c_F64L29_pro_400 
+
+
+連続王手の千日手、186手目で4回目。先手玉への王手
+position startpos moves 7g7f 8c8d 7i6h 3c3d 6g6f 7a6b 5g5f 5c5d 3i4h 3a4b 4i5h 4a3b 6i7h 5a4a 5i6i 6a5b 6h7g 4b3c 8h7i 2b3a 3g3f 4c4d 5h6g 7c7d 4h3g 3a6d 7i6h 5b4c 6i7i 4a3a 7i8h 3a2b 3g4f 6b5c 2i3g 6d7c 2g2f 3c2d 1g1f 1c1d 2h3h 9c9d 9g9f 8d8e 1i1g 9d9e 9f9e 9a9e P*9f 9e9f 9i9f P*9e 9f9e 7c9e 3f3e 3d3e 3g2e 9e7c 1f1e 1d1e P*1c L*9a 4f3e P*9g P*9f 2d3e 3h3e P*3d 3e3h S*3g 3h1h 3g2h+ 1c1b+ 1a1b 1g1e 2h1h 1e1b+ 2b1b P*3c 1b2b 3c3b+ 2b3b 8i9g 9a9f P*9h R*2i 7h7i 7c3g+ S*1b 9f9g+ 9h9g N*9e 7i7h 9e8g+ 7h8g L*8f 7g8f 8e8f 6h8f 2i6i+ 6g7g S*9i 8h9h P*8h 8g8h 9i8h+ 9h8h 8b8f 7g8f P*8g 8h8g B*7h 8g7g G*6g 7g8h P*8e 1b2c 3b3a 2c2b 3a2b S*2c 2b3a 2e3c+ 8e8f L*4b 5c4b 2f2e L*1a 2c1b+ 4b3c 1b2b 3a2b G*2f P*1d 2e2d 3c4b R*3e 2b1c 2d2c+ 1c2c L*9i 2c1c L*1i P*2c 3e3d 4c5c P*3c 8a7c N*2i 1c2b L*4f 2b1c 3c3b+ 4b3a 3d3c+ 3a4b 3c2b 1c2d 2b3c 2d1c 3c3e 2a3c P*1f 4b4c 9g9f 3c4e 3e3c 6c6d 3c2b 1c2d 2b3c 2d1c P*2g 7c8e 3c2b 1c2d 2b3c 2d1c 3c2b 1c2d 2b3c 2d1c 3c2b 1c2d 2b3c 2d1c
+
+後手：羽生善治    
+後手の持駒：金　銀二　桂　歩　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+| ・ ・ ・ ・ ・ ・ ・ ・v香|一
+| ・ ・ ・ ・ ・ ・ と ・ ・|二
+| ・ ・ ・ ・v金v銀 龍v歩v玉|三
+| ・ ・v歩v歩v歩v歩 ・ ・v歩|四
+| ・v桂 ・ ・ ・v桂 ・ ・ ・|五   手数=186,IsSenteTurn()=1  △13玉
+| 歩v歩 歩 歩 歩 香 ・ 金 歩|六
+| ・ ・ ・v金 ・ 歩v馬 歩 ・|七
+| ・ 玉v角 ・ ・ ・ ・ ・v全|八
+| 香 ・ ・v龍 ・ ・ ・ 桂 香|九
++---------------------------+
+先手の持駒：歩二　
+先手：佐藤康光    
+
+
+
+同一局面3回で千日手は打開してる
+position startpos moves 7g7f 8c8d 7i6h 3c3d 6h7g 7a6b 3i4h 3a4b 6i7h 5c5d 5i6i 4a3b 4i5h 5a4a 8h7i 6a5b 7i6h 8d8e 6i7i 4b3c 4g4f 2b3a 4h4g 3a4b 6g6f 4a3a 2g2f 7c7d 5h6g 3a2b 7i8h 9c9d 6h5i 7d7e 7f7e 4b7e 3g3f 6b7c P*7f 7e6d 5i3g 7c7d 1g1f 8a7c 1f1e 9d9e 1i1g 6d5c 2f2e 5c3a 3g2f 8b8a 2i3g 8a6a 5g5f 3a6d 2h2i 6d4b 2i5i 4b6d 6g5g 5b4b 3g4e 3c4d 5g6g 6a5a 5i2i 4b5b 2i4i 5a6a 4i5i 6d4b 5i2i 6c6d 2i5i 6a8a 5i2i 8a6a 2i5i 6a8a 5i2i 8a6a 2i5i 6a8a 5i2i 8a5a 2i5i 5a6a 5i2i 6d6e 6f6e 6a6e P*6f 6e6b 2i5i 4b6d 5i2i 6d4b 2i5i 4b6d 5i2i 6d4b 2i5i 4b6d 5i2i 6b6a 2i5i 5b4b
+
+後手：YSS 10.63:先:t=32 
+後手の持駒：歩二　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香 ・ ・v飛 ・ ・ ・v桂v香|一
+| ・ ・ ・ ・ ・v金v金v玉 ・|二
+| ・ ・v桂 ・ ・v歩 ・v歩v歩|三
+| ・ ・v銀v角v歩v銀v歩 ・ ・|四
+|v歩v歩 ・ ・ ・ 桂 ・ 歩 歩|五   手数=108,IsSenteTurn()=1  △42金
+| ・ ・ 歩 歩 歩 歩 歩 角 ・|六
+| 歩 歩 銀 金 ・ 銀 ・ ・ 香|七
+| ・ 玉 金 ・ ・ ・ ・ ・ ・|八
+| 香 桂 ・ ・ 飛 ・ ・ ・ ・|九
++---------------------------+
+先手の持駒：
+先手：IS将棋  
+
+
+
+
+
+詰み上がり
+position startpos moves 2g2f 3c3d 2f2e 2b3c 7g7f 4c4d 7i7h 3a3b 7f7e 8b4b 4i5h 7a7b 8h6f 5a6b 9g9f 4a5b 3i4h 6c6d 8i7g 6b7a 5g5f 3b4c 1g1f 4c5d 6f5g 4d4e 1f1e 9c9d 3g3f 5d6c 3f3e 3d3e 5g3e 7a8b 2e2d 2c2d P*3d 3c2b 2h2d P*2c 2d2c+ 4e4f 3e2d 4f4g+ 2d4b+ 4g5h 5i5h 5b4b 2c2b P*4a 2b2a B*8h R*8i 8h9i+ 8i9i P*2h 2a2h 5c5d B*6f 5d5e 6f5e L*7f 5e1a+ 7f7g+ 7h7g 6d6e 2h2d N*8d 3d3c+ 4b5b L*6d 6c6d 2d6d 5b6c 6d2d L*7f 7g8h G*6d P*4d 6d7e P*7h 6e6f 4d4c+ 7c7d P*3b 8a7c 3b3a+ 7c6e 6g6f P*5g 5h6g 7f7h+ 6i7h 7e7f 6g6h 7f6f B*5e P*6d 5e6f 7d7e 6h5i 7e7f L*7e 7f7g+ 7e7b+ 6a7b 8h7g 6e7g+ 6f7g S*5h 5i6h L*7f 7g5e 7f7h+ 6h7h 8d7f 7h7g G*6e 5e4d 6c5d 4d1g P*7c 2d5d 7f6h+ 7g6h 6e6f S*7h 6d6e P*6g 6f6g 7h6g 5h6g+ 6h6g 5g5h+ 6g5h 6e6f 1g5c+ S*7a P*6c 8b9c N*8e 9c8b S*9c 9a9c G*9b 8b9b 8e9c+ 9b9c 5d9d 9c8b S*9a 8b8a G*9b
+
+後手：
+後手の持駒：金　銀　桂　歩　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+| 銀v玉v銀 ・ ・v歩 と ・ 馬|一
+| 金 ・v金 ・ ・ ・ ・ ・ ・|二
+| ・v歩v歩 歩 馬 と と ・v歩|三
+| 龍 ・ ・ ・ ・ ・ ・ ・ ・|四
+| ・ ・ ・ ・ ・ ・ ・ ・ 歩|五   手数=153,IsSenteTurn()=0  ▲92金打
+| 歩 ・ ・v歩 歩 ・ ・ ・ ・|六
+| ・ 歩 ・ ・ ・ ・ ・ ・ ・|七
+| ・ ・ ・ ・ 玉 銀 ・ ・ ・|八
+| 飛 ・ ・ ・ ・ ・ ・ 桂 香|九
++---------------------------+
+先手の持駒：金　桂二　香三　歩四　
+先手：
+
+
+249手目に入玉宣言勝ち
+position startpos moves 7g7f 8c8d 8h7g 8d8e 7i7h 3c3d 2g2f 4a3b 3i3h 2b7g+ 7h7g 3a2b 3g3f 2b3c 3h3g 6c6d 3g4f 7a7b 2f2e 7b6c 5i6h 7c7d 6i7h 8a7c 4i5h 8b8a 6g6f 6a6b 6h7i 5a4b 9g9f 6d6e 6f6e 7c6e 7g6h B*4d B*5e 6c5d 5e4d 4c4d P*6f 4d4e 4f3g 1c1d 5h6g B*4i 6f6e 5d6e 2h4h 4i6g+ 7h6g 4b3a B*9e 8e8f 8g8f P*8d 8f8e P*6f 6g7g 7d7e 7f7e 6b7c 2e2d 2c2d 7e7d 7c7d B*6c 8a8b 6c7d+ 6e7d G*7c 8b8a 7c7d P*7f 7g7h 3a2b 3f3e 8d8e P*8g 8a7a P*7c 3d3e 9e8d 7a4a 8d6f G*6e S*5b 4a7a 6f8h P*6f P*6d 8e8f 8g8f 7f7g+ 7h7g P*8g 7g8g 6e5e 6d6c+ B*6e 7i7h 6e7d P*3d 3c3d 7c7b+ 7a3a 7b7c 7d9b 7c8b 9b7d P*7e 7d6e 6c6d G*6g 6h6g 6f6g+ 7h6g S*6f 6g7h P*7g 8g7g 6f7g+ 8h7g G*8g 7h7i P*7h 7i6i 6e4g+ 4h4g 8g7g 8i7g 5e4f 4g4h 4f3g 2i3g B*4d N*2f 4d7g+ G*6h 7g3c 2f3d 3c3d B*6f S*3c 3g4e N*3f 4h4g P*4d 4e5c+ 3f2h+ S*5f 2b1c 6i7h 2h1i S*4c 3d2c G*7g 1d1e P*4b 3b4c 5c4c L*4e 4g3g S*2f 3g3i 4e4g+ 4b4a+ N*4e 5f4e 2c4e G*5f 4e1h 4a3a 1c1d 4c3c 1e1f 1g1f 1d2e 3a2a 1h2h 3i8i 1a1f R*1c 1f1g+ 6f5e P*1e 5e2h 1g2h 8i1i 2e3f 1i8i B*1h 7h6g 3f3g 6g7f 4d4e 7f6e 4e4f 5b6c+ S*4e 5f5e 4g4h B*2c 3g3h 5e4e 1h3f+ 4e5e 4f4g+ 2c5f+ 2d2e N*8c 9a9b 6e7d 3f4f 8c7a+ 3e3f 1c1d+ 4f5f 5g5f 3f3g+ 1d2e 3g2g B*8c 2f3g+ 8c9b+ 4h5h 6h6g 2h3i 7d7c B*1g P*6b 1e1f 8f8e 4g5g 6g6f 1g2f+ 2e2b 1f1g+ S*8c 2f6b 6c6b 9c9d P*6c P*6a 7a6a 9d9e 6d5c 9e9f
+
+後手：Hefeweizen 
+後手の持駒：歩　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+| ・ ・ ・ 圭 ・ ・ ・ と ・|一
+| 馬 と ・ 全 ・ ・ ・ 龍 ・|二
+| ・ 銀 玉 歩 と ・ 圭 ・ ・|三
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|四
+| ・ 歩 歩 ・ 金 ・ ・ ・ ・|五   手数=248,IsSenteTurn()=1  △96歩
+|v歩 ・ ・ 金 歩 ・ ・ ・ ・|六
+| ・ ・ 金 ・vと ・v全vとvと|七
+| ・ ・ ・ ・v杏 ・v玉 ・ ・|八
+| 香 飛 ・ ・ ・ ・v杏 ・ ・|九
++---------------------------+
+先手の持駒：角　金　銀　桂二　香　歩六　
+先手：大将軍 
+
+
+459手目に宣言勝ち。policy全部0の自己対戦から
+position startpos moves 1g1f 5a4b 1i1h 6a5a 5i5h 1a1b 4g4f 5c5d 5g5f 7a6b 7g7f 3a3b 2h3h 1c1d 6i6h 6b7a 9g9f 8c8d 5h4h 8b5b 6h7g 5b6b 9i9h 9c9d 4h5h 6c6d 3h2h 1b1c 8i9g 6d6e 4f4e 4a3a 1f1e 2b1a 2h3h 4b5c 4e4d 5c4d 7g7h 5d5e 8h7g 8a9c 3i2h 7a7b 7g5i 3a4a 7h7g 4d5c 6g6f 2c2d 3h3i 4a5b 1e1d 1a2b 5h4g 6b6c 1h1e 5c4d 6f6e P*1f 4g3h 6c6b 4i4h 5e5f P*4i P*6f 5i6h 6b6d 4h4g 4d3d P*5d 7c7d 8g8f 3b4a 6h2d 5a4b 4g5f 3d2e 5f6f 5b5c 2d6h 9d9e 4i4h 6d6e 3h4i 7b8c 2i1g 1f1g+ 3g3f P*1b 6f6e N*5g 4i5i 2e3d 6e6f 8c9d R*6d 9d8e 9f9e 3d2d 6d7d 5c5b 7f7e 1g1f 6f5e 1f2g P*2c 2b3a P*6g 2g3g 9e9d 4a3b 3i3h P*9f 5e4e 1c1d 4e3e 2d1e 2h3i 3a2b 8f8e L*1f 6g6f P*7f S*8g 3g4h 5i4h 5g6i+ 7g6g 1b1c 7d8d 9a9b 4h5h P*8b 3h4h 8b8c 6g5f 1f1i+ 4h3h 3c3d 5f5e 9c8e P*4e P*5g 5h6g 5b5c 5e6d 1i2i 3e3d 3b2c 6g7f 2b1a 6h8f P*3b 3h7h 6i7i 3i2h 5c4d 7h3h 8c8d 8f9e S*6c 9e5i 1e1f 6d7d R*8h 2h1g 1f2e P*1i 8h8g+ 7f8g 4b4a 1g2f 2e3d R*7b 4d3e P*8f G*1h P*2g 7i7h 2f2e 3d2e 9g8e 6c7b N*7i S*1g 5i4h R*5b 3h1h S*1e 4h1e 2e1e S*9i 7b6a G*2b B*8i 9i8h 5g5h+ 8h9i 3e2f 4e4d 5h6h 2g2f 7h7i 1h1g 1e2d 9d9c+ N*8a G*4i 8i5f+ P*9d 6h5i S*5a 2i2h 6f6e 1d1g 8e7c+ R*4h 7d6d 2h2g 8g9f 5i6i 9c8c 5b5c 5a6b 5f2i 2f2e 2d1e 6b5c+ 4a5a R*8b 2i4g 7c7b 5a4a 9f9e 4h7h+ 4i3i 7h8g 2b1a 8g9g 9h9g 7i7h B*8g 2g1h 9d9c+ 6a7b 9c9b N*6g 1i1h 4g3g R*6h 3g5i 5c5b 2c1d 8f8e 4a4b L*8f 5i3g L*8i 7b7c 6d5c 1g1h+ 8e8d 1h1i 9e9d P*9a 8b6b+ 6i6h P*1f 1e1f P*9e 2a3c 8f8e 3g3h 6b6d 7c8d 9g9f 1f1e 6d6b R*7g 9d8d P*6d S*7c 3h3g 9i8h 3g4f P*1g P*7f P*8b 1i1h 8h9i 3c4e 7c6d 4b4a 6d6c+ 4e5g 3f3e 1d2e 1a2a P*2f 8b8a+ 4f2h 6b7a 2h3i N*5h G*9c 8d9c 3b3c G*4g 2e3d 4d4c+ 9a9b 9c8d 7h7i 5c6b 3d3e 6b5a 7i6i 7a7c 3e4d P*4f 6h5h 7e7d 4d5e 8c9c 1c1d 9c9b N*6a P*3e 3i4h P*8b 5e5f 5b6a 6g5i+ 2a3a 7g7h+ 7c9c 1h2i 3a4a 6i6h N*8c P*4b G*8f 1e2e 8g9h 7h7i 8d7c 2e3e 6a6b 5f4g+ 4c4b 3e2d 4f4e P*5b 6e6d G*9g P*2h P*4f 6b7a 7i8h 4b5b 6h7h P*3f 2f2g+ 8i8h 7h8i 8c9a+ 2g1g 8e8d P*2g R*1e 8i9i 8f8g 2d3d 5b6a S*6i 8g7g 9g8g 3f3e 3d4c 7c7b 8g8f 1e1g 2i2h 4a4b 4c5d 1g1d 5d6e P*1g 2h3h 1d1a+ P*8g 6c7c P*5e 7c8c 5g4i+ 7g7f 6e5d 7b6b 6i7h 7f8f 3h2i G*1c 4h3i 9e9d 2i1i P*5b 3i2h 1a2b 1i1h 2b1b 7h6g+ P*2f 6g6h 2f2e 6h6g 8f9e 2h2i 1g1f 2g2h+ 6b7b 4g4h 1b2a 4f4g+ 9h8i 2h1i 8c7c 4g4f 8d8c+ 2i6e 6d6c+ 5h5g 8i6g 4f5f S*3a 5g5h 9e8d 3c3d 4b4a 5f5g 6g7f 3d3e 3a2b 9i8i 6a6b 8g8h+ 6c6d 5d4e 4a3a P*1g 2b1a 5g6h 7b6c P*2c 5a6a L*1e 7f6e 4h4g
+
+後手：
+後手の持駒：
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+| 圭 と 全 金 ・ ・ 金 龍 銀|一
+| と 歩 ・ と 歩 ・ ・ ・ ・|二
+| 龍 杏 全 玉 ・ ・ ・v歩 金|三
+| 歩 金 歩 と ・ ・ ・ ・ ・|四
+| ・ ・ ・ 角v歩v玉v歩 歩v香|五   手数=458,IsSenteTurn()=1  △47成銀
+| 香 ・ ・ ・ ・ ・ ・ ・ 歩|六
+| ・ ・ ・ ・ ・v全 ・ ・v歩|七
+| ・vと ・vとvと ・ ・ ・v杏|八
+| ・v圭 ・ ・v圭v圭 ・ ・vと|九
++---------------------------+
+先手の持駒：角　
+先手：
+
+
+手順ハッシュの衝突
+position startpos moves 2h5h 8b5b 5h4h 5b7b 8g8f 4c4d 4h2h 3a3b 2h7h 7b9b 3i3h 6a6b 5i4h 6b6a 6i6h 4d4e 6h6i 8c8d 6i5i 6a6b 7h6h 7a7b 9g9f 4a4b 1g1f 5a6a 8f8e 1a1b 6h5h 4e4f 5h7h 2c2d 4h5h 2b3a 8i9g 4b4a 1f1e 9c9d 5h6i 4a4b 7h5h 9b8b 8e8d 7b8c 8d8c+ 8b8c 1e1d 8c8f 7i7h 8f8h+ 5h4h P*8d 1i1f B*1e 1f1e 6a5b B*9h 8d8e 6g6f 3b4a 3g3f 1c1d 4h6h 2a1c 7h8i 8h9h 9i9h B*2f 2g2f 7c7d 4i5h 8a7c 1e1d 9d9e 4g4f 5b4c 7g7f P*4d 6i7h 9e9f 6f6e 6b5b 5i4h 5b5a S*6a 5a6a P*8h 3a2b 2f2e S*7g 7h8g 7g6h 5h6h 6a7a 8g7g 7a8b 8i7h R*5a P*9i 3c3d 4h4g 5a5b 3h3g P*1f 7g6g 8e8f 6h7g 9f9g+ 9h9g N*7a 3g4h 5b5a B*7i 4c3c 6e6d 7c8e 4g5f 8b8c 7g8f 2b3a 8f8e 8c7c N*5e 9a9e 6d6c+ 7c6c 5e6c+
+
+この局面から
+4232KI -> 2524FU と2手動かした局面と
+1325KE -> 8574KI と2手動かした局面のハッシュ値が見事に一致します。 
+
+着手生成チェック用。駒の不成を特に。75手目で大駒の不成を。71手目で持ち駒を全部打てる。
+position startpos moves 7g7f 3c3d 2g2f 2b8h+ 7i8h 3a2b 8h7g 2b3c 7g6f 3c4d 5g5f 8b2b 6f5e 4d5e 5f5e 2c2d 2f2e 2d2e 2h2e 4a3b 2e2b+ 3b2b 5e5d 2a3c 5d5c+ 7a6b 5c6c 6b6c 1g1f 1c1d 1f1e 1d1e 1i1e 1a1c 1e1c+ 2b1c 9g9f 9c9d 9f9e 9d9e 8i7g 7c7d 7g6e 8a7c 6e7c+ 6a6b 6i5h 6b7c 5h5g 4c4d 5g5f 7c6d 5f5e 4d4e 5e6d 6c6d 5i6h 4e4f 6g6f 4f4g+ 4i3h 9e9f 7f7e 9f9g+ 7e7d 9g8h 7d7c+ 6d7c 3i4h P*1g P*4c R*2b R*7f B*6d B*7h
+
+後手の持駒：金　銀　桂　香　歩五　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香 ・ ・ ・v玉 ・ ・ ・ ・|一
+| ・ ・ ・ ・ ・ ・ ・ 飛 ・|二
+| ・v歩v銀 ・ ・ 歩v桂 ・v金|三
+| ・ ・ ・ 角 ・ ・v歩 ・ ・|四
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|五   手数=75,IsSenteTurn()=0  ▲78角打
+| ・ ・v飛 歩 ・ ・ ・ ・ ・|六
+| ・ 歩 ・ ・ ・vと 歩 ・v歩|七
+| ・vとv角 玉 ・ 銀 金 ・ ・|八
+| 香 ・ ・ ・ ・ ・ ・ 桂 ・|九
++---------------------------+
+先手の持駒：金　銀　桂　香　歩四　
+
+
+中合、移動合のチェック。104手目が角の合駒、97手目が飛の合駒
+position startpos moves 7g7f 3c3d 2g2f 2b8h+ 7i8h 3a2b 8h7g 2b3c 7g6f 3c4d 5g5f 8b2b 6f5e 4d5e 5f5e 2c2d 2f2e 2d2e 2h2e 4a3b 2e2b+ 3b2b 5e5d 2a3c 5d5c+ 7a6b 5c6c 6b6c 1g1f 1c1d 1f1e 1d1e 1i1e 1a1c 1e1c+ 2b1c 9g9f 9c9d 9f9e 9d9e 8i7g 7c7d 7g6e 8a7c 6e7c+ 6a6b 6i5h 6b7c 5h5g 4c4d 5g5f 7c6d 5f5e 4d4e 5e6d 6c6d 5i6h 4e4f 6g6f 4f4g+ 4i3h 9e9f 7f7e 9f9g+ 7e7d 9g8h 7d7c+ 6d7c 3i4h P*1g P*4c 7c6d 6h6i 6d7e 4h3i 7e7f 3g3f B*6g 2i3g 4g4f 3f3e 4f4e 6i5i 1c1d 5i4h 1d1c 3h4g 1c2c 3i2h 2c2d 4h3i 2d2c 3i3h 2c1c 2h2g 8h7i R*5i P*5c 3g2e 3c2e B*6b 5a6b 3h2h B*8b
+
+後手の持駒：飛　金　銀　桂二　香　歩四　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香 ・ ・ ・ ・ ・ ・ ・ ・|一
+| ・v角 ・v玉 ・ ・ ・ ・ ・|二
+| ・v歩 ・ ・v歩 歩 ・ ・v金|三
+| ・ ・ ・ ・ ・ ・v歩 ・ ・|四
+| ・ ・ ・ ・ ・vと 歩v桂 ・|五   手数=104,IsSenteTurn()=1  △82角打
+| ・ ・v銀 歩 ・ ・ ・ ・ ・|六
+| ・ 歩 ・v角 ・ 金 ・ 銀v歩|七
+| ・ ・ ・ ・ ・ ・ ・ 玉 ・|八
+| 香 ・vと ・ 飛 ・ ・ ・ ・|九
++---------------------------+
+先手の持駒：金　銀　桂　香　歩四　
+
+
+
+
+平手初期配置
+position sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1
+position sfen lnsgkgsnl/1r7/pppppp1pp/6p2/9/2P4P1/PP1PPPP1P/1S5R1/LN1GKGSNL w Bb 1
+豊島YSS 14金
+position sfen lnsg5/3kl1+R2/p1ppppn1p/9/8+R/2P6/PPNPPPP1P/2G2S3/+b+pS1K2G1 w BSL3Pgnl 1

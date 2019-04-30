@@ -1,0 +1,50 @@
+学習プログラムの使い方
+
+実行には caffe が必要です。
+caffe 1.0, cuda 8.0, cuDNN 6.0.21 で動作を確認しています。
+http://caffe.berkeleyvision.org/install_apt.html
+
+xzと開発環境をinstallします。
+
+$ sudo apt install xz-utils liblzma-dev
+
+archive/ の下に
+  arch000000000000.csa.xz から
+  arch000000200000.csa.xz
+ぐらいまでを置きます。
+https://drive.google.com/drive/folders/1dbE5xWGQLsduR00oxEGPpZQJtQr_EQ75
+
+$ cd archive
+$ xz -d -k *.xz
+
+ですべて展開します。
+
+$ make
+$ learn
+
+で実行します。
+12万棋譜を読み込んだ後、2000棋譜追加ごとに4000回学習、を繰り返します。
+過去10万棋譜からランダムに64局面を取り出して64 minibatchで学習します。
+
+
+実際の強化学習を行うには
+yss_dcnn.cpp の
+fReplayLearning = 0;
+ZERO_DB_SIZE = 500000;
+にして、pool/ の下に最新の棋譜が
+no000000000000.csa.xz
+no000000000001.csa.xz
+...
+と溜まっていくようにします。
+
+no000000010000.csa.xz
+を作ると
+no000000000000.csa.xz
+...
+no000000009999.csa.xz
+まではpoolから消えて
+archive/arch000000000000.csa.xz
+が作られるようにします。詳しくはサーバ側をご覧ください。
+
+過去50万棋譜まで見るにはメモリが最低でも19GB以上必要です。
+

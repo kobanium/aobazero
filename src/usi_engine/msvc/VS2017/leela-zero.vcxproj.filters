@@ -1,0 +1,306 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Source Files\bona">
+      <UniqueIdentifier>{075cc61c-6202-4f51-b19d-b0fb6a138d68}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\FastBoard.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\FastState.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\FullBoard.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\GameState.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\GTP.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Im2Col.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\KoState.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Network.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\ForwardPipe.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CPUPipe.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\OpenCL.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Random.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\SGFParser.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\SGFTree.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\SMP.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\ThreadPool.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\TimeControl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Timing.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Training.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\UCTNode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\UCTSearch.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Utils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Zobrist.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CL\cl2.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\NNCache.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Tuner.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\OpenCLScheduler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\UCTNodePointer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\bona\bitop.h">
+      <Filter>Source Files\bona</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\bona\dfpn.h">
+      <Filter>Source Files\bona</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\bona\lock.h">
+      <Filter>Source Files\bona</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\bona\param.h">
+      <Filter>Source Files\bona</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\bona\shogi.h">
+      <Filter>Source Files\bona</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\bona\yss_dcnn.h">
+      <Filter>Source Files\bona</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\bona\yss_var.h">
+      <Filter>Source Files\bona</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\GTP.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Leela.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Network.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CPUPipe.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\OpenCL.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Random.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\SMP.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Utils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Zobrist.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\NNCache.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Tuner.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\OpenCLScheduler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\attack.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\bitop.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\book.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\csa.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\data.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\debug.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\dfpn.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\dfpnhash.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\evaldiff.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\evaluate.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\gencap.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\genchk.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\gendrop.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\genevasn.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\gennocap.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\hash.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\ini.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\io.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\iterate.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\learn1.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\learn2.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\main.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\makemove.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\mate1ply.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\mate3.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\movgenex.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\next.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\phash.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\ponder.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\problem.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\proce.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\quiesrch.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\rand.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\root.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\search.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\searchr.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\swap.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\thread.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\time.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\unmake.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\utility.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\valid.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\yss_net.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\ysszero.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\sckt.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+</Project>
