@@ -39,7 +39,6 @@ class Client {
   std::unique_ptr<char []> _prec_xz;
   std::unique_ptr<char []> _saddr;
   std::thread _thread_reader, _thread_sender;
-  std::set<FNameID> _set_tmp;
   std::mutex _m;
   std::shared_ptr<const WghtFile> _wght;
   FName _dwght;

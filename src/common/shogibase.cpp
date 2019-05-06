@@ -609,7 +609,8 @@ Action Node::action_interpret(const char *cstr, SAux::Mode mode) noexcept {
 	if (!from.ok() || !to.ok()) return Action();
 	Pc pc  = _board.get_pc(from);
 	Pc cap = _board.get_pc(to);
-	if (cstr[4] == '\0') action = Action(from, to, pc, cap, Action::normal);
+	if (cstr[4] == '\0') action = Action(from, to, pc, cap,
+					     Action::normal);
 	else {
 	  if (cstr[4] != '+' || cstr[5] != '\0') return Action();
 	  action = Action(from, to, pc, cap, Action::promotion); } } } }
