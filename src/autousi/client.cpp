@@ -150,10 +150,11 @@ void Client::get_new_wght() {
     no_wght_tmp = 0; }
 
   // update information file
+  std::set<FNameID> set_tmp;
+  grab_files(set_tmp, _dwght.get_fname(), fmt_tmp_scn, 0);
   if (no_wght_tmp != no_wght) {
     // cleanup all of old temporary files
-    for (auto it = _set_tmp.begin(); !_set_tmp.empty();
-	 it = _set_tmp.erase(it))
+    for (auto it = set_tmp.begin(); !set_tmp.empty(); it = set_tmp.erase(it))
       if (remove(it->get_fname()) < 0) die(ERR_CLL("remove"));
     
     ofstream ofs(finfo.get_fname());
@@ -163,15 +164,15 @@ void Client::get_new_wght() {
     if (!ofs) {
       remove(finfo.get_fname());
       die(ERR_INT("cannot write to %s", finfo.get_fname())); } }
-  else if (!_set_tmp.empty()) {
-    auto it = _set_tmp.rbegin();
+  else if (!set_tmp.empty()) {
+    auto it = set_tmp.rbegin();
     if (nblock <= it->get_id())
       die(ERR_INT(corrupt_fmt, _dwght.get_fname())); }
   
   // flag existing blocks
   unique_ptr<bool []> flags(new bool [nblock]);
   for (uint u(0); u < nblock; ++u) flags[u] = false;
-  for (auto it = _set_tmp.begin(); it != _set_tmp.end(); ++it) {
+  for (auto it = set_tmp.begin(); it != set_tmp.end(); ++it) {
     int64_t i64(it->get_id());
     assert(0 <= i64);
     assert(i64 < static_cast<int64_t>(nblock));
@@ -199,13 +200,13 @@ void Client::get_new_wght() {
       die(ERR_INT("cannot write to %s", ftmp.get_fname())); }
     _retry_count = 0; }
   
-  grab_files(_set_tmp, _dwght.get_fname(), fmt_tmp_scn, 0);
-  if (_set_tmp.size() != nblock) die(ERR_INT(corrupt_fmt, _dwght.get_fname()));
+  grab_files(set_tmp, _dwght.get_fname(), fmt_tmp_scn, 0);
+  if (set_tmp.size() != nblock) die(ERR_INT(corrupt_fmt, _dwght.get_fname()));
 
   // gather all temporaries
   FName ftmp(_dwght.get_fname(), tmp_name);
   ofstream ofs(ftmp.get_fname(), ios::binary);
-  for (auto it = _set_tmp.begin(); it != _set_tmp.end(); ++it) {
+  for (auto it = set_tmp.begin(); it != set_tmp.end(); ++it) {
     ifstream ifs(it->get_fname(), ios::binary);
     if (!ifs) die(ERR_INT("cannot read %s", it->get_fname()));
     
@@ -223,7 +224,7 @@ void Client::get_new_wght() {
   fwght.add_fmt_fname(wght_xz_fmt, no_wght);
   if (rename(ftmp.get_fname(), fwght.get_fname()) < 0) die(ERR_CLL("rename"));
   
-  for (auto it = _set_tmp.begin(); !_set_tmp.empty(); it = _set_tmp.erase(it))
+  for (auto it = set_tmp.begin(); !set_tmp.empty(); it = set_tmp.erase(it))
     if (remove(it->get_fname()) < 0) die(ERR_CLL("remove"));
 
   cout << "new weight " << fwght.get_fname() << " arrived" << endl;
@@ -247,7 +248,7 @@ void Client::reader() noexcept {
     sec_wght = sec_retry = 0;
     
     try {
-      cout << "pooling for new weight" << endl;
+      cout << "polling for new weight" << endl;
       get_new_wght();
       _retry_count = 0;
       _has_conn    = true;
@@ -323,7 +324,6 @@ void Client::start(const char *dwght, const char *cstr_addr, uint port,
   strcpy(_saddr.get(), cstr_addr);
   _prec_xz.reset(new char [maxlen_rec_xz]);
   _pJQueue.reset(new JQueue<Job>(size_queue));
-  grab_files(_set_tmp, _dwght.get_fname(), fmt_tmp_scn, 0);
   uint retry_count = 0;
   while (true) {
     try { get_new_wght();  break; }

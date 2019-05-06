@@ -38,8 +38,8 @@ using ErrAux::die;
 using namespace IOAux;
 using uint = unsigned int;
 
-constexpr float speed_update_rate1 = 0.1f;
-constexpr float speed_update_rate2 = 0.01f;
+constexpr float speed_update_rate1 = 0.05f;
+constexpr float speed_update_rate2 = 0.005f;
 constexpr uint speed_th_1to2       = 100U;
 constexpr uint max_nchild          = 32;
 
@@ -65,7 +65,7 @@ class USIEngine : public OSI::Pipe {
 public:
   time_point<system_clock> time_last;
   float speed_average, speed_rate;
-  uint speed_nmove;
+  uint speed_nmove, nmove;
   NodeRec node;
   FName flog;
   ofstream ofs;
@@ -155,6 +155,7 @@ static void engine_out(USIEngine &c, const char *fmt, ...) noexcept {
 
 static void engine_start(USIEngine &c, const FName &cname, uint print_csa)
   noexcept {
+  c.nmove = 0;
   c.node.clear();
   c.update_wght();
 
@@ -209,7 +210,7 @@ static void engine_start(USIEngine &c, const FName &cname, uint print_csa)
   c.node.record += string(", usi-engine ") + to_string(eng_ver);
   c.node.record += string("\n'") + eng_settings;
   c.node.record	+= string("\nPI\n+\n");
-  if (c.get_id() == 0 && print_csa) cout << "PI\n+" << endl; }
+  if (c.get_id() == 0 && print_csa) cout << "PI +" << endl; }
 
 Pipe & Pipe::get() noexcept {
   static Pipe instance;
@@ -249,74 +250,89 @@ static bool play_update(char *line, USIEngine &c, uint print_csa) noexcept {
   token = OSI::strtok(line, " ,", &saveptr);
   if (strcmp(token, "bestmove") != 0) return false;
   
-  time_point<system_clock> time_now = system_clock::now();
-  float f = duration_cast<milliseconds>(time_now - c.time_last).count();
-  if (speed_th_1to2 < ++c.speed_nmove) c.speed_rate = speed_update_rate2;
-  c.speed_average += c.speed_rate * (f - c.speed_average);
-  c.time_last = time_now;
-  
-  Action actionBest;
-  bool bHasBest     = false;
+  // read played move
   long int num_best = 0;
   long int num_tot  = 0;
-  while (true) {
-    const char *str_move_usi = OSI::strtok(nullptr, " ,", &saveptr);
-    if (!str_move_usi) { node.record += "\n"; break; }
+  const char *str_move_usi = OSI::strtok(nullptr, " ,", &saveptr);
+  if (!str_move_usi) {
+    close_flush(c);
+    die(ERR_INT("bad usi format")); }
 
-    Action action = node.action_interpret(str_move_usi, SAux::usi);
-    if (!action.ok()) {
-      close_flush(c);
-      die(ERR_INT("cannot interpret candidate move %s (engine no. %d)\n%s",
-		  str_move_usi, id,
-		  static_cast<const char *>(node.to_str()))); }
-    
-    if (!action.is_move()) {
-      if (bHasBest) {
-	close_flush(c);
-	die(ERR_INT("bad candidate %s (engine no. %d)",	str_move_usi, id)); }
-      actionBest = action;
-      bHasBest   = true;
-      break; }
-    
-    if (bHasBest) node.record += ",";
-    else {
-      actionBest = action;
-      node.startpos += " ";
-      node.startpos += str_move_usi;
-      node.record   += node.get_turn().to_str();
-      if (id == 0 && print_csa) {
-	cout << node.get_turn().to_str() << action.to_str(SAux::csa)
-	     << " (" << f << "ms)" << endl; } }
-    node.record += action.to_str(SAux::csa);
+  Action actionPlay = node.action_interpret(str_move_usi, SAux::usi);
+  if (!actionPlay.ok()) {
+    close_flush(c);
+    die(ERR_INT("cannot interpret candidate move %s (engine no. %d)\n%s",
+		str_move_usi, id,
+		static_cast<const char *>(node.to_str()))); }
+
+  if (actionPlay.is_move()) {
+    time_point<system_clock> time_now = system_clock::now();
+    auto _f = duration_cast<milliseconds>(time_now - c.time_last).count();
+    float f = static_cast<float>(_f);
+    if (speed_th_1to2 < ++c.speed_nmove) c.speed_rate = speed_update_rate2;
+    c.speed_average += c.speed_rate * (f - c.speed_average);
+    c.time_last = time_now;
+
+    node.startpos += " ";
+    node.startpos += str_move_usi;
+    node.record   += node.get_turn().to_str();
+    if (id == 0 && 0 < print_csa) {
+      cout << node.get_turn().to_str() << actionPlay.to_str(SAux::csa)
+	   << " (" << f << "ms)";
+      if ((c.nmove % print_csa) == print_csa - 1U) cout << "\n";
+      else                                         cout << " ";
+      cout.flush(); }
+    c.nmove     += 1U;
+    node.record += actionPlay.to_str(SAux::csa);
     
     const char *str_count = OSI::strtok(nullptr, " ,", &saveptr);
     if (!str_count) {
       close_flush(c);
       die(ERR_INT("cannot read count (engine no. %d)", id)); }
-
+    
     char *endptr;
     long int num = strtol(str_count, &endptr, 10);
     if (endptr == str_count || *endptr != '\0' || num < 1 || num == LONG_MAX) {
       close_flush(c);
       die(ERR_INT("cannot interpret a visit count %s (engine no. %d)",
 		  str_count, id)); }
+    
+    num_best = num;
+    node.record += ",'";
+    node.record += to_string(num);
 
-    if (bHasBest) {
+    // read candidate moves
+    while (true) {
+      str_move_usi = OSI::strtok(nullptr, " ,", &saveptr);
+      if (!str_move_usi) { node.record += "\n"; break; }
+
+      Action action = node.action_interpret(str_move_usi, SAux::usi);
+      if (!action.is_move()) {
+	close_flush(c);
+	die(ERR_INT("bad candidate %s (engine no. %d)",	str_move_usi, id)); }
       node.record += ",";
-      num_tot     += num; }
-    else {
-      bHasBest = true;
-      num_best = num;
-      node.record += ",'"; }
-    node.record += to_string(num); }
+      node.record += action.to_str(SAux::csa);
+    
+      str_count = OSI::strtok(nullptr, " ,", &saveptr);
+      if (!str_count) {
+	close_flush(c);
+	die(ERR_INT("cannot read count (engine no. %d)", id)); }
 
-  if (!bHasBest) {
-    close_flush(c);
-    die(ERR_INT("cannot find any candidate (engine no. %d)", id)); }
+      num = strtol(str_count, &endptr, 10);
+      if (endptr == str_count || *endptr != '\0'
+	  || num < 1 || num == LONG_MAX) {
+	close_flush(c);
+	die(ERR_INT("cannot interpret a visit count %s (engine no. %d)",
+		    str_count, id)); }
+
+      node.record += ",";
+      num_tot     += num;
+      node.record += to_string(num); } }
+
   if (num_best < num_tot) {
     close_flush(c);
     die(ERR_INT("bad counts (engine no. %d)", id)); }
-  node.take_action(actionBest);
+  node.take_action(actionPlay);
   if (node.is_nyugyoku()) node.take_action(SAux::windecl);
   assert(node.ok());
   return true; }
@@ -373,7 +389,7 @@ void Pipe::wait() noexcept {
       close_flush(c); } }
 
   if (out_speed && _print_speed) {
-    cout << "Speed Summary:" << endl;
+    cout << "Average Speed:" << endl;
     for (uint u = 0; u < _nchild; ++u) {
       USIEngine &c = _children[u];
       cout << "- Device " << c.get_device() << " "
