@@ -6,8 +6,8 @@ PROGRAM = aobaz
 default:
 	@echo "Detected OS: ${THE_OS}"
 	$(MAKE) CC=gcc CXX=g++ \
-		CXXFLAGS='$(CXXFLAGS) -Wall -Wextra -pipe -O3 -g -march=native -std=c++14 -DNDEBUG'  \
-		LDFLAGS='$(LDFLAGS) -g' \
+		CXXFLAGS='$(CXXFLAGS) -Wall -Wextra -pipe -O3 -march=native -std=c++14 -DNDEBUG'  \
+		LDFLAGS='$(LDFLAGS)' \
 		$(PROGRAM)
 
 debug:
