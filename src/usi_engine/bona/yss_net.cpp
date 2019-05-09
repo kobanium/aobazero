@@ -279,7 +279,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 //	const auto result = Network::get_scored_moves_yss_zero((float(*)[B_SIZE][B_SIZE])data);
 	if (flag_dbgout) {
 	  printf("input");
-	  for (int i = 0; i < size; ++i) printf(" %.3e", data[i]);
+	  for (int i = 0; i < size; ++i) printf(" %g", data[i]);
 	  printf("\n"); }
 
 	const auto result = GTP::s_network->get_scored_moves_yss_zero((float(*)[B_SIZE][B_SIZE])data);
