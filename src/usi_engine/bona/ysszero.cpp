@@ -289,7 +289,7 @@ int YssZero_dbgout( tree_t * restrict ptree ) {
     pc->value = 0; }
   hs.child_num = move_num;
 
-  printf("position startpos moves %s\n", global_position_startpos_moves.c_str());
+  printf("position startpos moves%s\n", global_position_startpos_moves.c_str());
   float v = get_network_policy_value(ptree, root_turn, 1, &hs, true);
   printf("value %f\n", v);
   std::map<std::string, float> prob;
