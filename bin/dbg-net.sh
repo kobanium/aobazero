@@ -24,4 +24,4 @@ while read line
 do
     echo $line
     echo dbgout
-done < <(xz -dc $fposi) > >(bin/aobaz -q -w $fwght)
+done < <(xz -dc $fposi) > >(bin/aobaz -q -w <(xz -dc $fwght))
