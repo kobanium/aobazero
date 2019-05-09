@@ -1439,6 +1439,7 @@ double calc_penalty( void );
 #endif
 
 #if defined(YSS_ZERO)
+int YssZero_dbgout( tree_t * restrict ptree );
 int YssZero_com_turn_start( tree_t * restrict ptree );
 int getCmdLineParam(int argc, char *argv[]);
 const char *get_cmd_line_ptr();

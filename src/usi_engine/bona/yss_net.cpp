@@ -264,8 +264,8 @@ bool is_nan_inf(float x)
 	return ( std::isnan(x) || std::isinf(x) );
 }
 
-float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *phg)
-{
+float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
+                               HASH_SHOGI *phg, bool flag_dbgout) {
 	if ( ptree->nrep < 0 || ptree->nrep >= REP_HIST_LEN ) { PRT("nrep Err=%d\n",ptree->nrep); debug(); }
 
 	int size = 1*DCNN_CHANNELS*B_SIZE*B_SIZE;
@@ -277,6 +277,11 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 //	{ int sum=0; int i; for (i=0;i<size;i++) sum = 37*sum + (int)(data[i]+0.1); PRT("sum=%d\n",sum); }
 
 //	const auto result = Network::get_scored_moves_yss_zero((float(*)[B_SIZE][B_SIZE])data);
+	if (flag_dbgout) {
+	  printf("input");
+	  for (int i = 0; i < size; ++i) printf(" %.3e", data[i]);
+	  printf("\n"); }
+
 	const auto result = GTP::s_network->get_scored_moves_yss_zero((float(*)[B_SIZE][B_SIZE])data);
 
 

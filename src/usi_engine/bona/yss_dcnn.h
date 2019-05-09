@@ -84,7 +84,8 @@ inline void unpack_te(int *bz,int *az,int *tk,int *nf, int te) {
 	*nf = (te      ) & 0xff;
 }
 int get_yss_packmove_from_bona_move(int move);
-float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *phg);
+float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
+                               HASH_SHOGI *phg, bool flag_dbgout = false);
 void add_dirichlet_noise(float epsilon, float alpha, HASH_SHOGI *phg);
 
 #endif	//]] INCLUDE__GUARD

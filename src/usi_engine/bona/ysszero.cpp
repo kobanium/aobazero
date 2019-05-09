@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 #include <random>
+#include <map>
 
 #include "shogi.h"
 
@@ -273,6 +274,36 @@ int is_drop_pawn_mate(tree_t * restrict ptree, int turn, int ply)
 	}
 	return 1;
 }
+
+int YssZero_dbgout( tree_t * restrict ptree ) {
+  extern std::string global_position_startpos_moves;
+  HASH_SHOGI hs;
+  int move_num = generate_all_move( ptree, root_turn, 1 );
+  unsigned int *pmove = ptree->move_last[0];
+  for (int i = 0; i < move_num; i++) {
+    int move = pmove[i];
+    CHILD *pc = &hs.child[i];
+    pc->move = move;
+    pc->bias = 0;
+    pc->games = 0;
+    pc->value = 0; }
+  hs.child_num = move_num;
+
+  printf("position startpos moves %s\n", global_position_startpos_moves.c_str());
+  float v = get_network_policy_value(ptree, root_turn, 1, &hs, true);
+  printf("value %f\n", v);
+  std::map<std::string, float> prob;
+  char buf[7];
+  for (int i = 0; i < hs.child_num; ++i) {
+    CHILD &c = hs.child[i];
+    csa2usi(ptree, str_CSA_move(c.move), buf);
+    prob[buf] = c.bias; }
+
+  printf("policy");
+  for (auto &vt : prob) printf(" %s %f", vt.first.c_str(), vt.second);
+  printf("\nEND\n");
+  fflush(stdout);
+  return 1; }
 
 int YssZero_com_turn_start( tree_t * restrict ptree )
 {

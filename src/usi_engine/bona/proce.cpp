@@ -6,8 +6,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string>
 #include "shogi.h"
 
+std::string global_position_startpos_moves;
 
 /* unacceptable when the program is thinking, or quit pondering */
 #define AbortDifficultCommand                                              \
@@ -452,6 +454,7 @@ static int CONV proce_usi( tree_t * restrict ptree )
       return iret;
     }
 
+  if ( ! strcmp( token, "dbgout" ) ) { return YssZero_dbgout( ptree ); }
   if ( ! strcmp( token, "stop" ) )     { return cmd_move_now(); }
   if ( ! strcmp( token, "position" ) ) { return usi_posi( ptree, &lasts ); }
   if ( ! strcmp( token, "quit" ) )     { return cmd_quit(); }
@@ -619,6 +622,7 @@ usi_posi( tree_t * restrict ptree, char **lasts )
       return -1;
     }
     
+  global_position_startpos_moves = std::string("");
   for ( ;; )  {
 
     token = strtok_r( NULL, str_delimiters, lasts );
@@ -636,7 +640,9 @@ usi_posi( tree_t * restrict ptree, char **lasts )
       {
 	return -1;
       }
-  }
+    
+    global_position_startpos_moves += std::string(" ");
+    global_position_startpos_moves += std::string(token); }
     
   if ( get_elapsed( &time_turn_start ) < 0 ) { return -1; }
   return 1;
