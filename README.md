@@ -68,8 +68,8 @@ usiエンジンであるaobazはGPL v3です。それ以外はpublic domainで�
 詳しくはaobazero-1.0.tar.gz内のlicensesをご覧ください。
 
 # Link
- - [Leela Zero](https://github.com/leela-zero/leela-zero)
- - [Leela Chess Zero](https://github.com/LeelaChessZero/lczero)
+ - [Leela Zero (Go)](https://github.com/leela-zero/leela-zero)
+ - [LCZero (Chess)](https://github.com/LeelaChessZero/lczero)
 
 # 参考文献
  - D. Silver, et al. (2017a). Mastering the game of Go without human knowledge, *Nature*, **550**, 354-359.
