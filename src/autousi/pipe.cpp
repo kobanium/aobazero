@@ -333,7 +333,8 @@ static bool play_update(char *line, USIEngine &c, uint print_csa) noexcept {
     close_flush(c);
     die(ERR_INT("bad counts (engine no. %d)", id)); }
   node.take_action(actionPlay);
-  if (node.is_nyugyoku()) node.take_action(SAux::windecl);
+  if (node.get_type().is_interior() && node.is_nyugyoku())
+    node.take_action(SAux::windecl);
   assert(node.ok());
   return true; }
 
