@@ -17,7 +17,9 @@ AIプレイヤの名前でもあります。
 高性能なデスクトップゲーミングマシン1台で100年近い計算時間を要します。  
   
 Silverら（2017a, 2018）は囲碁やチェスでの実験結果も報告しています。
-囲碁のユーザ参加型の追試実験は[Leela Zero](https://zero.sjeng.org)によって行われていて、既に人間を超える棋力を獲得するということが再現されています。
+ユーザ参加型の追試実験は、囲碁の[Leela Zero](https://zero.sjeng.org)
+やチェスの[LCZero](https://lczero.org)によって行われていて、
+既に人間を超える棋力を獲得するということが再現されています。
 
 # 棋譜の生成に協力してみたい
 [Windows用の実行ファイル(現在は64bit版のみです)](https://github.com/kobanium/aoba-zero/releases)
