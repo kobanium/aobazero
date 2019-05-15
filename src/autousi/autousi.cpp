@@ -169,7 +169,7 @@ static void output() noexcept {
   printf("- Recv Status: Weights' ID %" PRIi64 ", ", wght_id);
 
   if (is_downloading) puts("NOW DOWNLOADING NEW WEIGHTS\n");
-  else                printf("Final Check %s\n\n", buf_time); }
+  else                printf("Last Check %s\n\n", buf_time); }
 
 int main() {
   OSI::prevent_multirun(FName("/tmp/autousi.jBQoNA7kEd.lock"));
