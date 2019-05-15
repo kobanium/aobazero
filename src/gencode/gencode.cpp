@@ -189,7 +189,8 @@ static void out_sq() noexcept {
 	       (i1 == 80 && i2 == 80) ? " } };\n\n"
 	       : ((i2 == 80) ? " },\n" : ",\n")); } }
   
-  fputs("static constexpr Sq::Attacks tbl_sq_atk[Color::ok_size][81] = {\n", pf);
+  fputs("static constexpr Sq::Attacks tbl_sq_atk[Color::ok_size][81] = {\n",
+	pf);
   for (u = 0; u < 81U; ++u) {
     int rank = static_cast<int>(u / 9U);
     int file = static_cast<int>(u % 9U);
@@ -218,6 +219,10 @@ static void out_sq() noexcept {
   
     // Black Lance
     for (int i = 1; i < 9; ++i) data.set_bit(rank - i, file);
+    data.out("      ", pf, ",\n");
+
+    // Black Pawn
+    data.set_bit(rank - 1, file);
     data.out("      ", pf, (u < 80U) ? " },\n" : " } },\n"); }
 
   for (u = 0; u < 81U; ++u) {
@@ -248,6 +253,10 @@ static void out_sq() noexcept {
 
     // White Lance
     for (int i = 1; i < 9; ++i) data.set_bit(rank + i, file);
+    data.out("      ", pf, ",\n");
+
+    // White Pawn
+    data.set_bit(rank + 1, file);
     data.out("      ", pf, (u < 80U) ? " },\n" : " } } };\n\n"); }
 
   fputs("static constexpr BMap tbl_sq_atk_king[81] = {\n", pf);
@@ -279,6 +288,20 @@ static void out_sq() noexcept {
 	    9*rank + 3, 9*rank + 2, 9*rank + 1, 9*rank + 0);
     fputs((rank == 0) ? " } };\n\n" : ",\n", pf); }
   
+  fputs("static constexpr uchar tbl_sq_adv[2][81] = {\n", pf);
+  fputs("  { 81U, 81U, 81U, 81U, 81U, 81U, 81U, 81U, 81U,\n", pf);
+  for (int rank = 1; rank < 9; ++rank) {
+    fprintf(pf, "    %2dU, %2dU, %2dU, %2dU, %2dU, %2dU, %2dU, %2dU, %2dU",
+	    9*rank - 9, 9*rank - 8, 9*rank - 7, 9*rank - 6, 9*rank - 5,
+	    9*rank - 4, 9*rank - 3, 9*rank - 2, 9*rank - 1);
+    fputs((rank == 8) ? " },\n" : ",\n", pf); }
+  for (int rank = 0; rank < 8; ++rank) {
+    fputs((rank == 0) ? "  { " : "    ", pf);
+    fprintf(pf, "%2dU, %2dU, %2dU, %2dU, %2dU, %2dU, %2dU, %2dU, %2dU,\n",
+	    9*rank + 9, 9*rank +10, 9*rank +11, 9*rank +12, 9*rank +13,
+	    9*rank +14, 9*rank +15, 9*rank +16, 9*rank +17); }
+  fputs("    81U, 81U, 81U, 81U, 81U, 81U, 81U, 81U, 81U } };\n\n", pf);
+  
   fputs("static constexpr uchar tbl_sq_ray[81][81] = {\n", pf);
   for (int sq1 = 0; sq1 < 81; ++sq1) {
     int rank1 = sq1 / 9;
@@ -302,8 +325,7 @@ static void out_sq() noexcept {
 	      tbl[x + 5], tbl[x + 6], tbl[x + 7], tbl[x + 8]);
       if (sq1 == 80 && rank == 8) fputs(" } };\n", pf);
       else if (rank == 8)         fputs(" },\n", pf);
-      else                        fputs(",\n", pf); } }
-}
+      else                        fputs(",\n", pf); } } }
 
 void out_bmap() noexcept {
   PF pf("src/common/tbl_bmap.inc");
