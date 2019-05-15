@@ -209,7 +209,7 @@ void OSI::Pipe::open(const char *, char * const argv[]) noexcept {
       || !CloseHandle(h_in_rd))
     die(ERR_INT("CloseHandle() failed: %s", LastErr().get()));
 
-  pid =GetProcessId(pi.hProcess);
+  DWORD pid =GetProcessId(pi.hProcess);
   if (!CloseHandle(pi.hProcess) || !CloseHandle(pi.hThread))
     die(ERR_INT("CloseHandle() failed: %s", LastErr().get()));
 
