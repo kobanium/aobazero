@@ -279,6 +279,7 @@ bool Pipe::play_update(char *line, class USIEngine &c) noexcept {
     double fms = static_cast<double>(rep);
     if (speed_th_1to2 < ++c.speed_nmove) c.speed_rate = speed_update_rate2;
     c.speed_average += c.speed_rate * (fms - c.speed_average);
+    c.time_last = time_now;
 
     node.startpos += " ";
     node.startpos += str_move_usi;
@@ -375,7 +376,6 @@ void Pipe::wait() noexcept {
 	  if (c.node.get_type().is_term()) engine_out(c, "quit");
 	  else {
 	    engine_out(c, "%s", c.node.startpos.c_str());
-	    c.time_last = system_clock::now();
 	    engine_out(c, "go visit"); } } } }
     
     if (eof) {
