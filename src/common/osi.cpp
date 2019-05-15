@@ -60,7 +60,7 @@ class PipeIn_impl {
   HANDLE _hfile, _do_read, _has_line;
   char _line[65536], _line_out[65536];
   bool _do_getline;
-  volatile atomic<bool> _is_eof;
+  atomic<bool> _is_eof;
   
   void reader() {
     size_t len_line = 0, len_buf = 0;
@@ -157,11 +157,13 @@ public:
 class OSI::Pipe_impl {
 public:
   HANDLE out;
+  DWORD pid;
   PipeIn_impl in, err;
   char *ready_in, *ready_err;
   bool done_in, done_err;
-  explicit Pipe_impl(HANDLE out_, HANDLE in_, HANDLE err_) noexcept
-    : out(out_), in(in_), err(err_), done_in(false), done_err(false) {} };
+  explicit Pipe_impl(HANDLE out_, uint pid_, HANDLE in_, HANDLE err_) noexcept
+    : out(out_), pid(pid_), in(in_), err(err_), done_in(false),
+      done_err(false) {} };
 
 void OSI::Pipe::open(const char *, char * const argv[]) noexcept {
   assert(argv && argv[0]);
@@ -207,10 +209,11 @@ void OSI::Pipe::open(const char *, char * const argv[]) noexcept {
       || !CloseHandle(h_in_rd))
     die(ERR_INT("CloseHandle() failed: %s", LastErr().get()));
 
+  pid =GetProcessId(pi.hProcess);
   if (!CloseHandle(pi.hProcess) || !CloseHandle(pi.hThread))
     die(ERR_INT("CloseHandle() failed: %s", LastErr().get()));
 
-  _impl.reset(new Pipe_impl(h_in_wr, h_out_rd, h_err_rd)); }
+  _impl.reset(new Pipe_impl(h_in_wr, pid, h_out_rd, h_err_rd)); }
 
 void OSI::Pipe::close_write() const noexcept {
   if (!_impl->out) return;
@@ -326,7 +329,7 @@ public:
     return _ffd.cFileName; }
 };
 
-volatile atomic<handler_t> handler;
+atomic<handler_t> handler;
 BOOL WINAPI CtrlHandler(DWORD fdwCtrlType) noexcept {
   switch (fdwCtrlType) {
   case CTRL_C_EVENT:
@@ -733,6 +736,8 @@ char *PipeIn_impl::getline_block() noexcept {
 OSI::Pipe::Pipe() noexcept : _impl(nullptr) {}
 OSI::Pipe::~Pipe() noexcept {}
 bool OSI::Pipe::is_closed() const noexcept { return !_impl; }
+uint OSI::Pipe::get_pid() const noexcept {
+  return static_cast<uint>(_impl->pid); }
 char *OSI::Pipe::getline_in() const noexcept {
   return _impl->in.getline(); }
 char *OSI::Pipe::getline_err() const noexcept {

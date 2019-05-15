@@ -116,8 +116,11 @@ static uint16_t receive_header(const OSI::Conn &conn, uint TO, uint bufsiz) {
   
   return bytes_to_int<uint16_t>(buf + 2); }
 
-Client::Client() noexcept : _quit(false), _has_conn(false), _wght_id(-1),
-			    _ver_engine(-1) {}
+Client::Client() noexcept : _quit(false), _has_conn(false),
+			    _downloading(false), _nsend(0), _ndiscard(0),
+			    _wght_id(-1), _ver_engine(-1) {
+  _buf_wght_time[0] = '\0'; }
+
 Client::~Client() noexcept {}
 
 void Client::get_new_wght() {
@@ -130,6 +133,8 @@ void Client::get_new_wght() {
   buf[0] = 1;
   conn.send(buf, 1, _sendTO, _send_bufsiz);
   conn.recv(buf, 12, _recvTO, _recv_bufsiz);
+  make_time_stamp(_buf_wght_time, sizeof(_buf_wght_time), "%D %T");
+  
   int64_t no_wght = bytes_to_int<int64_t>(buf);
   uint nblock     = bytes_to_int<uint>(buf + 8);
   if (nblock == 0) die(ERR_INT("invalid nblock value %d", nblock));
@@ -138,6 +143,7 @@ void Client::get_new_wght() {
   if (no_wght < _wght_id) die(ERR_INT(corrupt_fmt, _dwght.get_fname()));
 
   // get old weight information file
+  _downloading = true;
   int64_t no_wght_tmp;
   FName finfo(_dwght.get_fname(), info_name);
   try {
@@ -146,11 +152,11 @@ void Client::get_new_wght() {
     no_wght_tmp = Config::get<int64_t>(m, "WeightNo",
 				       [](int64_t v){ return 0 <= v; }); }
   catch (const ErrInt &e) {
-    cout << e.what() << endl;
+    cout << "\n" << e.what() << endl;
     no_wght_tmp = 0; }
 
   // update information file
-  std::set<FNameID> set_tmp;
+  set<FNameID> set_tmp;
   grab_files(set_tmp, _dwght.get_fname(), fmt_tmp_scn, 0);
   if (no_wght_tmp != no_wght) {
     // cleanup all of old temporary files
@@ -171,7 +177,7 @@ void Client::get_new_wght() {
   
   // flag existing blocks
   unique_ptr<bool []> flags(new bool [nblock]);
-  for (uint u(0); u < nblock; ++u) flags[u] = false;
+  for (uint u = 0; u < nblock; ++u) flags[u] = false;
   for (auto it = set_tmp.begin(); it != set_tmp.end(); ++it) {
     int64_t i64(it->get_id());
     assert(0 <= i64);
@@ -227,7 +233,6 @@ void Client::get_new_wght() {
   for (auto it = set_tmp.begin(); !set_tmp.empty(); it = set_tmp.erase(it))
     if (remove(it->get_fname()) < 0) die(ERR_CLL("remove"));
 
-  cout << "new weight " << fwght.get_fname() << " arrived" << endl;
   _wght_id = no_wght;
   
   lock_guard<mutex> lock(_m);
@@ -248,18 +253,19 @@ void Client::reader() noexcept {
     sec_wght = sec_retry = 0;
     
     try {
-      cout << "polling for new weight" << endl;
       get_new_wght();
       _retry_count = 0;
+      _downloading = false;
       _has_conn    = true;
       do_retry     = false;
       continue; }
-    catch (const exception &e) { cout << e.what() << endl; }
+    catch (const exception &e) { cout << "\n" << e.what() << endl; }
     
-    _has_conn = false;
+    _downloading = false;
+    _has_conn    = false;
     if (_max_retry < ++_retry_count)
       die(ERR_INT("retry count %u/%u, abort", _retry_count, _max_retry));
-    cout << "connect again ..." << endl;
+    cout << "\nconnect again ..." << endl;
     do_retry = true; } }
 
 void Client::sender() noexcept {
@@ -284,19 +290,21 @@ void Client::sender() noexcept {
 	_ver_engine = receive_header(conn, _recvTO, _recv_bufsiz);
 	conn.send(buf, len_head, _sendTO, _send_bufsiz);
 	conn.send(pJob->get_p(), pJob->get_len(), _sendTO, _send_bufsiz);
+	_nsend += 1U;
 	_has_conn = true;
 	pJob->reset();
 	sleep_for(milliseconds(snd_sleep));
 	break; }
-      catch (const exception &e) { cout << e.what() << endl; }
+      catch (const exception &e) { cout << "\n" << e.what() << endl; }
 
       _has_conn = false;
       if (snd_max_retry < ++retry_count) {
-	cout << "failed to send a game record" << endl;
+	cout << "\nfailed to send a game record" << endl;
+	_ndiscard += 1U;
 	pJob->reset();
 	break; }
       else {
-	cout << "connect again ..." << endl;
+	cout << "\nconnect again ..." << endl;
 	sec = 0; } } } }
 
 Client & Client::get() noexcept {
@@ -326,13 +334,14 @@ void Client::start(const char *dwght, const char *cstr_addr, uint port,
   _pJQueue.reset(new JQueue<Job>(size_queue));
   uint retry_count = 0;
   while (true) {
-    try { get_new_wght();  break; }
-    catch (const exception &e) { cout << e.what() << endl; }
+    try { get_new_wght(); break; }
+    catch (const exception &e) { cout << "\n" << e.what() << endl; }
     if (_max_retry < ++retry_count)
       die(ERR_INT("retry count %u/%u, abort", retry_count, _max_retry));
-    cout << "connect again ..." << endl;
+    cout << "\nconnect again ..." << endl;
     sleep_for(seconds(wght_retry_interval)); }
   
+  _downloading   = false;
   _has_conn      = true;  
   _thread_reader = thread(&Client::reader, this);
   _thread_sender = thread(&Client::sender, this); }
@@ -349,7 +358,7 @@ void Client::add_rec(const char *p, size_t len) noexcept {
   PtrLen<char> pl_out(_prec_xz.get(), 0);
   xze.start(&pl_out, maxlen_rec_xz, 9);
   if (!xze.append(&pl_in) || !xze.end() || UINT32_MAX < pl_out.len) {
-    cout << "too large compressed image of CSA record" << endl;
+    cout << "\ntoo large compressed image of CSA record" << endl;
     return; }
   
   Job *pjob = _pJQueue->get_free();

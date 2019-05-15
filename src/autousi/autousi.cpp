@@ -5,14 +5,19 @@
 #include "client.hpp"
 #include "pipe.hpp"
 #include "option.hpp"
+#include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <exception>
 #include <iostream>
+#include <iomanip>
 #include <map>
 #include <random>
 #include <string>
 #include <fstream>
 #include <vector>
+#include <cinttypes>
+#include <cstdio>
 using std::atomic;
 using std::cerr;
 using std::cout;
@@ -20,22 +25,29 @@ using std::current_exception;
 using std::endl;
 using std::exception;
 using std::exception_ptr;
+using std::fill_n;
 using std::ifstream;
 using std::map;
+using std::min;
 using std::random_device;
 using std::rethrow_exception;
 using std::string;
 using std::set_terminate;
 using std::vector;
-using std::chrono::milliseconds;
+using std::chrono::duration_cast;
+using std::chrono::time_point;
+using std::chrono::system_clock;
+using std::chrono::seconds;
 using std::this_thread::sleep_for;
 using namespace IOAux;
 using ErrAux::die;
 using uint   = unsigned int;
 using ushort = unsigned short int;
 
-constexpr uint max_sleep = 3000U; // in msec
-volatile atomic<int> flag_signal(0);
+constexpr uint max_sleep = 3U; // in sec
+atomic<int> flag_signal(0);
+static uint print_status, print_csa;
+static vector<int> devices;
 
 static bool is_posi(uint u) { return 0 < u; }
 
@@ -66,7 +78,7 @@ static void init() noexcept {
 			   {"SendBufSiz",    "8192"},
 			   {"MaxRetry",      "7"},
 			   {"MaxCSA",        "0"},
-			   {"PrintSpeed",    "0"},
+			   {"PrintStatus",  "0"},
 			   {"PrintCSA",      "0"},
 			   {"KeepWeight",    "0"},
 			   {"Addr",          "127.0.0.1"},
@@ -77,34 +89,99 @@ static void init() noexcept {
   const char *cstr_dlog  = Config::get_cstr(m, "DirLog",     maxlen_path);
   const char *cstr_csa   = Config::get_cstr(m, "DirCSA",     maxlen_path);
   const char *cstr_addr  = Config::get_cstr(m, "Addr",       64);
-  uint size_queue     = Config::get<uint>  (m, "SizeSendQueue", is_posi);
-  uint recvTO         = Config::get<uint>  (m, "RecvTO",        is_posi);
-  uint sendTO         = Config::get<uint>  (m, "SendTO",        is_posi);
-  uint recv_bufsiz    = Config::get<uint>  (m, "RecvBufSiz",    is_posi);
-  uint send_bufsiz    = Config::get<uint>  (m, "SendBufSiz",    is_posi);
-  uint max_retry      = Config::get<uint>  (m, "MaxRetry",      is_posi);
-  uint max_csa        = Config::get<uint>  (m, "MaxCSA");
-  uint print_speed    = Config::get<uint>  (m, "PrintSpeed");
-  uint print_csa      = Config::get<uint>  (m, "PrintCSA");
-  uint keep_wght      = Config::get<uint>  (m, "KeepWeight");
-  uint port           = Config::get<ushort>(m, "Port");
-  vector<int> devices = Config::getv<int>  (m, "Device");
-
+  uint size_queue   = Config::get<uint>  (m, "SizeSendQueue", is_posi);
+  uint recvTO       = Config::get<uint>  (m, "RecvTO",        is_posi);
+  uint sendTO       = Config::get<uint>  (m, "SendTO",        is_posi);
+  uint recv_bufsiz  = Config::get<uint>  (m, "RecvBufSiz",    is_posi);
+  uint send_bufsiz  = Config::get<uint>  (m, "SendBufSiz",    is_posi);
+  uint max_retry    = Config::get<uint>  (m, "MaxRetry",      is_posi);
+  uint max_csa      = Config::get<uint>  (m, "MaxCSA");
+  uint keep_wght    = Config::get<uint>  (m, "KeepWeight");
+  uint port         = Config::get<ushort>(m, "Port");
+  devices           = Config::getv<int>  (m, "Device");
+  print_status      = Config::get<uint>  (m, "PrintStatus");
+  print_csa         = Config::get<uint>  (m, "PrintCSA");
   Client::get().start(cstr_dwght, cstr_addr, port, recvTO, recv_bufsiz, sendTO,
 		      send_bufsiz, max_retry, size_queue, keep_wght);
   OSI::handle_signal(on_signal);
-  Pipe::get().start(cstr_cname, cstr_dlog, devices, cstr_csa, max_csa,
-		    print_csa, print_speed);
+  Pipe::get().start(cstr_cname, cstr_dlog, devices, cstr_csa, max_csa);
   cout << "self-play start" << endl; }
+
+static void output() noexcept {
+  static bool first = true;
+  static bool print_csa_do_nl = false;
+  static uint print_csa_num   = 0;
+  static time_point<system_clock> time_last = system_clock::now();
+
+  // print moves of child id #0
+  string s;
+  while (Pipe::get().get_moves_id0(s)) {
+    if (print_csa == 0) continue;
+    if (print_csa_do_nl) { print_csa_do_nl = false; puts(""); }
+    else if (!first) fputs(", ", stdout);
+    first = false;
+    fputs(s.c_str(), stdout);
+    if (s.at(0) == '%' || (++print_csa_num % print_csa) == 0) {
+      if (s.at(0) == '%') puts("");
+      print_csa_num   = 0;
+      print_csa_do_nl = true; }
+    fflush(stdout); }
+  
+  // print status
+  if (print_status == 0) return;
+  
+  time_point<system_clock> time_now = system_clock::now();
+  if (time_now < time_last + seconds(print_status)) return;
+  
+  first           = true;
+  print_csa_do_nl = false;
+  print_csa_num   = 0;
+  time_last       = time_now;
+  puts("");
+  puts("+------+-----+-------+---< Aobaz Status >------------------------+");
+  puts("|  PID | Dev |MSec/MV|               Progress                    |");
+  puts("+------+-----+-------+-------------------------------------------+");
+  for (uint u = 0; u < devices.size(); ++u) {
+    if (Pipe::get().is_closed(u)) {
+      puts("|  N/A |     |       |"
+	   "                                           |");
+      continue; }
+    char buf[64];
+    fill_n(buf, sizeof(buf), '#');
+    uint len = std::min(Pipe::get().get_nmove(u) / 5,
+			static_cast<uint>(sizeof(buf)) - 1U);
+    buf[len] = '\0';
+    printf("|%6d|%4d |%6.0f |%3d:%-39s|\n",
+	   Pipe::get().get_pid(u), devices[u],
+	   Pipe::get().get_speed_average(u),
+	   Pipe::get().get_nmove(u), buf); }
+  puts("+------+-----+-------+-------------------------------------------+");
+
+  uint ntot     = Pipe::get().get_ngen_records();
+  uint nsend    = Client::get().get_nsend();
+  uint ndiscard = Client::get().get_ndiscard();
+  printf("- Send Status: Sent %d, Lost %d, Waiting %d\n",
+	 nsend, ndiscard, ntot - nsend - ndiscard);
+
+  int64_t wght_id        = Client::get().get_wght_id();
+  bool    is_downloading = Client::get().is_downloading();
+  const char *buf_time   = Client::get().get_buf_wght_time();
+  printf("- Recv Status: Weights' ID %" PRIi64 ", ", wght_id);
+
+  if (is_downloading) puts("NOW DOWNLOADING NEW WEIGHTS\n");
+  else                printf("Final Check %s\n\n", buf_time); }
 
 int main() {
   OSI::prevent_multirun(FName("/tmp/autousi.jBQoNA7kEd.lock"));
-  sleep_for(milliseconds(random_device()() % max_sleep));
+  sleep_for(seconds(random_device()() % max_sleep));
   set_terminate(on_terminate);
-  init();
-  while (!flag_signal) Pipe::get().wait();
   
-  cout << "signal " << flag_signal << " caught" << endl;
+  init();
+  while (!flag_signal) {
+    output();
+    Pipe::get().wait(); }
+  
+  cout << "\nsignal " << flag_signal << " caught" << endl;
   Client::get().end();
   Pipe::get().end();
   return 0;
