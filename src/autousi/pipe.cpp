@@ -286,7 +286,7 @@ bool Pipe::play_update(char *line, class USIEngine &c) noexcept {
     node.record   += node.get_turn().to_str();
     if (id == 0) {
       char buf[256];
-      sprintf(buf, " (%6.0fms)", fms);
+      sprintf(buf, " (%5.0fms)", fms);
       string smove = node.get_turn().to_str();
       smove += actionPlay.to_str(SAux::csa);
       smove += buf;

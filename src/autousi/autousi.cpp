@@ -139,7 +139,7 @@ static void output() noexcept {
   time_last       = time_now;
   puts("");
   puts("+------+-----+-------+---< Aobaz Status >------------------------+");
-  puts("|  PID | Dev |MSec/MV|               Progress                    |");
+  puts("|  PID | Dev |Average|               Progress                    |");
   puts("+------+-----+-------+-------------------------------------------+");
   for (uint u = 0; u < devices.size(); ++u) {
     if (Pipe::get().is_closed(u)) {
@@ -151,7 +151,7 @@ static void output() noexcept {
     uint len = std::min(Pipe::get().get_nmove(u) / 5,
 			static_cast<uint>(sizeof(buf)) - 1U);
     buf[len] = '\0';
-    printf("|%6d|%4d |%6.0f |%3d:%-39s|\n",
+    printf("|%6d|%4d |%5.0fms|%3d:%-39s|\n",
 	   Pipe::get().get_pid(u), devices[u],
 	   Pipe::get().get_speed_average(u),
 	   Pipe::get().get_nmove(u), buf); }
