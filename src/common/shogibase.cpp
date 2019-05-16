@@ -561,7 +561,8 @@ bool Node::ok() const noexcept {
 
 void Node::clear() noexcept {
   _board.clear();
-  _turn = black;
+  _count_repeat = 0;
+  _turn         = black;
   auto place = [&](const Color &c, const Pc &pc,
 		   const Sq &sq){ _board.place_sq(c, pc,  sq.rel(c)); };
   for (uint uc = 0; uc < Color::ok_size; ++uc) {
@@ -598,11 +599,13 @@ void Node::take_action(const Action &a) noexcept {
   if (_board.is_incheck(t1))
     _len_incheck[_len_path + 1U] = _len_incheck[_len_path - 1U] + 1U;
   else _len_incheck[_len_path + 1U] = 0;
-    
-  for (uint count = 0, len = _len_path; 2U <= len;) {
+
+  _count_repeat = 0;
+  for (uint len = _len_path; 2U <= len;) {
     len -= 2U;
     if (_path[len] != _path[_len_path]) continue;
-    if (count < 2U) { count += 1; continue; }
+    _count_repeat += 1U;
+    if (_count_repeat < 3U) continue;
       
     uint nmove = (_len_path - len) / 2U;
     if (nmove <= _len_incheck[_len_path + 1U]) _type = illegal_win[t1.to_u()];

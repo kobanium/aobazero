@@ -6,17 +6,24 @@
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
-using std::vector;
-using std::string;
-using std::pair;
+#include <cmath>
 using std::cout;
 using std::endl;
+using std::fill_n;
+using std::string;
+using std::max;
+using std::min;
+using std::pair;
+using std::terminate;
+using std::vector;
 using policy_t = vector<pair<string, float>>;
 using namespace ErrAux;
+using namespace SAux;
 
 static void do_test(std::istream &ifs) noexcept;
 static void compare(const vector<string> &path, const vector<float> &inputs,
@@ -94,19 +101,69 @@ static void do_test(std::istream &ifs) noexcept {
 
     compare(path, inputs, value, policy, udata); } }
 
+namespace NN {
+  constexpr uint nch      = 362U;
+  constexpr uint ninput   = nch * Sq::ok_size;
+  constexpr float epsilon = 0.001f;
+}
+
+static bool is_approx_equal(float f1, float f2) noexcept {
+  return fabsf(f1 - f2) <= max(fabsf(f1), fabsf(f2)) * NN::epsilon; }
+
+static void encode_features(const Node &node, float *p) noexcept {
+  assert(node.ok() && p);
+  fill_n(p, NN::ninput, 0.0);
+  const Board &board = node.get_board();
+  const Color &turn  = node.get_turn();
+  
+  auto store = [p](uint ch, uint usq, float f = 1.0f){
+    p[ch * Sq::ok_size + usq] = f; };
+
+  auto store_plane = [p](uint ch, float f = 1.0f){
+    fill_n(p + ch * Sq::ok_size, Sq::ok_size, f); };
+
+  uint ch_off = 0;
+  for (Color c : {turn, turn.to_opp()}) {
+    BMap bm = board.get_bm_color(c);
+    for (Sq sq(bm.pop_f()); sq.ok(); sq = Sq(bm.pop_f())) {
+      Pc pc = board.get_pc(sq);
+      store(ch_off + pc.to_u(), sq.rel(turn).to_u()); }
+    ch_off += Pc::ok_size; }
+  
+  for (Color c : {turn, turn.to_opp()}) {
+    for (uint upc = 0; upc < Pc::hand_size; ++upc) {
+      uint num = board.get_num_hand(c, Pc(upc));
+      if (num) {
+	float f = ( static_cast<float>(num)
+		    / static_cast<float>(Pc::num_array[upc]) );
+	store_plane(ch_off + upc, f); } }
+    ch_off += Pc::hand_size; }
+
+  uint nrep = node.get_count_repeat();
+  for (uint u = 0; u < nrep; ++u) store_plane(ch_off + u);
+  ch_off += 3U;
+
+  if (turn == white) store_plane(360U);
+  uint len = min(node.get_len_path(), 512U);
+  store_plane(361U, static_cast<float>(len) * (1.0f / 512.0f)); }
+
 #include <set>
 #include <iomanip>
-static void compare(const vector<string> &path, const vector<float> &inputs,
+static void compare(const vector<string> &path, const vector<float> &inputs1,
 		    float value, const policy_t &policy, uint udata) noexcept {
+  std::unique_ptr<float []> inputs2(new float [NN::ninput]);
   Node node;
   for (auto &s : path) {
     Action a = node.action_interpret(s.c_str(), SAux::usi);
     if (! a.is_move()) die(ERR_INT("bad move"));
     node.take_action(a); }
 
+  encode_features(node, inputs2.get());
+  
   MoveSet ms;
   ms.gen_all(node);
-  
+
+  // test genmove
   std::set<string> set1, set2;
   for (auto &f : policy) set1.emplace(f.first);
   for (uint u = 0; u < ms.size(); ++u) set2.emplace(ms[u].to_str(SAux::usi));
@@ -124,4 +181,20 @@ static void compare(const vector<string> &path, const vector<float> &inputs,
     
       if (it2 != set2.cend()) cout << std::setw(6) << std::left << *it2++;
       cout << endl; }
-    std::terminate(); } }
+    
+    terminate(); }
+
+  // test input
+  if (inputs1.size() != NN::ninput) {
+    cout << "bad input size " << inputs1.size() << endl;
+    terminate(); }
+
+  for (uint uch = 0; uch < 28U + 14U + 3U /*NN::nch*/; ++uch)
+    for (uint usq = 0; usq < Sq::ok_size; ++usq)
+      if (!is_approx_equal(inputs1[uch*Sq::ok_size + usq],
+			   inputs2[uch*Sq::ok_size + usq])) {
+	cout << "bad input " << uch << " " << usq << endl;
+	cout << inputs1[uch*Sq::ok_size + usq] << " "
+	     << inputs2[uch*Sq::ok_size + usq] << endl;
+	terminate(); }
+}

@@ -1,5 +1,5 @@
 CXXFLAGS += -std=c++11 -Wextra -O2 -march=native -mtune=native
-CPPFLAGS += -MMD -MP -Isrc/common -DNDEBUG -DUSE_SSE4
+CPPFLAGS += -MMD -MP -Isrc/common -DDEBUG -DUSE_SSE4
 LDFLAGS  += -llzma -lpthread -lOpenCL
 
 TARGETS        := bin/aobaz bin/autousi bin/server bin/gencode bin/playshogi bin/crc64 bin/extract bin/ocldevs bin/net-test

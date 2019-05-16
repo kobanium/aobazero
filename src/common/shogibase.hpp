@@ -441,6 +441,7 @@ class Board {
       return c == v.c && pc == v.pc; }
     constexpr bool operator!=(const Value &v) const noexcept {
       return c != v.c || pc != v.pc; } };
+  ZKey _zkey;
   BMap _bm_pawn_atk[Color::ok_size];
   BMap _bm_sub_mobil[Color::ok_size][Pc::unpromo_size];
   BMap _bm_horse[Color::ok_size];
@@ -452,7 +453,6 @@ class Board {
   uchar _hand[Color::ok_size][Pc::hand_size];
   uchar _pawn_file[Color::ok_size][SAux::file_size];
   uchar _hand_color[Color::ok_size];
-  ZKey _zkey;
   ZKey make_zkey(const Color &turn) const noexcept;
   const BMap & to_atk(const Sq &sq, uint ray) const noexcept;
   Value get_value_wbt(const Sq &sq) const noexcept {
@@ -563,9 +563,10 @@ class Node {
   using uchar  = unsigned char;
   ZKey _path[SAux::maxlen_path];
   Board _board;
-  Color _turn;
   ushort _len_incheck[SAux::maxlen_path + 1U];
   ushort _len_path;
+  uchar _count_repeat;
+  Color _turn;
   NodeType _type;
 
 public:
@@ -575,6 +576,7 @@ public:
   bool is_nyugyoku() const noexcept { return _board.is_nyugyoku(_turn); }
   uint get_len_path() const noexcept { return _len_path; }
   Color get_turn() const noexcept { return _turn; }
+  uint get_count_repeat() const noexcept { return _count_repeat; }
   const Board &get_board() const noexcept { return _board; }
   FixLStr<512U> to_str() const noexcept { return _board.to_str(_turn); }
   bool ok() const noexcept;
@@ -590,7 +592,7 @@ class MoveSet {
   using uint   = unsigned int;
   using ushort = unsigned short;
   Action _moves[SAux::maxsize_moves];
-  uint _uend;
+  ushort _uend;
   
   template <uint UPCMobil>
   void add(const Color &turn, const Sq &from, const Sq &to, const Pc &pc,
