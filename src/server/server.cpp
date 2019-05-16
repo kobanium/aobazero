@@ -6,7 +6,7 @@
 #include "logging.hpp"
 #include "option.hpp"
 #include "osi.hpp"
-#include "version.hpp"
+#include "param.hpp"
 #include <exception>
 #include <fstream>
 #include <iostream>

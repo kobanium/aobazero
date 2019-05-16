@@ -4,6 +4,7 @@
 #include "iobase.hpp"
 #include "option.hpp"
 #include "osi.hpp"
+#include "param.hpp"
 #include "shogibase.hpp"
 #include <exception>
 #include <iostream>
@@ -37,12 +38,14 @@ public:
   const string & get_cmd() const noexcept { return _cmd; }
 };
 
-static void play_update(USIEngine *players[], Node & node, int index,
-			char *line, string & startpos) noexcept;
+static void play_update(USIEngine *players[],
+			Node<Param::maxlen_play> & node, int index, char *line,
+			string & startpos) noexcept;
 static void play_shogi(USIEngine & player_black, USIEngine & player_white,
-		       Node & node) noexcept;
-static void addup_result(const Node & node, const Color & turn_player0,
-			 int nplay, uint result[][NodeType::ok_size][3])
+		       Node<Param::maxlen_play> & node) noexcept;
+static void addup_result(const Node<Param::maxlen_play> & node,
+			 const Color & turn_player0, int nplay,
+			 uint result[][NodeType::ok_size][3])
   noexcept;
 static void result_out(Color turn, uint result[][NodeType::ok_size][3])
   noexcept;
@@ -85,7 +88,7 @@ int main(int argc, char **argv) {
       if (flag_r) cout << "PI\n+" << endl; }
     else if (flag_r) cout << "/\nPI\n+" << endl;
 
-    Node node;
+    Node<Param::maxlen_play> node;
     if (turn_player0 == SAux::black) play_shogi(player0, player1, node);
     else                             play_shogi(player1, player0, node);
     
@@ -104,8 +107,9 @@ int main(int argc, char **argv) {
 
 enum { win = 0, draw = 1, lose = 2 };
 
-static void addup_result(const Node & node, const Color & turn_player0,
-			 int nplay, uint result[][NodeType::ok_size][3])
+static void addup_result(const Node<Param::maxlen_play> & node,
+			 const Color & turn_player0, int nplay,
+			 uint result[][NodeType::ok_size][3])
   noexcept {
   assert(node.ok() && node.get_type().is_term() && turn_player0.ok());
   const NodeType & type = node.get_type();
@@ -210,7 +214,7 @@ static void result_out(Color turn,
     cout << "'point: " << mean << " pm " << 1.96 * se << "\n"; } }
 
 static void play_shogi(USIEngine & player_black, USIEngine & player_white,
-		       Node & node) noexcept {
+		       Node<Param::maxlen_play> & node) noexcept {
   assert(player_black.ok() && player_white.ok() && node.ok());
   OSI::Selector selector;
   string startpos("position startpos moves");
@@ -248,8 +252,8 @@ static void play_shogi(USIEngine & player_black, USIEngine & player_white,
 
   return; }
 
-static void play_update(USIEngine *players[], Node & node, int index,
-			char *line, string & startpos) noexcept {
+static void play_update(USIEngine *players[], Node<Param::maxlen_play> & node,
+			int index, char *line, string & startpos) noexcept {
   assert(players[0] && players[0]->ok());
   assert(players[1] && players[1]->ok());
   assert(node.ok() && (index == 0 || index == 1) && line);

@@ -6,6 +6,7 @@
 #include "datakeep.hpp"
 #include "shogibase.hpp"
 #include "hashtbl.hpp"
+#include "param.hpp"
 #include <chrono>
 #include <climits>
 #include <cstring>
@@ -82,7 +83,7 @@ static bool is_record_ok(const char *rec, size_t len_rec, uint64_t &digest,
   digest = XZAux::crc64(line, 1U, digest);
   digest = XZAux::crc64(newline, 1U, digest);
   
-  Node node;
+  Node<Param::maxlen_play_learn> node;
   uint tot_nchild = 0;
   bool has_result = false;
   while (true) {

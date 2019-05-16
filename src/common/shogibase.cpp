@@ -1,6 +1,7 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
 #include "shogibase.hpp"
+#include "param.hpp"
 #include <algorithm>
 #include <functional>
 #include <cassert>
@@ -553,13 +554,15 @@ const char * const NodeType::tbl_nodetype_CSA[NodeType::ok_size] = {
   "", "TORYO", "KACHI", "SENNICHITE", "-ILLEGAL_ACTION",
   "+ILLEGAL_ACTION", "CHUDAN" };
 
-bool Node::ok() const noexcept {
+template<uint N>
+bool Node<N>::ok() const noexcept {
   if (!_turn.ok() || !_type.ok() || !_board.ok(_turn)) return false;
-  if (maxlen_path < _len_path) return false;
-  if (_len_path == maxlen_path && _type == interior) return false;
+  if (N < _len_path) return false;
+  if (_len_path == N && _type == interior) return false;
   return true; }
 
-void Node::clear() noexcept {
+template<uint N>
+void Node<N>::clear() noexcept {
   _board.clear();
   _count_repeat = 0;
   _turn         = black;
@@ -582,12 +585,13 @@ void Node::clear() noexcept {
   _type           = interior;
   assert(ok()); }
 
-void Node::take_action(const Action &a) noexcept {
-  assert(a.ok() && _len_path < maxlen_path && _type == interior);
+template<uint N>
+void Node<N>::take_action(const Action &a) noexcept {
+  assert(a.ok() && _len_path < N && _type == interior);
   assert(_board.action_ok_full(_turn, a));
   if (a.is_resign())  { _type = resigned; return; }
   if (a.is_windecl()) { _type = windclrd; return; }
-  if (_len_path + 1U == maxlen_path) { _type = maxlen_term; return; }
+  if (_len_path + 1U == N) { _type = maxlen_term; return; }
     
   Color t0 = _turn;
   _board.update(t0, a, true);
@@ -615,7 +619,8 @@ void Node::take_action(const Action &a) noexcept {
     
   assert(ok()); }
   
-Action Node::action_interpret(const char *cstr, SAux::Mode mode) noexcept {
+template<uint N>
+Action Node<N>::action_interpret(const char *cstr, SAux::Mode mode) noexcept {
   assert(ok() && cstr);
   if (_type.is_term()) return Action();
   Action action;
@@ -671,8 +676,11 @@ Action Node::action_interpret(const char *cstr, SAux::Mode mode) noexcept {
   if (!_board.action_ok_full(_turn, action)) return Action();
   return action; }
 
-template <uint UPCMobil>
-void MoveSet::add(const Color &turn, const Sq &from, const Sq &to,
+template class Node<Param::maxlen_play_learn>;
+template class Node<Param::maxlen_play>;
+
+template<uint N> template <uint UPCMobil>
+void MoveSet<N>::add(const Color &turn, const Sq &from, const Sq &to,
 		  const Pc &pc, const Pc &cap) noexcept {
   if (can_promote(turn, Pc(UPCMobil), from, to)) {
     assert(_uend + 1U < SAux::maxsize_moves);
@@ -682,8 +690,8 @@ void MoveSet::add(const Color &turn, const Sq &from, const Sq &to,
     assert(_uend + 1U < SAux::maxsize_moves);
     _moves[_uend++] = Action(from, to, pc, cap, Action::normal); } }
 
-
-void MoveSet::gen_pawn(const Board &board, const BMap &bm_target,
+template<uint N>
+void MoveSet<N>::gen_pawn(const Board &board, const BMap &bm_target,
 		       const Color &turn) noexcept {
   assert(bm_target.ok() && turn.ok());
   const Color tx = turn.to_opp();
@@ -694,7 +702,8 @@ void MoveSet::gen_pawn(const Board &board, const BMap &bm_target,
     if (board.is_pinned(turn, from, to)) continue;
     add<upawn>(turn, from, to, pawn, cap); } }
 
-void MoveSet::gen_king(Node &node, const Color &turn) noexcept {
+template<uint N>
+void MoveSet<N>::gen_king(Node<N> &node, const Color &turn) noexcept {
   assert(turn.ok());
   const Board & board     = node.get_board();
   const BMap & bm_friends = board.get_bm_color(turn);
@@ -708,10 +717,10 @@ void MoveSet::gen_king(Node &node, const Color &turn) noexcept {
     add<uking>(turn, sqk, to, king, cap); }
   node.get_board().toggle_ray_penetrate(sqk); }
 
-template <uint UPCMobil>
-void MoveSet::gen_nsg(const Board &board, const Color &turn,
-		      const BMap &bm_target,
-		      function<BMap(const Sq &, const Color &)> fatk)
+template<uint N> template <uint UPCMobil>
+void MoveSet<N>::gen_nsg(const Board &board, const Color &turn,
+			 const BMap &bm_target,
+			 function<BMap(const Sq &, const Color &)> fatk)
   noexcept {
   assert(turn.ok());
   const Color tx = turn.to_opp();
@@ -725,11 +734,11 @@ void MoveSet::gen_nsg(const Board &board, const Color &turn,
       if (board.is_pinned(turn, from, to)) continue;
       add<UPCMobil>(turn, from, to, pc, cap); } } }
 
-template <uint UPCMobil>
-void MoveSet::gen_slider(const Board &board, const Color &turn, BMap bm_from,
-			 const BMap &bm_target,
-			 function<BMap(const Board &, const Color &,
-				       const Sq &)> fatk)
+template<uint N> template <uint UPCMobil>
+void MoveSet<N>::gen_slider(const Board &board, const Color &turn,
+			    BMap bm_from, const BMap &bm_target,
+			    function<BMap(const Board &, const Color &,
+					  const Sq &)> fatk)
   noexcept {
   assert(turn.ok() && bm_from.ok() && bm_target.ok());
   const Color tx = turn.to_opp();
@@ -743,7 +752,8 @@ void MoveSet::gen_slider(const Board &board, const Color &turn, BMap bm_from,
       add<UPCMobil>(turn, from, to, pc, cap); } } }
 
 
-void MoveSet::gen_drop(Board &board, const Color &turn, BMap bm_target)
+template<uint N>
+void MoveSet<N>::gen_drop(Board &board, const Color &turn, BMap bm_target)
   noexcept {
   assert(turn.ok());
   Pc drops[Pc::hand_size];
@@ -767,8 +777,8 @@ void MoveSet::gen_drop(Board &board, const Color &turn, BMap bm_target)
       assert(_uend + 1U < SAux::maxsize_moves);
       _moves[_uend++] = Action(to, drops[u]); } }
 
-      
-void MoveSet::gen_all_evation(Node &node) noexcept {
+template<uint N>
+void MoveSet<N>::gen_all_evation(Node<N> &node) noexcept {
   const Color &turn = node.get_turn();
   Board &board      = node.get_board();
   const Sq &sqk     = board.get_sq_king(turn);
@@ -798,7 +808,8 @@ void MoveSet::gen_all_evation(Node &node) noexcept {
 		      &Board::to_atk_dragon);
   gen_drop(board, turn, bm_obstacle); }
 
-void MoveSet::gen_all_no_evation(Node &node) noexcept {
+template<uint N>
+void MoveSet<N>::gen_all_no_evation(Node<N> &node) noexcept {
   const Color turn        = node.get_turn();
   const Color xturn       = turn.to_opp();
   Board &board            = node.get_board();
@@ -822,9 +833,11 @@ void MoveSet::gen_all_no_evation(Node &node) noexcept {
 		      &Board::to_atk_dragon);
   gen_drop(board, turn, ~board.get_bm_all()); }
 
-
-void MoveSet::gen_all(Node &node) noexcept {
+template<uint N>
+void MoveSet<N>::gen_all(Node<N> &node) noexcept {
   assert(node.ok() && node.get_type().is_interior());
   _uend = 0;
   if (node.is_incheck()) gen_all_evation(node);
   else                   gen_all_no_evation(node); }
+
+template class MoveSet<Param::maxlen_play>;

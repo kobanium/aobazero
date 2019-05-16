@@ -8,7 +8,7 @@
 #include "jqueue.hpp"
 #include "option.hpp"
 #include "osi.hpp"
-#include "version.hpp"
+#include "param.hpp"
 #include "xzi.hpp"
 #include <algorithm>
 #include <exception>

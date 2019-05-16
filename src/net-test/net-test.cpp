@@ -2,6 +2,7 @@
 // This source code is in the public domain.
 #include "err.hpp"
 #include "osi.hpp"
+#include "param.hpp"
 #include "shogibase.hpp"
 #include <algorithm>
 #include <fstream>
@@ -110,7 +111,8 @@ namespace NN {
 static bool is_approx_equal(float f1, float f2) noexcept {
   return fabsf(f1 - f2) <= max(fabsf(f1), fabsf(f2)) * NN::epsilon; }
 
-static void encode_features(const Node &node, float *p) noexcept {
+static void encode_features(const Node<Param::maxlen_play> &node,
+			    float *p) noexcept {
   assert(node.ok() && p);
   fill_n(p, NN::ninput, 0.0);
   const Board &board = node.get_board();
@@ -152,7 +154,7 @@ static void encode_features(const Node &node, float *p) noexcept {
 static void compare(const vector<string> &path, const vector<float> &inputs1,
 		    float value, const policy_t &policy, uint udata) noexcept {
   std::unique_ptr<float []> inputs2(new float [NN::ninput]);
-  Node node;
+  Node<Param::maxlen_play> node;
   for (auto &s : path) {
     Action a = node.action_interpret(s.c_str(), SAux::usi);
     if (! a.is_move()) die(ERR_INT("bad move"));
@@ -160,7 +162,7 @@ static void compare(const vector<string> &path, const vector<float> &inputs1,
 
   encode_features(node, inputs2.get());
   
-  MoveSet ms;
+  MoveSet<Param::maxlen_play> ms;
   ms.gen_all(node);
 
   // test genmove

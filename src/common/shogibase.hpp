@@ -18,7 +18,6 @@ namespace SAux {
   enum class Mode { CSA, USI };
   constexpr Mode csa = Mode::CSA, usi = Mode::USI;
   constexpr unsigned int mode_size     = 2U;
-  constexpr unsigned int maxlen_path   = 513U;
   constexpr unsigned int maxsize_moves = 1024U;
   constexpr unsigned int file_size = 9U, rank_size = 9U;
   constexpr unsigned int ray_rank  = 0U, ray_file  = 1U;
@@ -557,13 +556,14 @@ namespace SAux {
   constexpr NodeType illegal_win[2] = { illegal_bwin, illegal_wwin };
 }
 
+template<uint N>
 class Node {
   using uint   = unsigned int;
   using ushort = unsigned short;
   using uchar  = unsigned char;
-  ZKey _path[SAux::maxlen_path];
+  ZKey _path[N];
   Board _board;
-  ushort _len_incheck[SAux::maxlen_path + 1U];
+  ushort _len_incheck[N + 1U];
   ushort _len_path;
   uchar _count_repeat;
   Color _turn;
@@ -588,10 +588,11 @@ public:
 			  SAux::Mode mode = SAux::csa) noexcept;
 };
 
+template<uint N>
 class MoveSet {
   using uint   = unsigned int;
   using ushort = unsigned short;
-  Action _moves[SAux::maxsize_moves];
+  Action _moves[N];
   ushort _uend;
   
   template <uint UPCMobil>
@@ -599,7 +600,7 @@ class MoveSet {
 	   const Pc &cap) noexcept;
   void gen_pawn(const Board &board, const BMap &bm_target, const Color &turn)
     noexcept;
-  void gen_king(Node &node, const Color &turn) noexcept;
+  void gen_king(Node<N> &node, const Color &turn) noexcept;
   template <uint UPCMobil>
   void gen_nsg(const Board &board, const Color &turn, const BMap &bm_target,
 	       std::function<BMap(const Sq &, const Color &)> fatk) noexcept;
@@ -609,12 +610,12 @@ class MoveSet {
 		  std::function<BMap(const Board &, const Color &,
 				     const Sq &)> fatk) noexcept;
   void gen_drop(Board &board, const Color &turn, BMap bm_target) noexcept;
-  void gen_all_evation(Node &node) noexcept;
-  void gen_all_no_evation(Node &node) noexcept;
+  void gen_all_evation(Node<N> &node) noexcept;
+  void gen_all_no_evation(Node<N> &node) noexcept;
   
 public:
   explicit MoveSet() noexcept {}
-  void gen_all(Node &node) noexcept;
+  void gen_all(Node<N> &node) noexcept;
 
   const Action & operator[](uint u) const noexcept {
     assert(u < _uend); return _moves[u]; }

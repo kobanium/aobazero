@@ -7,9 +7,9 @@
 #include "err.hpp"
 #include "iobase.hpp"
 #include "osi.hpp"
+#include "param.hpp"
 #include "pipe.hpp"
 #include "shogibase.hpp"
-#include "version.hpp"
 #include <chrono>
 #include <fstream>
 #include <memory>
@@ -49,7 +49,7 @@ constexpr char fmt_log[]     = "engine%03u.log";
 constexpr char fmt_csa[]     = "rec%012" PRIi64 ".csa";
 constexpr char fmt_csa_scn[] = "rec%16[^.].csa";
 
-class NodeRec : public Node {
+class NodeRec : public Node<Param::maxlen_play_learn> {
 public:
   string startpos, record;
   void clear() noexcept {
