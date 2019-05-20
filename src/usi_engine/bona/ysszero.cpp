@@ -300,7 +300,7 @@ int YssZero_dbgout( tree_t * restrict ptree ) {
     prob[buf] = c.bias; }
 
   printf("policy");
-  for (auto &vt : prob) printf(" %s %f", vt.first.c_str(), vt.second);
+  for (auto &vt : prob) printf(" %s %.8e", vt.first.c_str(), vt.second);
   printf("\nEND\n");
   fflush(stdout);
   return 1; }
