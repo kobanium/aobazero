@@ -712,8 +712,8 @@ void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *p
 
 	if ( NOT_USE_NN ) {
 		// softmax
-		const float temperature = 1.0f;
-		float max = -10000000;
+		const float temperature_inv = 1.0f;
+		float max = -10000000.0f;
 		for (i=0; i<move_num; i++) {
 			CHILD *pc = &phg->child[i];
 			if ( max < pc->bias ) max = pc->bias;
@@ -721,7 +721,7 @@ void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *p
 		float sum = 0;
 		for (i=0; i<move_num; i++) {
 			CHILD *pc = &phg->child[i];
-			pc->bias = (float)exp((pc->bias - max)*temperature);
+			pc->bias = std::exp((pc->bias - max)*temperature_inv);
 			sum += pc->bias;
 		}
 		for(i=0; i<move_num; i++){
@@ -789,11 +789,24 @@ select_again:
 		CHILD *pc  = &phg->child[loop];
 		if ( pc->value == ILLEGAL_MOVE ) continue;
 
-		const double cBASE = 19652;
+		const double cBASE = 19652.0;
 		const double cINIT = 1.25;
-		double c = log((1.0 + phg->games_sum + cBASE) / cBASE) + cINIT;	// when 800 playout, cBASE has no effect.
-		double puct = c * pc->bias * sqrt((double)(phg->games_sum + 1.0)) / (pc->games + 1.0);	// when games_sum = 0, +1.0 is necessary. (paper bug)
-		double uct_value = pc->value + puct;
+		// cBASE has little effect on the value of c if games_sum is
+		// sufficiently smaller than x.
+		double c = (std::log((1.0 + phg->games_sum + cBASE) / cBASE)
+			    + cINIT);
+		
+		// The number of visits to the parent is games_sum + 1.
+		// There may by a bug in pseudocode.py regarding this.
+		double puct = (c * pc->bias
+			       * std::sqrt(static_cast<double>(phg->games_sum
+							       + 1))
+			       / static_cast<double>(pc->games + 1));
+		double mean_action_value = (pc->games == 0) ? -1.0 : pc->value;
+		
+		// We must multiply puct by two because the range of
+		// mean_action_value is [-1, 1] instead of [0, 1].
+		double uct_value = mean_action_value + 2.0 * puct;
 
 //		if ( depth==0 && phg->games_sum==500 ) PRT("%3d:v=%5.3f,p=%5.3f,u=%5.3f,g=%4d,s=%5d\n",loop,pc->value,puct,uct_value,pc->games,phg->games_sum);
 		if ( uct_value > max_value ) {

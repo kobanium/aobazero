@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.1 - 2019-5-27
+
+### Fixed
+- the initial action value in MCTS code
+
+
 ## 1.1 - 2019-5-5
 
 ### Fixed
