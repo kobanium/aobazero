@@ -1,202 +1,246 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
 #include "err.hpp"
-#include "osi.hpp"
+#include "iobase.hpp"
+#include "nnet.hpp"
 #include "param.hpp"
 #include "shogibase.hpp"
+#include "xzi.hpp"
 #include <algorithm>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <limits>
+#include <map>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
+#include <climits>
 #include <cmath>
+#include <cstdlib>
+#include <lzma.h>
 using std::cout;
+using std::cerr;
 using std::endl;
 using std::fill_n;
-using std::string;
+using std::getline;
+using std::ifstream;
+using std::map;
 using std::max;
-using std::min;
-using std::pair;
+using std::move;
+using std::set;
+using std::setw;
+using std::string;
+using std::stringstream;
 using std::terminate;
+using std::unique_ptr;
 using std::vector;
-using policy_t = vector<pair<string, float>>;
+using uint   = unsigned int;
+using ushort = unsigned short;
+using uchar  = unsigned char;
 using namespace ErrAux;
 using namespace SAux;
+static_assert(file_size == NN::width,  "file_size == NN::width");
+static_assert(rank_size == NN::height, "rank_size == NN::height");
 
-static void do_test(std::istream &ifs) noexcept;
-static void compare(const vector<string> &path, const vector<float> &inputs,
-		    float value, const policy_t &policy, uint udata) noexcept;
+static void do_test(ifstream &ifs) noexcept;
+static void compare(const vector<string> &path, const vector<double> &input,
+		    double value, const map<string, double> &policy) noexcept;
+
+static uint   value_n          = 0;
+static double value_sum_e      = 0.0;
+static double value_sum_se     = 0.0;
+static double value_max_e      = 0.0;
+
+static uint   policy_n          = 0;
+static double policy_sum_e      = 0.0;
+static double policy_sum_se     = 0.0;
+static double policy_max_e      = 0.0;
+
+static NNet nnet;
 
 int main(int argc, char **argv) {
-  if (argc == 1) {
-    do_test(std::cin);
-    return 0; }
+  if (argc < 3) {
+    die(ERR_INT("Usage: %s weight log...", argv[0]));
+    return 1; }
   
+  nnet.reset(FName(argv[1]));
+  
+  argv += 1U;
   while (*++argv) {
-    std::ifstream ifs(*argv);
+    ifstream ifs(*argv);
     if (!ifs) die(ERR_INT("cannot open %s", *argv));
     do_test(ifs); }
-  return 0; }
   
-static void do_test(std::istream &ifs) noexcept {
+  if (0 < value_n) {
+    double factor = 1.0 / static_cast<double>(value_n);
+    cout << "Value (ABSOLUTE, " << value_n << " samples)\n";
+    cout << "  - MaxE: " << value_max_e << "\n";
+    cout << "  - ME:   " << value_sum_e * factor << "\n";
+    cout << "  - RMSE: " << std::sqrt(value_sum_se * factor) << "\n\n"; }
+    
+  if (0 < policy_n) {
+    double factor = 1.0 / static_cast<double>(policy_n);
+    cout << "Policy (ABSOLUTE, " << policy_n << " samples)\n";
+    cout << "  - MaxE: " << policy_max_e << "\n";
+    cout << "  - ME:   " << policy_sum_e * factor << "\n";
+    cout << "  - RMSE: " << std::sqrt(policy_sum_se * factor) << "\n\n"; }
+  
+  return 0; }
+
+static void do_test(ifstream &ifs) noexcept {
 
   for (uint uline = 0, udata = 0;;) {
-
-    // read position startpos moves...
-    std::string string_line;
-    if (! std::getline(ifs, string_line)) break;
+    // read position startpos move...
+    string string_line;
+    if (! getline(ifs, string_line)) break;
     udata += 1U;
     uline += 1U;
-    std::cout << udata << std::endl;
+    cout << setw(5) << udata << endl;
     
-    std::stringstream ss(string_line);
-    std::string token1, token2, token3;
+    stringstream ss(string_line);
+    string token1, token2, token3;
     ss >> token1 >> token2 >> token3;
     if (token1 != "position" || token2 != "startpos" || token3 != "moves")
       die(ERR_INT("bad line %u", uline));
 
     vector<string> path;
-    while (ss >> token1) path.push_back(std::move(token1));
+    while (ss >> token1) path.emplace_back(move(token1));
     
-    // input...
+    // input
     uline += 1U;
-    if (! std::getline(ifs, string_line)) die(ERR_INT("bad line %u", uline));
+    if (! getline(ifs, string_line)) die(ERR_INT("bad line %u", uline));
     ss.clear();
     ss.str(string_line);
     ss >> token1;
     if (token1 != "input") die(ERR_INT("bad line %u", uline));
-    
-    vector<float> inputs;
-    float f;
-    while (ss >> f) inputs.push_back(f);
+    vector<double> input;
+    double f;
+    while (ss >> f) input.push_back(f);
 
-    // value...
+    // value
     uline += 1U;
-    if (! std::getline(ifs, string_line)) die(ERR_INT("bad line %u", uline));
+    if (!getline(ifs, string_line)) die(ERR_INT("bad line %u", uline));
     ss.clear();
     ss.str(string_line);
     ss >> token1;
     if (token1 != "value") die(ERR_INT("bad line %u", uline));
-
-    float value;
+    double value;
     ss >> value;
 
-    // policy...
+    // policy
     uline += 1U;
-    if (! std::getline(ifs, string_line)) die(ERR_INT("bad line %u", uline));
+    if (!getline(ifs, string_line)) die(ERR_INT("bad line %u", uline));
     ss.clear();
     ss.str(string_line);
     ss >> token1;
     if (token1 != "policy") die(ERR_INT("bad line %u", uline));
 
-    policy_t policy;
-    while (ss >> token1 >> f) policy.emplace_back(std::move(token1), f);
+    map<string, double> policy;
+    while (ss >> token1 >> f) policy.emplace(move(token1), f);
 
     // END
     uline += 1U;
-    if (! std::getline(ifs, string_line)) die(ERR_INT("bad line %u", uline));
+    if (!getline(ifs, string_line)) die(ERR_INT("bad line %u", uline));
     if (string_line != "END") die(ERR_INT("bad line %u", uline));
 
-    compare(path, inputs, value, policy, udata); } }
+    compare(path, input, value, policy); } }
 
-namespace NN {
-  constexpr uint nch      = 362U;
-  constexpr uint ninput   = nch * Sq::ok_size;
-  constexpr float epsilon = 0.001f;
-}
+static double absolute_error(double f1, double f2) noexcept {
+  return std::fabs(f1 - f2); }
 
-static bool is_approx_equal(float f1, float f2) noexcept {
-  return fabsf(f1 - f2) <= max(fabsf(f1), fabsf(f2)) * NN::epsilon; }
-
-static void encode_features(const Node<Param::maxlen_play> &node,
-			    float *p) noexcept {
-  assert(node.ok() && p);
-  fill_n(p, NN::ninput, 0.0);
-  const Board &board = node.get_board();
-  const Color &turn  = node.get_turn();
-  
-  auto store = [p](uint ch, uint usq, float f = 1.0f){
-    p[ch * Sq::ok_size + usq] = f; };
-
-  auto store_plane = [p](uint ch, float f = 1.0f){
-    fill_n(p + ch * Sq::ok_size, Sq::ok_size, f); };
-
-  uint ch_off = 0;
-  for (Color c : {turn, turn.to_opp()}) {
-    BMap bm = board.get_bm_color(c);
-    for (Sq sq(bm.pop_f()); sq.ok(); sq = Sq(bm.pop_f())) {
-      Pc pc = board.get_pc(sq);
-      store(ch_off + pc.to_u(), sq.rel(turn).to_u()); }
-    ch_off += Pc::ok_size; }
-  
-  for (Color c : {turn, turn.to_opp()}) {
-    for (uint upc = 0; upc < Pc::hand_size; ++upc) {
-      uint num = board.get_num_hand(c, Pc(upc));
-      if (num) {
-	float f = ( static_cast<float>(num)
-		    / static_cast<float>(Pc::num_array[upc]) );
-	store_plane(ch_off + upc, f); } }
-    ch_off += Pc::hand_size; }
-
-  uint nrep = node.get_count_repeat();
-  for (uint u = 0; u < nrep; ++u) store_plane(ch_off + u);
-  ch_off += 3U;
-
-  if (turn == white) store_plane(360U);
-  uint len = min(node.get_len_path(), 512U);
-  store_plane(361U, static_cast<float>(len) * (1.0f / 512.0f)); }
-
-#include <set>
-#include <iomanip>
-static void compare(const vector<string> &path, const vector<float> &inputs1,
-		    float value, const policy_t &policy, uint udata) noexcept {
-  std::unique_ptr<float []> inputs2(new float [NN::ninput]);
-  Node<Param::maxlen_play> node;
+static void compare(const vector<string> &path, const vector<double> &input1,
+		    double value1, const map<string, double> &policy1)
+  noexcept {
+  constexpr double epsilon = 1e-4;
+  NodeNN<Param::maxlen_play> node;
   for (auto &s : path) {
     Action a = node.action_interpret(s.c_str(), SAux::usi);
     if (! a.is_move()) die(ERR_INT("bad move"));
     node.take_action(a); }
-
-  encode_features(node, inputs2.get());
   
+  // test input
+  unique_ptr<float []> input2(new float [NN::size_input]);
+  node.encode_input(input2.get());
+  
+  if (input1.size() != NN::size_input)
+    die(ERR_INT("bad input size %zu vs %u", input1.size(), NN::size_input));
+
+  for (uint uch = 0; uch < NN::nch_input; ++uch)
+    for (uint usq = 0; usq < Sq::ok_size; ++usq) {
+      double f1 = input1[uch * Sq::ok_size + usq];
+      double f2 = input2[uch * Sq::ok_size + usq];
+      if (absolute_error(f1, f2) <= epsilon) continue;
+      cerr << "input1:         " << f1 << endl;
+      cerr << "input2:         " << f2 << endl;
+      cerr << "absolute error: " << absolute_error(f1, f2) << endl;
+      terminate(); }
+
   MoveSet<Param::maxlen_play> ms;
   ms.gen_all(node);
+  assert(ms.ok());
 
   // test genmove
-  std::set<string> set1, set2;
-  for (auto &f : policy) set1.emplace(f.first);
+  set<string> set1, set2;
+  for (auto &f : policy1)              set1.insert(f.first);
   for (uint u = 0; u < ms.size(); ++u) set2.emplace(ms[u].to_str(SAux::usi));
-
   if (set1 != set2) {
-    cout << "position startpos moves";
-    for (auto &s : path) cout << " " << s;
-    cout << "\n" << node.to_str();
-
+    cerr << "position startpos moves";
+    for (auto &s : path) cerr << " " << s;
+    cerr << "\n" << node.to_str();
+    
     auto &&it1 = set1.cbegin();
     auto &&it2 = set2.cbegin();
     while (it1 != set1.cend() || it2 != set2.cend()) {
-      if (it1 == set1.cend()) cout << "      ";
-      else cout << std::setw(6) << std::left << *it1++;
-    
-      if (it2 != set2.cend()) cout << std::setw(6) << std::left << *it2++;
-      cout << endl; }
-    
+      if (it1 == set1.cend()) cerr << "      ";
+      else cerr << std::setw(6) << std::left << *it1++;
+      
+      if (it2 != set2.cend()) cerr << std::setw(6) << std::left << *it2++;
+      cerr << endl; }
+    die(ERR_INT("bad move generation")); }
+  
+  if (ms.size() == 0) return;
+  
+  ushort nnmoves2[SAux::maxsize_moves];
+  for (uint u = 0; u < ms.size(); ++u)
+    nnmoves2[u] = NN::encode_nnmove(ms[u], node.get_turn());
+  
+  float prob2[SAux::maxsize_moves];
+  double value2 = nnet.ff(input2.get(), ms.size(), nnmoves2, prob2);
+  cout << nnet.get_elapsed() << endl;
+  if (node.get_turn() == white) value2 = -value2;
+  
+  map<string, double> policy2;
+  for (uint u = 0; u < ms.size(); ++u)
+    policy2.emplace(ms[u].to_str(SAux::usi), prob2[u]);
+  
+  // test output
+  double value_e     = absolute_error(value1, value2);
+  value_n          += 1U;
+  value_sum_e      += value_e;
+  value_sum_se     += value_e * value_e;
+  value_max_e       = max(value_max_e, value_e);
+  if (2.0 * epsilon < value_e) {
+    cerr << "value1:         " << value1 << endl;
+    cerr << "value2:         " << value2 << endl;
+    cerr << "absolute error: " << value_e << endl;
     terminate(); }
-
-  // test input
-  if (inputs1.size() != NN::ninput) {
-    cout << "bad input size " << inputs1.size() << endl;
-    terminate(); }
-
-  for (uint uch = 0; uch < 28U + 14U + 3U /*NN::nch*/; ++uch)
-    for (uint usq = 0; usq < Sq::ok_size; ++usq)
-      if (!is_approx_equal(inputs1[uch*Sq::ok_size + usq],
-			   inputs2[uch*Sq::ok_size + usq])) {
-	cout << "bad input " << uch << " " << usq << endl;
-	cout << inputs1[uch*Sq::ok_size + usq] << " "
-	     << inputs2[uch*Sq::ok_size + usq] << endl;
-	terminate(); }
-}
+  
+  auto &&it1 = policy1.cbegin();
+  auto &&it2 = policy2.cbegin();
+  while (it1 != policy1.cend() && it2 != policy2.cend()) {
+    double prob1 = (it1++)->second;
+    double prob2 = (it2++)->second;
+    double policy_e     = absolute_error(prob1, prob2);
+    policy_n          += 1U;
+    policy_sum_e      += policy_e;
+    policy_sum_se     += policy_e * policy_e;
+    policy_max_e       = max(policy_max_e, policy_e);
+    if (epsilon < policy_e) {
+      cerr << "prob1:          " << prob1 << endl;
+      cerr << "prob2:          " << prob2 << endl;
+      cerr << "absolute error: " << policy_e << endl;
+      terminate(); } } }

@@ -89,7 +89,7 @@ public:
 };
 
 namespace SAux {
-  constexpr uint ublack(0), uwhite(1U);
+  constexpr uint ublack(0U), uwhite(1U);
   constexpr Color black(0U), white(1U); }
 
 class BMap {
@@ -245,6 +245,10 @@ public:
     assert(ok()); return tbl_sq_name[static_cast<int>(mode)][_u]; }
   constexpr uint to_ray(const Sq &sq) const noexcept {
     return tbl_sq_ray[_u][sq.to_u()]; }
+  constexpr uint to_dir(const Sq &sq) const noexcept {
+    return tbl_sq_dir[_u][sq.to_u()]; }
+  constexpr uint to_distance(const Sq &sq) const noexcept {
+    return tbl_sq_distance[_u][sq.to_u()]; }
   constexpr const BMap & to_obstacle(const Sq &sq) const noexcept {
     return tbl_sq_obstacle[_u][sq.to_u()]; }
   constexpr const BMap & to_bmap() const noexcept {
@@ -304,7 +308,7 @@ class Pc {
 
 public:
   static constexpr uint all_size = 15U, ok_size = 14U, hand_size = 7U;
-  static constexpr uint unpromo_size = 8U, npawn = 18U;
+  static constexpr uint unpromo_size = 8U, npawn = 18U, npc = 40U;
   static constexpr uchar num_array[hand_size] = {18U, 4U, 4U, 4U, 4U, 2U, 2U};
   explicit constexpr Pc() noexcept : _u(14U) {}
   explicit constexpr Pc(uint u) noexcept :
@@ -592,7 +596,7 @@ template<uint N>
 class MoveSet {
   using uint   = unsigned int;
   using ushort = unsigned short;
-  Action _moves[N];
+  Action _moves[SAux::maxsize_moves];
   ushort _uend;
   
   template <uint UPCMobil>
@@ -620,4 +624,5 @@ public:
   const Action & operator[](uint u) const noexcept {
     assert(u < _uend); return _moves[u]; }
   uint size() const noexcept { return _uend; }
+  bool ok() const noexcept;
 };

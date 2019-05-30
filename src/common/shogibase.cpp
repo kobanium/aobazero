@@ -13,6 +13,9 @@
 using std::function;
 using std::fill_n;
 using std::min;
+using uint   = unsigned int;
+using ushort = unsigned short;
+using uchar  = unsigned char;
 using namespace SAux;
 
 constexpr BMap::RBB BMap::tbl_bmap_rbb[81][4];
@@ -52,9 +55,12 @@ Pc::Pc(int ch1, int ch2, SAux::Mode mode) noexcept {
 
 constexpr BMap Sq::tbl_sq_obstacle[81][81];
 constexpr BMap Sq::tbl_sq_u2bmap[ok_size][ray_size];
-constexpr unsigned char Sq::tbl_sq_rel[2][81];
-constexpr unsigned char Sq::tbl_sq_adv[2][81];
-constexpr unsigned char Sq::tbl_sq_ray[81][81];
+constexpr uchar Sq::tbl_sq_rel[2][81];
+constexpr uchar Sq::tbl_sq_adv[2][81];
+constexpr uchar Sq::tbl_sq_ray[81][81];
+constexpr uchar Sq::tbl_sq_dir[81][81];
+constexpr uchar Sq::tbl_sq_distance[81][81];
+
 const char * const Sq::tbl_sq_name[mode_size][ok_size] = {
   { "91", "81", "71", "61", "51", "41", "31", "21", "11",
     "92", "82", "72", "62", "52", "42", "32", "22", "12",
@@ -683,11 +689,11 @@ template<uint N> template <uint UPCMobil>
 void MoveSet<N>::add(const Color &turn, const Sq &from, const Sq &to,
 		  const Pc &pc, const Pc &cap) noexcept {
   if (can_promote(turn, Pc(UPCMobil), from, to)) {
-    assert(_uend + 1U < SAux::maxsize_moves);
+    assert(_uend < SAux::maxsize_moves);
     _moves[_uend++] = Action(from, to, pc, cap, Action::promotion); }
 
   if (can_exist(turn, to, Pc(UPCMobil))) {
-    assert(_uend + 1U < SAux::maxsize_moves);
+    assert(_uend < SAux::maxsize_moves);
     _moves[_uend++] = Action(from, to, pc, cap, Action::normal); } }
 
 template<uint N>
@@ -774,7 +780,7 @@ void MoveSet<N>::gen_drop(Board &board, const Color &turn, BMap bm_target)
       else if (drops[u] == knight) {
 	if (!can_exist(turn, to, knight)) continue; }
       
-      assert(_uend + 1U < SAux::maxsize_moves);
+      assert(_uend < SAux::maxsize_moves);
       _moves[_uend++] = Action(to, drops[u]); } }
 
 template<uint N>
@@ -839,5 +845,11 @@ void MoveSet<N>::gen_all(Node<N> &node) noexcept {
   _uend = 0;
   if (node.is_incheck()) gen_all_evation(node);
   else                   gen_all_no_evation(node); }
+
+template<uint N>
+bool MoveSet<N>::ok() const noexcept {
+  if (SAux::maxsize_moves <= _uend) return false;
+  for (uint u = 0; u < _uend; ++u) if (!_moves[u].ok()) return false;
+  return true; }
 
 template class MoveSet<Param::maxlen_play>;
