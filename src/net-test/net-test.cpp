@@ -7,7 +7,8 @@
 #include "shogibase.hpp"
 #include "xzi.hpp"
 #include <algorithm>
-#include <fstream>
+#include <chrono>
+#include <iostream>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -27,7 +28,7 @@ using std::cerr;
 using std::endl;
 using std::fill_n;
 using std::getline;
-using std::ifstream;
+using std::istream;
 using std::map;
 using std::max;
 using std::move;
@@ -38,6 +39,9 @@ using std::stringstream;
 using std::terminate;
 using std::unique_ptr;
 using std::vector;
+using std::chrono::system_clock;
+using std::chrono::duration_cast;
+using std::chrono::microseconds;
 using uint   = unsigned int;
 using ushort = unsigned short;
 using uchar  = unsigned char;
@@ -46,7 +50,10 @@ using namespace SAux;
 static_assert(file_size == NN::width,  "file_size == NN::width");
 static_assert(rank_size == NN::height, "rank_size == NN::height");
 
-static void do_test(ifstream &ifs) noexcept;
+static double elapsed = 0.0;
+static uint nelapsed  = 0U;
+
+static void do_test(istream &is) noexcept;
 static void compare(const vector<string> &path, const vector<double> &input,
 		    double value, const map<string, double> &policy) noexcept;
 
@@ -63,17 +70,17 @@ static double policy_max_e      = 0.0;
 static NNet nnet;
 
 int main(int argc, char **argv) {
-  if (argc < 3) {
-    die(ERR_INT("Usage: %s weight log...", argv[0]));
+  if (argc != 2) {
+    die(ERR_INT("Usage: %s weight", argv[0]));
     return 1; }
   
   nnet.reset(FName(argv[1]));
-  
-  argv += 1U;
-  while (*++argv) {
-    ifstream ifs(*argv);
-    if (!ifs) die(ERR_INT("cannot open %s", *argv));
-    do_test(ifs); }
+  do_test(std::cin);
+
+  if (0 < nelapsed) {
+    cout << "Average Time: "
+      << 0.001 * elapsed / static_cast<double>(nelapsed)
+	 << "ms" << endl; }
   
   if (0 < value_n) {
     double factor = 1.0 / static_cast<double>(value_n);
@@ -91,15 +98,14 @@ int main(int argc, char **argv) {
   
   return 0; }
 
-static void do_test(ifstream &ifs) noexcept {
+static void do_test(istream &is) noexcept {
 
   for (uint uline = 0, udata = 0;;) {
     // read position startpos move...
     string string_line;
-    if (! getline(ifs, string_line)) break;
+    if (! getline(is, string_line)) break;
     udata += 1U;
     uline += 1U;
-    cout << setw(5) << udata << endl;
     
     stringstream ss(string_line);
     string token1, token2, token3;
@@ -112,7 +118,7 @@ static void do_test(ifstream &ifs) noexcept {
     
     // input
     uline += 1U;
-    if (! getline(ifs, string_line)) die(ERR_INT("bad line %u", uline));
+    if (! getline(is, string_line)) die(ERR_INT("bad line %u", uline));
     ss.clear();
     ss.str(string_line);
     ss >> token1;
@@ -123,7 +129,7 @@ static void do_test(ifstream &ifs) noexcept {
 
     // value
     uline += 1U;
-    if (!getline(ifs, string_line)) die(ERR_INT("bad line %u", uline));
+    if (!getline(is, string_line)) die(ERR_INT("bad line %u", uline));
     ss.clear();
     ss.str(string_line);
     ss >> token1;
@@ -133,7 +139,7 @@ static void do_test(ifstream &ifs) noexcept {
 
     // policy
     uline += 1U;
-    if (!getline(ifs, string_line)) die(ERR_INT("bad line %u", uline));
+    if (!getline(is, string_line)) die(ERR_INT("bad line %u", uline));
     ss.clear();
     ss.str(string_line);
     ss >> token1;
@@ -144,10 +150,11 @@ static void do_test(ifstream &ifs) noexcept {
 
     // END
     uline += 1U;
-    if (!getline(ifs, string_line)) die(ERR_INT("bad line %u", uline));
+    if (!getline(is, string_line)) die(ERR_INT("bad line %u", uline));
     if (string_line != "END") die(ERR_INT("bad line %u", uline));
 
-    compare(path, input, value, policy); } }
+    compare(path, input, value, policy);
+    cout << setw(5) << udata << " OK" << endl; } }
 
 static double absolute_error(double f1, double f2) noexcept {
   return std::fabs(f1 - f2); }
@@ -209,8 +216,11 @@ static void compare(const vector<string> &path, const vector<double> &input1,
     nnmoves2[u] = NN::encode_nnmove(ms[u], node.get_turn());
   
   float prob2[SAux::maxsize_moves];
+  system_clock::time_point start = system_clock::now();
   double value2 = nnet.ff(input2.get(), ms.size(), nnmoves2, prob2);
-  cout << nnet.get_elapsed() << endl;
+  system_clock::time_point end = system_clock::now();
+  elapsed += duration_cast<microseconds>(end - start).count();
+  nelapsed += 1U;
   if (node.get_turn() == white) value2 = -value2;
   
   map<string, double> policy2;

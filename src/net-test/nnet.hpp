@@ -205,7 +205,6 @@ class NNet {
   void load(const FName &fwght) noexcept;
 
 public:
-  double get_elapsed() const noexcept;
   void reset(const FName &fwght) noexcept;
   float ff(const float *input, uint size_nnmove, ushort *nnmoves, float *prob)
     noexcept;

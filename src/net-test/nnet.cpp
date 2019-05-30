@@ -7,7 +7,6 @@
 #include "shogibase.hpp"
 #include "xzi.hpp"
 #include <algorithm>
-#include <chrono>
 #include <fstream>
 #include <queue>
 #include <utility>
@@ -26,16 +25,10 @@ using std::queue;
 using std::swap;
 using std::unique_ptr;
 using std::vector;
-using std::chrono::system_clock;
-using std::chrono::duration_cast;
-using std::chrono::microseconds;
 using row_t  = unique_ptr<float []>;
 using ushort = unsigned short;
 using uchar  = unsigned char;
 using namespace ErrAux;
-
-static double elapsed = 0.0;
-static uint nelapsed  = 0U;
 
 constexpr char msg_bad_xz_fmt[] = "bad xz format";
 constexpr char msg_bad_wght[]   = "bad weight format";
@@ -428,9 +421,6 @@ void Conv_3x3::ff(const float *fin, float *fout) noexcept {
 	fout[ch_out * NN::size_plane + u] += _bias[ch_out]; }
 #endif
 
-double NNet::get_elapsed() const noexcept {
-  return 0.001 * elapsed / static_cast<double>(nelapsed); }
-
 void NNet::reset(const FName &fwght) noexcept {
   load(fwght);
   for (auto &f : fslot) f.reset(new float [_maxsize_out]); }
@@ -559,8 +549,6 @@ void NNet::load(const FName &fwght) noexcept {
 
 float NNet::ff(const float *input, uint size_nnmove, ushort *nnmoves,
 	       float *prob) noexcept {
-  system_clock::time_point start = system_clock::now();
-
   assert(input && 0 < size_nnmove && nnmoves && prob);
   
   // feed forward input layers
@@ -579,8 +567,7 @@ float NNet::ff(const float *input, uint size_nnmove, ushort *nnmoves,
     
     swap(fin, fout);
     _body[ulayer + 1U].first.ff(fin, fout);
-    _body[ulayer + 1U].second.ff_relu(fout, fbypass);
-  }
+    _body[ulayer + 1U].second.ff_relu(fout, fbypass); }
   
   float *fout_body = fbypass;
   swap(fout_body, fout);
@@ -605,10 +592,4 @@ float NNet::ff(const float *input, uint size_nnmove, ushort *nnmoves,
   swap(fin, fout);
   _head_vl3.ff(fin, fout);
   assert(_head_vl3.get_nout() == 1U);
-  float ret = std::tanh(fout[0]);
-
-  system_clock::time_point end = system_clock::now();
-  elapsed += duration_cast<microseconds>(end - start).count();
-  nelapsed += 1U;
-  return ret; }
-
+  return std::tanh(fout[0]); }
