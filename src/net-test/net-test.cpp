@@ -228,7 +228,7 @@ static void compare(const vector<string> &path, const vector<double> &input1,
     policy2.emplace(ms[u].to_str(SAux::usi), prob2[u]);
   
   // test output
-  double value_e     = absolute_error(value1, value2);
+  double value_e    = absolute_error(value1, value2);
   value_n          += 1U;
   value_sum_e      += value_e;
   value_sum_se     += value_e * value_e;
