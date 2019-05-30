@@ -74,7 +74,7 @@ void PRT(const char *fmt, ...)
 	va_end( arg );
 }
 
-const int TMP_BUF_LEN = 256;
+const int TMP_BUF_LEN = 256*2;
 static char debug_str[TMP_BUF_LEN];
 
 void debug_set(const char *file, int line)
