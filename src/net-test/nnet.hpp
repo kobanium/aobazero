@@ -1,3 +1,5 @@
+// 2019 Team AobaZero
+// This source code is in the public domain.
 #pragma once
 #include "shogibase.hpp"
 #include <algorithm>

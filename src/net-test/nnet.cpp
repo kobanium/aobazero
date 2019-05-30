@@ -1,3 +1,5 @@
+// 2019 Team AobaZero
+// This source code is in the public domain.
 #include "err.hpp"
 #include "iobase.hpp"
 #include "nnet.hpp"
@@ -5,6 +7,7 @@
 #include "shogibase.hpp"
 #include "xzi.hpp"
 #include <algorithm>
+#include <chrono>
 #include <fstream>
 #include <queue>
 #include <utility>
@@ -23,15 +26,14 @@ using std::queue;
 using std::swap;
 using std::unique_ptr;
 using std::vector;
+using std::chrono::system_clock;
+using std::chrono::duration_cast;
+using std::chrono::microseconds;
 using row_t  = unique_ptr<float []>;
 using ushort = unsigned short;
 using uchar  = unsigned char;
 using namespace ErrAux;
 
-#include <chrono>
-using std::chrono::system_clock;
-using std::chrono::duration_cast;
-using std::chrono::microseconds;
 static double elapsed = 0.0;
 static uint nelapsed  = 0U;
 
@@ -197,10 +199,8 @@ static float x2(float x) noexcept { return x + x; }
 static float x3(float x) noexcept { return x + x + x; }
 static float x4(float x) noexcept { x += x; return x + x; }
 static float x6(float x) noexcept { x += x; return x + x + x; }
-static float x8(float x) noexcept { x += x; x += x; return x + x; }
 static float x9(float x) noexcept {
   float y = x + x; y += y; return y + y + x; }
-static float x16(float x) noexcept { x += x; x += x; x += x; return x + x; }
 
 void Conv_3x3::ff(const float *fin, float *fout) noexcept {
   constexpr int pad = static_cast<int>(_len_kernel / 2U);
