@@ -8,6 +8,10 @@
 #include <string.h>
 #include "shogi.h"
 
+#include <string>
+#include "yss_var.h"
+#include "yss_dcnn.h"
+
 
 /* unacceptable when the program is thinking, or quit pondering */
 #define AbortDifficultCommand                                              \
@@ -445,14 +449,27 @@ static int CONV proce_usi( tree_t * restrict ptree )
       return usi_root_list( ptree );
     }
 
-  if ( ! strncmp( token, "go", 2 ) )
-    {
-      iret = usi_go( ptree, &lasts );
-      moves_ignore[0] = MOVE_NA;
-      return iret;
-    }
+  if ( ! strncmp( token, "go", 2 ) ) {
+    usi_go_count++;
+    iret = usi_go( ptree, &lasts );
+    moves_ignore[0] = MOVE_NA;
+    return iret;
+  }
 
-  if ( ! strcmp( token, "stop" ) )     { return cmd_move_now(); }
+//if ( ! strcmp( token, "stop" ) )     { return cmd_move_now(); }
+  if ( ! strcmp( token, "stop" ) ) {
+    if ( is_ignore_stop()==0 ) {
+      send_latest_bestmove();
+    }
+    return 1;
+  }
+  if ( ! strcmp( token,"usinewgame") ) {
+    usi_go_count       = 0;
+    usi_bestmove_count = 0;
+    usi_newgame();
+    return 1;
+  }
+
   if ( ! strcmp( token, "position" ) ) { return usi_posi( ptree, &lasts ); }
   if ( ! strcmp( token, "quit" ) )     { return cmd_quit(); }
   if ( ! strcmp( token, "d" ) ) {
@@ -581,8 +598,9 @@ usi_go( tree_t * restrict ptree, char **lasts )
 //  iret = com_turn_start( ptree, 0 );
   iret = YssZero_com_turn_start( ptree );
   if ( iret < 0 ) {
-    if ( str_error == str_no_legal_move ) { USIOut( "bestmove resign\n" ); }
-    else                                  { return -1; }
+    DEBUG_PRT("Err\n");
+//  if ( str_error == str_no_legal_move ) { USIOut( "bestmove resign\n" ); }
+//  else                                  { return -1; }
   }
   
   return 1;

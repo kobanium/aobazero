@@ -21,6 +21,7 @@ namespace OSI {
     ~Pipe() noexcept;
     void open(const char *, char * const []) noexcept;
     void close() noexcept;
+    uint get_pid() const noexcept;
     void close_write() const noexcept;
     bool is_closed() const noexcept;
     bool ok() const noexcept;

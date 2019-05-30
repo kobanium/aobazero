@@ -393,7 +393,8 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 	}
 
 	float mul = 1.0f;
-	if ( all_sum > legal_sum && legal_sum > 0 ) mul = all_sum / legal_sum;
+//	PRT("all_sum=%f,legal=%f\n",all_sum,legal_sum);
+	if ( all_sum > legal_sum && legal_sum > 0 ) mul = 1.0f / legal_sum;
 	for ( i = 0; i < phg->child_num; i++ ) {
 		CHILD *pc = &phg->child[i];
 		if ( 1 && ply==1 && i < 30 ) {

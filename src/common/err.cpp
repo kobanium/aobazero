@@ -14,7 +14,7 @@ using std::terminate;
 using std::exception;
 
 void ErrAux::die(const exception &e) noexcept {
-  try { cerr << e.what() << endl; }
+  try { cerr << "\n" << e.what() << endl; }
   catch (...) {}
   terminate();
 }

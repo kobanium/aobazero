@@ -29,7 +29,7 @@ using namespace IOAux;
 using namespace Log;
 
 constexpr uint64_t size_cluster  = 10000U;
-constexpr char fname_wght_list[] = "weight_list.cfg";
+constexpr char fname_wght_list[] = "weight-list.cfg";
 constexpr char fname_tmp[]       = "tmp.csa.x_";
 constexpr char fmt_arch[]        = "arch%012" PRIi64 ".csa.xz";
 constexpr char fmt_pool[]        = "no%012" PRIi64 ".csa.xz";

@@ -32,15 +32,15 @@ public:
 
 class Client {
   using uint = unsigned int;
-  volatile std::atomic<bool> _quit;
-  volatile std::atomic<bool> _has_conn;
-  int64_t _wght_id;
+  std::atomic<bool> _quit, _has_conn, _downloading;
+  std::atomic<uint> _nsend, _ndiscard;
+  std::atomic<int64_t> _wght_id;
   std::unique_ptr<JQueue<Job>> _pJQueue;
-  std::unique_ptr<char []> _prec_xz;
-  std::unique_ptr<char []> _saddr;
+  std::unique_ptr<char []> _prec_xz, _saddr;
   std::thread _thread_reader, _thread_sender;
   std::mutex _m;
   std::shared_ptr<const WghtFile> _wght;
+  char _buf_wght_time[256];
   FName _dwght;
   int _ver_engine;
   uint _max_retry, _retry_count, _recvTO, _recv_bufsiz, _sendTO, _send_bufsiz;
@@ -63,6 +63,12 @@ public:
 	     uint size_queue, uint keep_wght) noexcept;
   void end() noexcept;
   std::shared_ptr<const WghtFile> get_wght() noexcept;
+
+  const char *get_buf_wght_time() { return _buf_wght_time; }
+  uint64_t get_wght_id() { return _wght_id; }
+  bool is_downloading() { return _downloading; }
+  uint get_nsend() const noexcept { return _nsend; };
+  uint get_ndiscard() const noexcept { return _ndiscard; }
   int get_ver_engine() const noexcept { return _ver_engine; }
   bool has_conn() const noexcept { return _has_conn; }
 };
