@@ -206,6 +206,6 @@ class NNet {
 
 public:
   void reset(const FName &fwght) noexcept;
-  float ff(const float *input, uint size_nnmove, ushort *nnmoves, float *prob)
-    noexcept;
+  void ff(uint size_batch, const float *input, const uint *sizes_nnmove,
+	  const ushort *nnmoves, float *probs, float *values) noexcept;
 };

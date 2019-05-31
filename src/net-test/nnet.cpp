@@ -547,9 +547,9 @@ void NNet::load(const FName &fwght) noexcept {
   index += 2;
   _maxsize_out = max(_maxsize_out, 1U); }
 
-float NNet::ff(const float *input, uint size_nnmove, ushort *nnmoves,
-	       float *prob) noexcept {
-  assert(input && 0 < size_nnmove && nnmoves && prob);
+void NNet::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
+	      const ushort *nnmoves, float *probs, float *values) noexcept {
+  assert(input && sizes_nnmove && nnmoves && probs);
   
   // feed forward input layers
   float *fin     = fslot[0].get();
@@ -578,10 +578,10 @@ float NNet::ff(const float *input, uint size_nnmove, ushort *nnmoves,
   _conv_head_plcy2.ff(fin, fout);
 
   assert(_conv_head_plcy2.get_nout() == NN::nch_out_policy);
-  for (uint u = 0; u < size_nnmove; ++u) {
+  for (uint u = 0; u < sizes_nnmove[0]; ++u) {
     assert(nnmoves[u] < NN::nch_out_policy * NN::size_plane);
-    prob[u] = fout[nnmoves[u]]; }
-  softmax(size_nnmove, prob);
+    probs[u] = fout[nnmoves[u]]; }
+  softmax(sizes_nnmove[0], probs);
 
   _conv_head_vl1.ff(fout_body, fout);
   _bn_head_vl1.ff_relu(fout);
@@ -592,4 +592,5 @@ float NNet::ff(const float *input, uint size_nnmove, ushort *nnmoves,
   swap(fin, fout);
   _head_vl3.ff(fin, fout);
   assert(_head_vl3.get_nout() == 1U);
-  return std::tanh(fout[0]); }
+  values[0] = std::tanh(fout[0]); }
+
