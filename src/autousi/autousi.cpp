@@ -153,17 +153,16 @@ static void output() noexcept {
   puts("|  PID | Dev | Average|               Progress                    |");
   puts("+------+-----+--------+-------------------------------------------+");
   for (uint u = 0; u < devices.size(); ++u) {
-    if (Pipe::get().is_closed(u)) {
-      puts("|  N/A |     |        |"
-	   "                                           |");
-      continue; }
+    char spid[64];
+    sprintf(spid,"  N/A ");
+    if ( ! Pipe::get().is_closed(u) ) sprintf(spid,"%6d",Pipe::get().get_pid(u));
     char buf[64];
     fill_n(buf, sizeof(buf), '#');
     uint len = std::min(Pipe::get().get_nmove(u) / 5,
 			static_cast<uint>(sizeof(buf)) - 1U);
     buf[len] = '\0';
-    printf("|%6d|%4d |%6.0fms|%3d:%-39s|\n",
-	   Pipe::get().get_pid(u), devices[u],
+    printf("|%s|%4d |%6.0fms|%3d:%-39s|\n",
+	   spid, devices[u],
 	   Pipe::get().get_speed_average(u),
 	   Pipe::get().get_nmove(u), buf); }
   puts("+------+-----+--------+-------------------------------------------+");
