@@ -133,17 +133,28 @@ static void output() noexcept {
   time_point<system_clock> time_now = system_clock::now();
   if (time_now < time_last + seconds(print_status)) return;
   
+  static uint prev_ntot     = 0;
+  static uint prev_nsend    = 0;
+  static uint prev_ndiscard = 0;
+  uint ntot     = Pipe::get().get_ngen_records();
+  uint nsend    = Client::get().get_nsend();
+  uint ndiscard = Client::get().get_ndiscard();
+  if ( prev_ntot == ntot && prev_nsend == nsend && prev_ndiscard == ndiscard ) return;
+  prev_ntot     = ntot;
+  prev_nsend    = nsend;
+  prev_ndiscard = ndiscard;
+
   first           = true;
   print_csa_do_nl = false;
   print_csa_num   = 0;
   time_last       = time_now;
   puts("");
-  puts("+------+-----+-------+---< Aobaz Status >------------------------+");
-  puts("|  PID | Dev |Average|               Progress                    |");
-  puts("+------+-----+-------+-------------------------------------------+");
+  puts("+------+-----+--------+---< Aobaz Status >------------------------+");
+  puts("|  PID | Dev | Average|               Progress                    |");
+  puts("+------+-----+--------+-------------------------------------------+");
   for (uint u = 0; u < devices.size(); ++u) {
     if (Pipe::get().is_closed(u)) {
-      puts("|  N/A |     |       |"
+      puts("|  N/A |     |        |"
 	   "                                           |");
       continue; }
     char buf[64];
@@ -151,15 +162,12 @@ static void output() noexcept {
     uint len = std::min(Pipe::get().get_nmove(u) / 5,
 			static_cast<uint>(sizeof(buf)) - 1U);
     buf[len] = '\0';
-    printf("|%6d|%4d |%5.0fms|%3d:%-39s|\n",
+    printf("|%6d|%4d |%6.0fms|%3d:%-39s|\n",
 	   Pipe::get().get_pid(u), devices[u],
 	   Pipe::get().get_speed_average(u),
 	   Pipe::get().get_nmove(u), buf); }
-  puts("+------+-----+-------+-------------------------------------------+");
+  puts("+------+-----+--------+-------------------------------------------+");
 
-  uint ntot     = Pipe::get().get_ngen_records();
-  uint nsend    = Client::get().get_nsend();
-  uint ndiscard = Client::get().get_ndiscard();
   printf("- Send Status: Sent %d, Lost %d, Waiting %d\n",
 	 nsend, ndiscard, ntot - nsend - ndiscard);
 
