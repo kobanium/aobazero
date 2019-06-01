@@ -150,7 +150,7 @@ static void output() noexcept {
   time_last       = time_now;
   puts("");
   puts("+------+-----+--------+---< Aobaz Status >------------------------+");
-  puts("|  PID | Dev | Average|               Progress                    |");
+  puts("|  PID | Dev | Average|               Moves                       |");
   puts("+------+-----+--------+-------------------------------------------+");
   for (uint u = 0; u < devices.size(); ++u) {
     char spid[64];
