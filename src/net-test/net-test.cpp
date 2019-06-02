@@ -123,7 +123,7 @@ public:
     _nnmoves(new ushort [N * SAux::maxsize_moves]),
     _probs(new float [N * SAux::maxsize_moves]), _npush(0), _ntest(0) {}
 
-  void reset(const FName &fname) noexcept { _nnet.reset(fname); }
+  void reset(const FName &fname) noexcept { _nnet.reset(N, fname); }
   
   void flush() noexcept {
     if (_npush == 0) return;
@@ -285,7 +285,7 @@ static void do_test(istream &is) noexcept {
     uline += 1U;
     if (!getline(is, string_line)) die(ERR_INT("bad line %u", uline));
     if (string_line != "END") die(ERR_INT("bad line %u", uline));
-    if (ms.size() == 0) return;
+    if (ms.size() == 0) continue;
 
     // push target position
     map<ushort, string> nnmove2str;
