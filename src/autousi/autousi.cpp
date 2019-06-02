@@ -153,10 +153,10 @@ static void output() noexcept {
   puts("|  PID | Dev | Average|               Moves                       |");
   puts("+------+-----+--------+-------------------------------------------+");
   for (uint u = 0; u < devices.size(); ++u) {
-    char spid[64];
-    sprintf(spid,"  N/A ");
-    if ( ! Pipe::get().is_closed(u) ) sprintf(spid,"%6d",Pipe::get().get_pid(u));
-    char buf[64];
+    const int BUF_SIZE = 64;
+    char spid[BUF_SIZE] = "  N/A ";
+    if ( ! Pipe::get().is_closed(u) ) snprintf(spid,BUF_SIZE,"%6d",Pipe::get().get_pid(u));
+    char buf[BUF_SIZE];
     fill_n(buf, sizeof(buf), '#');
     uint len = std::min(Pipe::get().get_nmove(u) / 5,
 			static_cast<uint>(sizeof(buf)) - 1U);
