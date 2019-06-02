@@ -42,8 +42,9 @@ using uchar  = unsigned char;
 using namespace ErrAux;
 using namespace SAux;
 
-static_assert(file_size == NN::width,  "file_size == NN::width");
-static_assert(rank_size == NN::height, "rank_size == NN::height");
+static_assert(file_size     == NN::width,  "file_size == NN::width");
+static_assert(rank_size     == NN::height, "rank_size == NN::height");
+static_assert(maxsize_moves == NN::nmove,  "maxsize_size == NN::nmove");
 constexpr double epsilon = 1e-4;
 
 static double elapsed  = 0.0;
@@ -125,13 +126,10 @@ public:
   void reset(const FName &fname) noexcept { _nnet.reset(fname); }
   
   void flush() noexcept {
+    if (_npush == 0) return;
     system_clock::time_point start = system_clock::now();
-
-    for (uint u = 0; u < _npush; ++u)
-      _nnet.ff(1, &( _input[u * NN::size_input] ), _sizes_nnmove + u,
-	       &( _nnmoves[u * SAux::maxsize_moves] ),
-	       &( _probs[u * SAux::maxsize_moves] ), _values + u);
-    
+    _nnet.ff(_npush, _input.get(), _sizes_nnmove, _nnmoves.get(), _probs.get(),
+	     _values);
     system_clock::time_point end = system_clock::now();
     elapsed  += duration_cast<microseconds>(end - start).count();
     nelapsed += 1U;
@@ -139,9 +137,8 @@ public:
     for (uint index = 0; index < _npush; ++index) test(index);
     for (uint index = 0; index < _npush; ++index) {
       _ntest += 1U; cout << setw(5) << _ntest; }
-    if (_npush) {
-      cout << " OK" << endl;
-      _npush = 0; } }
+    cout << " OK" << endl;
+    _npush = 0; }
   
   void push(const float *input, uint size_nnmove, const ushort *nnmoves,
 	    float value, const map<string, double> &policy_answers,

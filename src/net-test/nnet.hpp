@@ -22,6 +22,7 @@ namespace NN {
   constexpr uint nch_input      = 362U;
   constexpr uint size_input     = size_plane * nch_input;
   constexpr uint nch_out_policy = 139U;
+  constexpr uint nmove          = 1024U;
   unsigned short encode_nnmove(const Action &a, const Color &turn) noexcept;
 }
 
@@ -138,7 +139,7 @@ class Conv_1x1 : public Conv {
 public:
   void ff(const float *fin, float *fout) const noexcept; };
 
-#define F_3x3_3x3
+//#define F_3x3_3x3
 #if defined(F_3x3_3x3)
 class Conv_3x3 : public Conv {
   using uint = unsigned int;

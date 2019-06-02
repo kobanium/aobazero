@@ -552,45 +552,52 @@ void NNet::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
   assert(input && sizes_nnmove && nnmoves && probs);
   
   // feed forward input layers
-  float *fin     = fslot[0].get();
-  float *fout    = fslot[1].get();
-  float *fbypass = fslot[2].get();
+  for (uint ub = 0; ub < size_batch; ++ub) {
+    float *fin     = fslot[0].get();
+    float *fout    = fslot[1].get();
+    float *fbypass = fslot[2].get();
 
-  _body[0].first.ff(input, fout);
-  _body[0].second.ff_relu(fout);
-  uint nf = _body[0].second.get_nio() * NN::size_plane;
-  for (uint ulayer = 1U; ulayer < _body.size(); ulayer += 2U) {
-    swap(fin, fout);
-    copy_n(fin, nf, fbypass);
-    _body[ulayer].first.ff(fin, fout);
-    _body[ulayer].second.ff_relu(fout);
+    _body[0].first.ff(input, fout);
+    _body[0].second.ff_relu(fout);
+    uint nf = _body[0].second.get_nio() * NN::size_plane;
+    for (uint ulayer = 1U; ulayer < _body.size(); ulayer += 2U) {
+      swap(fin, fout);
+      copy_n(fin, nf, fbypass);
+      _body[ulayer].first.ff(fin, fout);
+      _body[ulayer].second.ff_relu(fout);
+      
+      swap(fin, fout);
+      _body[ulayer + 1U].first.ff(fin, fout);
+      _body[ulayer + 1U].second.ff_relu(fout, fbypass); }
+    
+    float *fout_body = fbypass;
+    swap(fout_body, fout);
+    _conv_head_plcy1.ff(fout_body, fout);
+    _bn_head_plcy1.ff_relu(fout);
     
     swap(fin, fout);
-    _body[ulayer + 1U].first.ff(fin, fout);
-    _body[ulayer + 1U].second.ff_relu(fout, fbypass); }
-  
-  float *fout_body = fbypass;
-  swap(fout_body, fout);
-  _conv_head_plcy1.ff(fout_body, fout);
-  _bn_head_plcy1.ff_relu(fout);
-  
-  swap(fin, fout);
-  _conv_head_plcy2.ff(fin, fout);
-
-  assert(_conv_head_plcy2.get_nout() == NN::nch_out_policy);
-  for (uint u = 0; u < sizes_nnmove[0]; ++u) {
-    assert(nnmoves[u] < NN::nch_out_policy * NN::size_plane);
-    probs[u] = fout[nnmoves[u]]; }
-  softmax(sizes_nnmove[0], probs);
-
-  _conv_head_vl1.ff(fout_body, fout);
-  _bn_head_vl1.ff_relu(fout);
-
-  swap(fin, fout);
-  _head_vl2.ff_relu(fin, fout);
-  
-  swap(fin, fout);
-  _head_vl3.ff(fin, fout);
-  assert(_head_vl3.get_nout() == 1U);
-  values[0] = std::tanh(fout[0]); }
+    _conv_head_plcy2.ff(fin, fout);
+    
+    assert(_conv_head_plcy2.get_nout() == NN::nch_out_policy);
+    for (uint u = 0; u < sizes_nnmove[0]; ++u) {
+      assert(nnmoves[u] < NN::nch_out_policy * NN::size_plane);
+      probs[u] = fout[nnmoves[u]]; }
+    softmax(sizes_nnmove[0], probs);
+    
+    _conv_head_vl1.ff(fout_body, fout);
+    _bn_head_vl1.ff_relu(fout);
+    
+    swap(fin, fout);
+    _head_vl2.ff_relu(fin, fout);
+    
+    swap(fin, fout);
+    _head_vl3.ff(fin, fout);
+    assert(_head_vl3.get_nout() == 1U);
+    values[0] = std::tanh(fout[0]);
+    
+    input        += NN::size_input;
+    nnmoves      += NN::nmove;
+    probs        += NN::nmove;
+    sizes_nnmove += 1U;
+    values       += 1U; } }
 
