@@ -1,3 +1,4 @@
+The text written in English is [here](README_en.md).
 # おねがい
 みなさん！将棋人工知能(AI)がゼロから学習し、強くなっていく過程を一緒に観察しませんか？  
 世界中から計算資源を獲得するために、ユーザ参加型のコンテンツを作成しました。  
@@ -75,8 +76,8 @@ usiエンジンであるaobazはGPL v3です。それ以外はpublic domainで�
 詳しくはaobazero-1.0.tar.gz内のlicensesをご覧ください。
 
 # Link
- - [Leela Zero](https://github.com/leela-zero/leela-zero)
- - [LCZero](https://github.com/LeelaChessZero/lc0)
+ - [Leela Zero (Go)](https://github.com/leela-zero/leela-zero)
+ - [LCZero (Chess)](https://github.com/LeelaChessZero/lczero)
 
 # 参考文献
  - D. Silver, et al. (2017a). Mastering the game of Go without human knowledge, *Nature*, **550**, 354-359.
