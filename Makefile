@@ -1,8 +1,53 @@
-CXXFLAGS += -std=c++11 -Wextra -Ofast -march=native -mtune=native
-CPPFLAGS += -MMD -MP -Isrc/common -DDEBUG -DUSE_SSE4
-LDFLAGS  += -lopenblas -llzma -lpthread -lOpenCL
+include Makefile.config
 
-TARGETS        := bin/aobaz bin/autousi bin/server bin/gencode bin/playshogi bin/crc64 bin/extract bin/ocldevs bin/net-test
+ENABLE_GDBINFO ?= 0
+ifeq ($(ENABLE_GDBINFO), 1)
+	CXXFLAGS += -g
+	LDFLAGS  += -g
+endif
+
+ENABLE_ASSERT ?= 0
+ifeq ($(ENABLE_ASSERT), 1)
+	CPPFLAGS += -DDEBUG
+else
+	CPPFLAGS += -DNDEBUG
+endif
+
+USE_OpenCL ?= 0
+ifeq ($(USE_OpenCL), 1)
+	CPPFLAGS += -DUSE_OPENCL
+	TARGETS  += bin/ocldevs
+	LIB_OpenCL := -lOpenCL
+else
+	LIB_OpenCL :=
+endif
+
+BLAS ?= None
+ifeq ($(BLAS), IntelMKL)
+	LIB_BLAS := -lmkl_rt
+	CPPFLAGS += -DUSE_MKL
+	ifdef IntelMKL_INC
+		CPPFLAGS += -I$(IntelMKL_INC)
+	endif
+	ifdef IntelMKL_LIB
+		LDFLAGS  += -L$(IntelMKL_LIB) -Wl,-rpath,$(IntelMKL_LIB)
+	endif
+else ifeq ($(BLAS), OpenBLAS)
+	LIB_BLAS := -lopenblas
+	CPPFLAGS += -DUSE_OPENBLAS
+	ifdef OpenBLAS_INC
+		CPPFLAGS += -I$(OpenBLAS_INC)
+	endif
+	ifdef OpenBLAS_LIB
+		LDFLAGS  += -L$(OpenBLAS_LIB) -Wl,-rpath,$(OpenBLAS_LIB)
+	endif
+endif
+
+CXXFLAGS += -std=c++11 -Wextra -Ofast -march=native -mtune=native
+CPPFLAGS += -MMD -MP -Isrc/common -DNDEBUG -DUSE_SSE4
+LDFLAGS  += -llzma -lpthread
+
+TARGETS        += bin/aobaz bin/autousi bin/server bin/gencode bin/playshogi bin/crc64 bin/extract bin/net-test
 AUTOUSI_OBJS   := src/autousi/autousi.o src/autousi/client.o src/autousi/pipe.o src/common/iobase.o src/common/option.o src/common/jqueue.o src/common/xzi.o src/common/err.o src/common/shogibase.o src/common/osi.o
 SERVER_OBJS    := src/server/server.o src/server/listen.o src/server/datakeep.o src/common/iobase.o src/common/xzi.o src/common/jqueue.o src/common/err.o src/common/option.o src/server/logging.o src/common/shogibase.o src/common/osi.o
 GENCODE_OBJS   := src/gencode/gencode.o
@@ -39,10 +84,10 @@ bin/extract: $(EXTRACT_OBJS)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 bin/ocldevs: $(OCLDEVS_OBJS)
-	$(CXX) -o $@ $^ $(LDFLAGS)
+	$(CXX) -o $@ $^ $(LDFLAGS) $(LIB_OpenCL)
 
 bin/net-test: $(NET_TEST_OBJS)
-	$(CXX) -o $@ $^ $(LDFLAGS)
+	$(CXX) -o $@ $^ $(LDFLAGS) $(LIB_BLAS) $(LIB_OpenCL)
 
 .cpp.o:
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<

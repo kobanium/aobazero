@@ -14,8 +14,7 @@
 #include <cassert>
 #if defined(USE_MKL)
 #  include <mkl.h>
-//#  include <mkl_cblas.h>
-#else
+#elif defined(USE_OPENBLAS)
 #  include <cblas.h>
 #endif
 using std::copy_n;
@@ -467,6 +466,8 @@ void NNet::reset(uint maxsize_batch, const FName &fwght) noexcept {
   assert(0 < maxsize_batch && fwght.ok());
 #if defined(USE_MKL)
   mkl_set_num_threads(1);
+#elif defined(USE_OPENBLAS)
+  openblas_set_num_threads(1);
 #endif
   _maxsize_batch = maxsize_batch;
   load(fwght);
@@ -485,7 +486,7 @@ void NNet::load(const FName &fwght) noexcept {
   
   // read version
   PtrLen<char> pl_line(line, 0);
-  bool bRet = xzd.getline(&ifs, &pl_line, len_line, "\n\r");
+  bool bRet = xzd.getline(&ifs, &pl_line, len_line, "\n");
   if (!bRet) die(ERR_INT(msg_bad_xz_fmt));
   if (len_line <= pl_line.len) die(ERR_INT("line too long"));
   pl_line.p[pl_line.len] = '\0';
