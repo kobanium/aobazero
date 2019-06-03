@@ -245,7 +245,7 @@ public:
     assert(ok()); return tbl_sq_name[static_cast<int>(mode)][_u]; }
   constexpr uint to_ray(const Sq &sq) const noexcept {
     return tbl_sq_ray[_u][sq.to_u()]; }
-  constexpr uint to_dir(const Sq &sq) const noexcept {
+  constexpr uchar to_dir(const Sq &sq) const noexcept {
     return tbl_sq_dir[_u][sq.to_u()]; }
   constexpr uint to_distance(const Sq &sq) const noexcept {
     return tbl_sq_distance[_u][sq.to_u()]; }
@@ -329,7 +329,7 @@ public:
   constexpr bool is_slider() const noexcept { return tbl_slider[_u]; }
   constexpr bool can_promote() const noexcept { return _u < 7U && _u != 4U; }
   constexpr bool capt_ok() const noexcept { return _u < 14U && _u != 7U; }
-  constexpr uint to_u() const noexcept { return _u; }
+  constexpr uchar to_u() const noexcept { return _u; }
   const char *to_str(const SAux::Mode &mode = SAux::csa) const noexcept {
     assert(ok()); return tbl_pc_name[static_cast<int>(mode)][_u]; }
   constexpr Pc to_proPc() const noexcept { return Pc(tbl_promote[_u]); }
@@ -510,7 +510,7 @@ public:
     assert(c.ok()); return _bm_horse[c.to_u()]; }
   const BMap & get_bm_dragon(const Color &c) const noexcept {
     assert(c.ok()); return _bm_dragon[c.to_u()]; }
-  uint get_num_hand(const Color &c, const Pc &pc) const noexcept {
+  uchar get_num_hand(const Color &c, const Pc &pc) const noexcept {
     assert(c.ok() && pc.hand_ok()); return _hand[c.to_u()][pc.to_u()]; }
   bool have_pawn(const Color &c, int file) const noexcept {
     return 0 < _pawn_file[c.to_u()][file]; }
@@ -560,7 +560,7 @@ namespace SAux {
   constexpr NodeType illegal_win[2] = { illegal_bwin, illegal_wwin };
 }
 
-template<uint N>
+template<unsigned int N>
 class Node {
   using uint   = unsigned int;
   using ushort = unsigned short;
@@ -592,7 +592,7 @@ public:
 			  SAux::Mode mode = SAux::csa) noexcept;
 };
 
-template<uint N>
+template<unsigned int N>
 class MoveSet {
   using uint   = unsigned int;
   using ushort = unsigned short;

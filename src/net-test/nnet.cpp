@@ -12,6 +12,12 @@
 #include <utility>
 #include <vector>
 #include <cassert>
+#if defined(USE_MKL)
+#  include <mkl.h>
+//#  include <mkl_cblas.h>
+#else
+#  include <cblas.h>
+#endif
 using std::copy_n;
 using std::fill_n;
 using std::forward;
@@ -82,7 +88,8 @@ static pair<uint, row_t> read_row(ifstream &ifs,
     queue_float.push(f);
     token = OSI::strtok(nullptr, " ", &saveptr); }
   
-  pair<uint, row_t> ret(queue_float.size(), new float [queue_float.size()]);
+  pair<uint, row_t> ret(static_cast<uint>(queue_float.size()),
+			new float [queue_float.size()]);
   uint u = 0;
   while(!queue_float.empty()) {
     ret.second[u++] = queue_float.front();
@@ -97,7 +104,7 @@ static void softmax(uint n, float *p) noexcept {
     p[u] = std::exp(p[u] - fmax);
     fsum += p[u]; }
   
-  float factor = 1.0 / fsum;
+  float factor = 1.0f / fsum;
   for (uint u = 0; u < n; ++u) p[u] *= factor; }
 
 void IP::reset(uint nin, uint nout, row_t &&weight, row_t &&bias) noexcept {
@@ -458,6 +465,9 @@ void Conv_3x3::ff(uint size_batch, const float *fin, float *fout) noexcept {
 
 void NNet::reset(uint maxsize_batch, const FName &fwght) noexcept {
   assert(0 < maxsize_batch && fwght.ok());
+#if defined(USE_MKL)
+  mkl_set_num_threads(1);
+#endif
   _maxsize_batch = maxsize_batch;
   load(fwght);
   for (auto &f : _fslot) f.reset(new float [_maxsize_batch * _maxsize_out]); }
@@ -486,7 +496,6 @@ void NNet::load(const FName &fwght) noexcept {
   _version = static_cast<uint>(v);
   
   // read weights and detect dimensions
-  uint counter = 0;
   vector<pair<uint, row_t>> vec;
   for (uint counter = 0;; ++counter) {
     if (counter == 1024U) die(ERR_INT(msg_bad_wght));
@@ -638,4 +647,3 @@ void NNet::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
   _head_vl3.ff(size_batch, fin, fout);
   assert(_head_vl3.get_nout() == 1U);
   for (uint ub = 0; ub < size_batch; ++ub) values[ub] = std::tanh(fout[ub]); }
-

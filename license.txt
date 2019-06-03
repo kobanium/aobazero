@@ -9,11 +9,12 @@ This package contains part of source code from Leela Zero in
 src/usi_engine/ [1], CLBlast in src/usi_engine/kernels/clblast/ [2],
 OpenCL in src/usi_engine/CL/ and win/CL [3], and half in
 src/usi_engine/half [4]. This package also contains part of binary code
-from liblzma [5] built by using Visual Studio Community 2017 [6] in win/.
-We place detailed license information under the directory licenses/.
+from liblzma [5] built by using Visual Studio Community 2017 [6] and from
+Intel Math Kernel Library [7] in win/. We place detailed license information
+under the directory licenses/.
 
 Please use the licensing statement of Unlicense (https://unlicense.org)
-if you require legal permission for the programs in public domain [7].
+if you require legal permission for the programs in public domain [8].
 
 [1] Gian-Carlo Pascutto et al., Leela Zero, http://zero.sjeng.org/home/,
 2019 (last access).
@@ -27,5 +28,6 @@ library, http://half.sourceforge.net/, 2019 (last access).
 [6] Microsoft Corporation, Microsoft Visual Studio Community 2017
 distributable, https://visualstudio.microsoft.com/license-terms/mlt553321/,
 2019 (last access).
-[7] Unlicense.org, Unlicense Yourself: Set Your Code Free,
+[7] Intel Corporation, LICENSE FAQ, https://software.intel.com/en-us/mkl/license-faq
+[8] Unlicense.org, Unlicense Yourself: Set Your Code Free,
 https://unlicense.org/, 2019 (last access).

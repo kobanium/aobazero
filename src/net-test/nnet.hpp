@@ -12,10 +12,9 @@
 #include <climits>
 #include <cmath>
 #include <cstdint>
-#include <cblas.h>
-using uint = unsigned int;
 
 namespace NN {
+  using uint = unsigned int;
   constexpr uint width          = 9U;
   constexpr uint height         = 9U;
   constexpr uint size_plane     = width * height;
@@ -26,7 +25,7 @@ namespace NN {
   unsigned short encode_nnmove(const Action &a, const Color &turn) noexcept;
 }
 
-template<uint Len>
+template<unsigned int Len>
 class NodeNN : public Node<Len> {
   using uint  = unsigned int;
   using uchar = unsigned char;
@@ -48,7 +47,6 @@ class NodeNN : public Node<Len> {
   void set_posi() noexcept {
     uint len = Node<Len>::get_len_path();
     const Board &board = Node<Len>::get_board();
-    const Color &turn  = Node<Len>::get_turn();
 
     for (uint uc = 0; uc < Color::ok_size; ++uc) {
       _posi[len].bm[uc] = board.get_bm_color(Color(uc));
@@ -69,13 +67,10 @@ public:
   
   void encode_input(float *p) noexcept {
     assert(p);
-    std::fill_n(p, NN::size_input, 0.0);
-    const Board &board = Node<Len>::get_board();
-    const Color &turn  = Node<Len>::get_turn();
-    uint len_path      = Node<Len>::get_len_path();
+    std::fill_n(p, NN::size_input, 0.0f);
+    const Color &turn = Node<Len>::get_turn();
     
     uint ch_off = 0;
-    static_assert(362U == NN::nch_input);
     for (uint uposi = 0; uposi < 8U; ++uposi) {
       if (Node<Len>::get_len_path() < uposi) break;
       uint len_path = Node<Len>::get_len_path() - uposi;
@@ -107,11 +102,13 @@ public:
     if (turn == SAux::white) store_plane(p, 360U);
     
     // path length from root of shogi
+    uint len_path = Node<Len>::get_len_path();
     store_plane(p, 361U, (1.0f / 512.0f) * static_cast<float>(len_path)); }
 };
 
 class IP {
   using row_t = std::unique_ptr<float []>;
+  using uint = unsigned int;
   uint _nin, _nout;
   row_t _weight, _bias;
   
@@ -126,6 +123,7 @@ public:
 
 class Conv {
   using row_t = std::unique_ptr<float []>;
+  using uint = unsigned int;
 protected:
   uint _nin, _nout;
   row_t _weight, _bias;
@@ -140,6 +138,7 @@ public:
 };
 
 class Conv_1x1 : public Conv {
+  using uint = unsigned int;
 public:
   void ff(uint size_batch, const float *fin, float *fout) const noexcept; };
 
@@ -185,6 +184,7 @@ public:
 
 class BNorm {
   using row_t = std::unique_ptr<float []>;
+  using uint = unsigned int;
 protected:
   uint _nio;
   row_t _mean, _sd_inv;
@@ -201,6 +201,8 @@ public:
 
 class FName;
 class NNet {
+  using uint = unsigned int;
+  using ushort = unsigned short;
   using row_t = std::unique_ptr<float []>;
   static constexpr float bn_factor = 1.0f / 999.982f;
   static constexpr float bn_eps    = 1e-5f;

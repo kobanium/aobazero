@@ -45,6 +45,7 @@ using namespace SAux;
 static_assert(file_size     == NN::width,  "file_size == NN::width");
 static_assert(rank_size     == NN::height, "rank_size == NN::height");
 static_assert(maxsize_moves == NN::nmove,  "maxsize_size == NN::nmove");
+constexpr uint size_batch = 8U;
 constexpr double epsilon = 1e-4;
 
 static double elapsed  = 0.0;
@@ -76,7 +77,7 @@ class QueueTest {
   NNet _nnet;
   map<ushort, string> _tbl_nnmove2str[N];
   map<string, double> _policy_answers[N];
-  float _value_answers[N];
+  double _value_answers[N];
 
   void test(uint index) const noexcept {
     assert(index < N);
@@ -141,7 +142,7 @@ public:
     _npush = 0; }
   
   void push(const float *input, uint size_nnmove, const ushort *nnmoves,
-	    float value, const map<string, double> &policy_answers,
+	    double value, const map<string, double> &policy_answers,
 	    const map<ushort, string> &nnmove2str) noexcept {
     copy_n(input, NN::size_input,
 	   &( _input[_npush * NN::size_input] ));
@@ -156,7 +157,7 @@ public:
 
 static void do_test(istream &is) noexcept;
 
-static QueueTest<4> queue_test;
+static QueueTest<size_batch> queue_test;
 
 int main(int argc, char **argv) {
   if (argc != 2) {
@@ -218,8 +219,8 @@ static void do_test(istream &is) noexcept {
     ss >> token1;
     if (token1 != "input") die(ERR_INT("bad line %u", uline));
     vector<double> input_answer;
-    double f;
-    while (ss >> f) input_answer.push_back(f);
+    double di;
+    while (ss >> di) input_answer.push_back(di);
 
     unique_ptr<float []> input(new float [NN::size_input]);
     node.encode_input(input.get());
@@ -256,7 +257,7 @@ static void do_test(istream &is) noexcept {
     if (token1 != "policy") die(ERR_INT("bad line %u", uline));
 
     map<string, double> policy_answer;
-    while (ss >> token1 >> f) policy_answer.emplace(move(token1), f);
+    while (ss >> token1 >> di) policy_answer.emplace(move(token1), di);
 
     // test genmove
     MoveSet<Param::maxlen_play> ms;
