@@ -37,6 +37,7 @@ using namespace ErrAux;
 
 constexpr char msg_bad_xz_fmt[] = "bad xz format";
 constexpr char msg_bad_wght[]   = "bad weight format";
+constexpr uint len_wght_line    = 1024U * 1024U * 64U;
 
 void preprocess(Conv &conv, BNorm &bn) noexcept {
   assert(conv.ok() && bn.ok());
@@ -67,16 +68,8 @@ ushort NN::encode_nnmove(const Action &a, const Color &turn) noexcept {
   assert(us < 10692U);
   return us; }
 
-static pair<uint, row_t> read_row(ifstream &ifs,
-				  XZDecode<ifstream, PtrLen<char>> &xzd,
-				  char *line, uint len_line) noexcept {
-  assert(line && 0 < len_line);
-  PtrLen<char> pl_line(line, 0);
-  bool bRet = xzd.getline(&ifs, &pl_line, len_line, "\n\r");
-  if (!bRet) die(ERR_INT(msg_bad_xz_fmt));
-  if (len_line <= pl_line.len) die(ERR_INT("line too long"));
-  pl_line.p[pl_line.len] = '\0';
-  
+static pair<uint, row_t> read_row(char *line) noexcept {
+  assert(line);
   char *saveptr, *endptr;
   const char *token = OSI::strtok(line, " ", &saveptr);
   queue<float> queue_float;
@@ -94,6 +87,81 @@ static pair<uint, row_t> read_row(ifstream &ifs,
     ret.second[u++] = queue_float.front();
     queue_float.pop(); }
   return ret; }
+
+class NotXZ {};
+
+static vector<pair<uint, row_t>>
+read_xz(const FName &fwght, uint &version, uint64_t &digest) {
+  ifstream ifs(fwght.get_fname(), ios::binary);
+  if (!ifs) die(ERR_INT("cannot open %s", fwght.get_fname()));
+  
+  unique_ptr<char []> line_ptr(new char [len_wght_line]);
+  char *line = line_ptr.get();
+  XZDecode<ifstream, PtrLen<char>> xzd;
+  xzd.init();
+  
+  // read version
+  PtrLen<char> pl_line(line, 0);
+  bool bRet = xzd.getline(&ifs, &pl_line, len_wght_line, "\n");
+  if (!bRet) throw NotXZ();
+  if (pl_line.len == 0) die(ERR_INT(msg_bad_wght));
+  if (pl_line.len == len_wght_line) die(ERR_INT("line too long"));
+  pl_line.p[pl_line.len] = '\0';
+  char *endptr;
+  long int v = strtol(line, &endptr, 10);
+  if (endptr == line || *endptr != '\0' || v == LONG_MAX || v == LONG_MIN)
+    die(ERR_INT(msg_bad_wght));
+  version = static_cast<uint>(v);
+  
+  // read weights and detect dimensions
+  vector<pair<uint, row_t>> vec;
+  for (uint counter = 0;; ++counter) {
+    if (counter == 1024U) die(ERR_INT(msg_bad_wght));
+    PtrLen<char> pl_line(line, 0);
+    bool bRet = xzd.getline(&ifs, &pl_line, len_wght_line, "\n");
+    if (!bRet) die(ERR_INT(msg_bad_wght));
+    if (len_wght_line == pl_line.len) die(ERR_INT("line too long"));
+    if (pl_line.len == 0) break;
+    pl_line.p[pl_line.len] = '\0';
+    pair<uint, row_t> row = read_row(line);
+    vec.emplace_back(move(row)); }
+  digest = xzd.get_crc64();
+  return vec; }
+
+static vector<pair<uint, row_t>>
+read_txt(const FName &fwght, uint &version, uint64_t &digest) noexcept {
+  ifstream ifs(fwght.get_fname());
+  if (!ifs) die(ERR_INT("cannot open %s", fwght.get_fname()));
+  
+  unique_ptr<char []> line_ptr(new char [len_wght_line]);
+  char *line = line_ptr.get();
+  
+  // read version
+  ifs.getline(line, len_wght_line, '\n');
+  if (ifs.eof()) die(ERR_INT(msg_bad_wght));
+  if (!ifs) die(ERR_INT("line too long"));
+  digest = XZAux::crc64(line, 0);
+  digest = XZAux::crc64("\n", digest);
+  
+  char *endptr;
+  long int v = strtol(line, &endptr, 10);
+  if (endptr == line || *endptr != '\0' || v == LONG_MAX || v == LONG_MIN)
+    die(ERR_INT(msg_bad_wght));
+  version = static_cast<uint>(v);
+  
+  // read weights and detect dimensions
+  vector<pair<uint, row_t>> vec;
+  for (uint counter = 0;; ++counter) {
+    if (counter == 1024U) die(ERR_INT(msg_bad_wght));
+
+    ifs.getline(line, len_wght_line);
+    if (ifs.eof()) break;
+    if (!ifs) die(ERR_INT("line too long"));
+    digest = XZAux::crc64(line, digest);
+    digest = XZAux::crc64("\n", digest);
+    pair<uint, row_t> row = read_row(line);
+    vec.emplace_back(move(row)); }
+  return vec; }
 
 static void softmax(uint n, float *p) noexcept {
   assert(0 < n && p);
@@ -475,35 +543,9 @@ void NNet::reset(uint maxsize_batch, const FName &fwght) noexcept {
 
 void NNet::load(const FName &fwght) noexcept {
   assert(fwght.ok());
-  ifstream ifs(fwght.get_fname(), ios::binary);
-  if (!ifs) die(ERR_INT("cannot open %s", fwght.get_fname()));
-  
-  constexpr uint len_line = 1024U * 1024U * 64U;
-  unique_ptr<char []> line_ptr(new char [len_line]);
-  char *line = line_ptr.get();
-  XZDecode<ifstream, PtrLen<char>> xzd;
-  xzd.init();
-  
-  // read version
-  PtrLen<char> pl_line(line, 0);
-  bool bRet = xzd.getline(&ifs, &pl_line, len_line, "\n");
-  if (!bRet) die(ERR_INT(msg_bad_xz_fmt));
-  if (len_line <= pl_line.len) die(ERR_INT("line too long"));
-  pl_line.p[pl_line.len] = '\0';
-  char *endptr;
-  long int v = strtol(line, &endptr, 10);
-  if (endptr == line || *endptr != '\0' || v == LONG_MAX || v == LONG_MIN)
-    die(ERR_INT(msg_bad_wght));
-  _version = static_cast<uint>(v);
-  
-  // read weights and detect dimensions
   vector<pair<uint, row_t>> vec;
-  for (uint counter = 0;; ++counter) {
-    if (counter == 1024U) die(ERR_INT(msg_bad_wght));
-    pair<uint, row_t> row = read_row(ifs, xzd, line, len_line);
-    if (row.first == 0) break;
-    vec.emplace_back(move(row)); }
-  _digest = xzd.get_crc64();
+  try             { vec = read_xz (fwght, _version, _digest); }
+  catch (NotXZ &) { vec = read_txt(fwght, _version, _digest); }
   
   constexpr uint nrow_input = 4U;
   constexpr uint nrow_head  = 14U;
@@ -536,6 +578,10 @@ void NNet::load(const FName &fwght) noexcept {
     preprocess(conv_3x3, bn);
     _body.emplace_back(move(conv_3x3), move(bn));
     nch_in = nch_out; }
+  
+  for (uint ulayer = 1U; ulayer < _body.size(); ++ulayer)
+    if (_body[0].second.get_nio() != _body[ulayer].second.get_nio())
+      die(ERR_INT(msg_bad_wght));
   
   uint nch_body = nch_in;
   
