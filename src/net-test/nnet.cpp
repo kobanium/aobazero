@@ -298,11 +298,11 @@ void Conv_3x3::ff(uint size_batch, const float *fin, float *fout) noexcept {
   const uint uca = _len_tile_in * size_batch * _ntile * _nin;
   const uint ucb = size_batch * _ntile * _nin ;
 
-  for (uint nb = 0; nb < size_batch; ++nb)
-    for (uint uh = 0; uh < _ntile_h; ++uh)
-      for (uint uw = 0; uw < _ntile_w; ++uw)
-	for (uint ch_in = 0; ch_in < _nin; ++ch_in) {
-	  const float *fin_c = fin + (nb * _nin + ch_in) * NN::size_plane;
+  for (uint ub = 0; ub < size_batch; ++ub)
+    for (uint ch_in = 0; ch_in < _nin; ++ch_in) {
+      const float *fin_c = fin + (ub * _nin + ch_in) * NN::size_plane;
+      for (uint uh = 0; uh < _ntile_h; ++uh)
+	for (uint uw = 0; uw < _ntile_w; ++uw) {
 	  float md[_len_tile_in][_len_tile_in];
 	  int y0 = static_cast<int>(uh * _len_tile_out) - pad;
 	  int x0 = static_cast<int>(uw * _len_tile_out) - pad;
@@ -314,7 +314,7 @@ void Conv_3x3::ff(uint size_batch, const float *fin, float *fout) noexcept {
 	      else md[y][x] = 0.0f;
 	  
 	  const uint utile = uh * _ntile_w + uw;
-	  const uint ucc = (ch_in * size_batch + nb) * _ntile + utile;
+	  const uint ucc = (ch_in * size_batch + ub) * _ntile + utile;
 	  _matrix_V[ucc + uca*0U + ucb*0U]
 	    = (+ x4(md[0][0]) - x2(md[0][1]) - x4(md[0][2]) + x2(md[0][3])
 	       - x2(md[1][0]) + x1(md[1][1]) + x2(md[1][2]) - x1(md[1][3])
@@ -413,7 +413,8 @@ void Conv_3x3::ff(uint size_batch, const float *fin, float *fout) noexcept {
 	    = (+ x4(md[1][1]) - x2(md[1][2]) - x4(md[1][3]) + x2(md[1][4])
 	       - x2(md[2][1]) + x1(md[2][2]) + x2(md[2][3]) - x1(md[2][4])
 	       - x4(md[3][1]) + x2(md[3][2]) + x4(md[3][3]) - x2(md[3][4])
-	       + x2(md[4][1]) - x1(md[4][2]) - x2(md[4][3]) + x1(md[4][4])); }
+	       + x2(md[4][1]) - x1(md[4][2]) - x2(md[4][3]) + x1(md[4][4]));
+	} }
 
   for (uint uin = 0; uin < _len_tile_in * _len_tile_in; ++uin)
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
@@ -424,8 +425,8 @@ void Conv_3x3::ff(uint size_batch, const float *fin, float *fout) noexcept {
 		0.0f, &( _matrix_M[uin * _nout * _ntile * size_batch] ),
 		_ntile * size_batch);
 
-  for (uint ch_out = 0; ch_out < _nout; ++ch_out)
-    for (uint nb = 0; nb < size_batch; ++nb)
+  for (uint ub = 0; ub < size_batch; ++ub)
+    for (uint ch_out = 0; ch_out < _nout; ++ch_out)
       for (uint uh = 0; uh < _ntile_h; ++uh)
 	for (uint uw = 0; uw < _ntile_w; ++uw) {
 	  float mm[_len_tile_in][_len_tile_in];
@@ -435,10 +436,10 @@ void Conv_3x3::ff(uint size_batch, const float *fin, float *fout) noexcept {
 		= _matrix_M[uh_in * _len_tile_in * _nout * size_batch * _ntile
 			    + uw_in * _nout * size_batch * _ntile
 			    + ch_out * size_batch * _ntile
-			    + nb * _ntile
+			    + ub * _ntile
 			    + uh * _ntile_w + uw];
 
-	  const uint ucd = ((nb * _nout + ch_out) * NN::size_plane
+	  const uint ucd = ((ub * _nout + ch_out) * NN::size_plane
 			    + uh * _len_tile_out * NN::width
 			    + uw * _len_tile_out);
 	  fout[ucd + 0U * NN::width + 0U]
@@ -485,10 +486,10 @@ void Conv_3x3::ff(uint size_batch, const float *fin, float *fout) noexcept {
 	       + mm[4][1] + mm[4][2] + x4(mm[4][3]) + mm[4][4]); }
   
   if (_bias)
-    for (uint nb = 0; nb < size_batch; ++nb)
+    for (uint ub = 0; ub < size_batch; ++ub)
       for (uint ch_out = 0; ch_out < _nout; ++ch_out)
 	for (uint u = 0; u < NN::size_plane; ++u)
-	  fout[(nb * _nout + ch_out) * NN::size_plane + u] += _bias[ch_out]; }
+	  fout[(ub * _nout + ch_out) * NN::size_plane + u] += _bias[ch_out]; }
 
 #else
 
