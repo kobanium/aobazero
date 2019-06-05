@@ -2,10 +2,10 @@
 // This source code is in the public domain.
 #include "err.hpp"
 #include "iobase.hpp"
-#include "nnet.hpp"
+#include "nnet-shogi.hpp"
+#include "nnet-cpu.hpp"
 #include "param.hpp"
 #include "shogibase.hpp"
-#include "xzi.hpp"
 #include <algorithm>
 #include <chrono>
 #include <iostream>
@@ -17,6 +17,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <cmath>
 using std::copy_n;
 using std::cout;
 using std::cerr;
@@ -42,9 +43,6 @@ using uchar  = unsigned char;
 using namespace ErrAux;
 using namespace SAux;
 
-static_assert(file_size     == NN::width,  "file_size == NN::width");
-static_assert(rank_size     == NN::height, "rank_size == NN::height");
-static_assert(maxsize_moves == NN::nmove,  "maxsize_size == NN::nmove");
 constexpr uint size_batch = 8U;
 constexpr double epsilon = 1e-4;
 
@@ -120,7 +118,7 @@ class QueueTest {
   
 public:
   explicit QueueTest() noexcept
-  : _input(new float [N * NN::size_input]),
+  : _input(new float [N * NNAux::size_input]),
     _nnmoves(new ushort [N * SAux::maxsize_moves]),
     _probs(new float [N * SAux::maxsize_moves]), _npush(0), _ntest(0) {}
 
@@ -144,8 +142,8 @@ public:
   void push(const float *input, uint size_nnmove, const ushort *nnmoves,
 	    double value, const map<string, double> &policy_answers,
 	    const map<ushort, string> &nnmove2str) noexcept {
-    copy_n(input, NN::size_input,
-	   &( _input[_npush * NN::size_input] ));
+    copy_n(input, NNAux::size_input,
+	   &( _input[_npush * NNAux::size_input] ));
     copy_n(nnmoves, SAux::maxsize_moves,
 	   &( _nnmoves[_npush * SAux::maxsize_moves] ));
     _sizes_nnmove[_npush]   = size_nnmove;
@@ -222,13 +220,13 @@ static void do_test(istream &is) noexcept {
     double di;
     while (ss >> di) input_answer.push_back(di);
 
-    unique_ptr<float []> input(new float [NN::size_input]);
+    unique_ptr<float []> input(new float [NNAux::size_input]);
     node.encode_input(input.get());
-    if (input_answer.size() != NN::size_input)
+    if (input_answer.size() != NNAux::size_input)
       die(ERR_INT("bad input size %zu vs %u",
-		  input_answer.size(), NN::size_input));
+		  input_answer.size(), NNAux::size_input));
     
-    for (uint uch = 0; uch < NN::nch_input; ++uch)
+    for (uint uch = 0; uch < NNAux::nch_input; ++uch)
       for (uint usq = 0; usq < Sq::ok_size; ++usq) {
 	double f1 = input_answer[uch * Sq::ok_size + usq];
 	double f2 = input[uch * Sq::ok_size + usq];
@@ -292,7 +290,7 @@ static void do_test(istream &is) noexcept {
     map<ushort, string> nnmove2str;
     ushort nnmoves2[SAux::maxsize_moves];
     for (uint u = 0; u < ms.size(); ++u) {
-      nnmoves2[u] = NN::encode_nnmove(ms[u], node.get_turn());
+      nnmoves2[u] = NNAux::encode_nnmove(ms[u], node.get_turn());
       nnmove2str[nnmoves2[u]] = ms[u].to_str(SAux::usi); }
     
     if (node.get_turn() == white) value_answer = - value_answer;
