@@ -329,12 +329,14 @@ bool Board::action_ok_full(const Color &turn, const Action &a) noexcept {
   if (a.is_resign()) return true;
   if (a.is_windecl()) return is_nyugyoku(turn);
 
-  bool is_ok = true;
+
   assert(a.is_move());
   update(turn, a, false);
-  if (is_incheck(turn) || is_mate_by_drop_pawn(turn, a)) is_ok = false;
+  bool b_incheck = is_incheck(turn);
   undo(turn, a, false);
-  return is_ok; }
+  if (b_incheck) return false;
+  if (is_mate_by_drop_pawn(turn, a)) return false;
+  return true; }
 
 bool Board::is_mate_by_drop_pawn(const Color &turn, const Action &action)
   noexcept {
