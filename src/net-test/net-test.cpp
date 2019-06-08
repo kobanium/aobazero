@@ -27,6 +27,7 @@ using std::istream;
 using std::map;
 using std::max;
 using std::move;
+using std::pair;
 using std::set;
 using std::setw;
 using std::string;
@@ -72,7 +73,7 @@ class QueueTest {
   uint _sizes_nnmove[N];
   uint _npush;
   uint _ntest;
-  NNet _nnet;
+  NNetCPU _nnet;
   map<ushort, string> _tbl_nnmove2str[N];
   map<string, double> _policy_answers[N];
   double _value_answers[N];
@@ -122,7 +123,11 @@ public:
     _nnmoves(new ushort [N * SAux::maxsize_moves]),
     _probs(new float [N * SAux::maxsize_moves]), _npush(0), _ntest(0) {}
 
-  void reset(const FName &fname) noexcept { _nnet.reset(N, fname); }
+  void reset(const FName &fname) noexcept {
+    uint version;
+    uint64_t digest;
+    NNAux::wght_t wght = NNAux::read(fname, version, digest);
+    _nnet.reset(N, wght); }
   
   void flush() noexcept {
     if (_npush == 0) return;

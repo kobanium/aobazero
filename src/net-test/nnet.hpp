@@ -7,9 +7,9 @@
 #include <cstdint>
 class FName;
 namespace NNAux {
-  using row_t = std::unique_ptr<float []>;
-  using uint = unsigned int;
-  class NotXZ {};
+  using uint   = unsigned int;
+  using row_t  = std::unique_ptr<float []>;
+  using wght_t = std::vector<std::pair<uint, row_t>>;
   constexpr uint width          = 9U;
   constexpr uint height         = 9U;
   constexpr uint size_plane     = width * height;
@@ -17,8 +17,5 @@ namespace NNAux {
   constexpr uint size_input     = size_plane * nch_input;
   constexpr uint nch_out_policy = 139U;
   constexpr uint nmove          = 1024U;
-  std::vector<std::pair<uint, row_t>>
-  read_xz(const FName &fwght, uint &version, uint64_t &digest);
-  std::vector<std::pair<uint, row_t>>
-  read_txt(const FName &fwght, uint &version, uint64_t &digest) noexcept;
+  wght_t read(const FName &fwght, uint &version, uint64_t &digest) noexcept;
 }

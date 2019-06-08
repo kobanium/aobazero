@@ -13,6 +13,12 @@ else
 	CPPFLAGS += -DNDEBUG
 endif
 
+USE_OpenMP ?= 0
+ifeq ($(USE_OpenMP), 1)
+	CXXFLAGS += -fopenmp
+	LDFLAGS  += -fopenmp
+endif
+
 USE_OpenCL ?= 0
 ifeq ($(USE_OpenCL), 1)
 	CPPFLAGS += -DUSE_OPENCL

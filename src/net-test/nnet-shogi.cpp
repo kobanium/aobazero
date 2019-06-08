@@ -4,7 +4,9 @@
 #include <algorithm>
 #include <cassert>
 using std::fill_n;
-using uchar = unsigned char;
+using uint   = unsigned int;
+using ushort = unsigned short;
+using uchar  = unsigned char;
 static_assert(SAux::file_size == NNAux::width,
 	      "SAux::file_size == NNAux::width");
 static_assert(SAux::rank_size == NNAux::height,

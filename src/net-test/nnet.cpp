@@ -44,8 +44,9 @@ static pair<uint, row_t> read_row(char *line) noexcept {
     queue_float.pop(); }
   return ret; }
 
-vector<pair<uint, row_t>>
-NNAux::read_xz(const FName &fwght, uint &version, uint64_t &digest) {
+class NotXZ {};
+static vector<pair<uint, row_t>>
+read_xz(const FName &fwght, uint &version, uint64_t &digest) {
   ifstream ifs(fwght.get_fname(), ios::binary);
   if (!ifs) die(ERR_INT("cannot open %s", fwght.get_fname()));
   
@@ -57,7 +58,7 @@ NNAux::read_xz(const FName &fwght, uint &version, uint64_t &digest) {
   // read version
   PtrLen<char> pl_line(line, 0);
   bool bRet = xzd.getline(&ifs, &pl_line, len_wght_line, "\n");
-  if (!bRet) throw NNAux::NotXZ();
+  if (!bRet) throw NotXZ();
   if (pl_line.len == 0) die(ERR_INT(msg_bad_wght));
   if (pl_line.len == len_wght_line) die(ERR_INT("line too long"));
   pl_line.p[pl_line.len] = '\0';
@@ -71,8 +72,8 @@ NNAux::read_xz(const FName &fwght, uint &version, uint64_t &digest) {
   vector<pair<uint, row_t>> vec;
   for (uint counter = 0;; ++counter) {
     if (counter == 1024U) die(ERR_INT(msg_bad_wght));
-    PtrLen<char> pl_line(line, 0);
-    bool bRet = xzd.getline(&ifs, &pl_line, len_wght_line, "\n");
+    pl_line.clear();
+    bRet = xzd.getline(&ifs, &pl_line, len_wght_line, "\n");
     if (!bRet) die(ERR_INT(msg_bad_wght));
     if (len_wght_line == pl_line.len) die(ERR_INT("line too long"));
     if (pl_line.len == 0) break;
@@ -82,8 +83,8 @@ NNAux::read_xz(const FName &fwght, uint &version, uint64_t &digest) {
   digest = xzd.get_crc64();
   return vec; }
 
-vector<pair<uint, row_t>>
-NNAux::read_txt(const FName &fwght, uint &version, uint64_t &digest) noexcept {
+static vector<pair<uint, row_t>>
+read_txt(const FName &fwght, uint &version, uint64_t &digest) noexcept {
   ifstream ifs(fwght.get_fname());
   if (!ifs) die(ERR_INT("cannot open %s", fwght.get_fname()));
   
@@ -116,3 +117,10 @@ NNAux::read_txt(const FName &fwght, uint &version, uint64_t &digest) noexcept {
     pair<uint, row_t> row = read_row(line);
     vec.emplace_back(move(row)); }
   return vec; }
+
+vector<pair<uint, row_t>>
+NNAux::read(const FName &fwght, uint &version, uint64_t &digest) noexcept {
+  wght_t ret;
+  try             { ret = read_xz (fwght, version, digest); }
+  catch (NotXZ &) { ret = read_txt(fwght, version, digest); }
+  return ret; }
