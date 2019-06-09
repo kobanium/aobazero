@@ -58,7 +58,8 @@ class USIEngine : public OSI::Pipe {
   shared_ptr<const WghtFile> _wght;
   uint _id;
   int _device;
-  
+  bool _is_verbose;
+
 public:
   time_point<system_clock> time_last;
   double speed_average, speed_rate;
@@ -69,10 +70,12 @@ public:
 
   void set_id(uint id) noexcept { _id = id; }
   void set_device(int device) noexcept { _device = device; }
+  void set_verbose(bool is_verbose) { _is_verbose = is_verbose; }
   void update_wght() noexcept { _wght = Client::get().get_wght(); }
   
   int get_id() const noexcept { return _id; }
   int get_device() const noexcept { return _device; }
+  bool is_verbose() const noexcept { return _is_verbose; }
   const shared_ptr<const WghtFile> & get_wght() const noexcept {
     return _wght; } };
 
@@ -172,26 +175,28 @@ static void engine_start(USIEngine &c, const FName &cname)
 
   unique_ptr<char []> path(new char [cname.get_len_fname() + 1U]);
   unique_ptr<char []> a0  (new char [cname.get_len_fname() + 1U]);
-  unique_ptr<char []> a8  (new char [c.get_wght()->get_len_fname() + 1U]);
+  unique_ptr<char []> a7  (new char [c.get_wght()->get_len_fname() + 1U]);
   char a1[] = "-p";  char a2[] = "800";
-  char a3[] = "-q";
-  char a4[] = "-n";
-  char a5[] = "-m";  char a6[] = "30";
-  char a7[] = "-w";
+  char a3[] = "-n";
+  char a4[] = "-m";  char a5[] = "30";
+  char a6[] = "-w";
   memcpy(path.get(), cname.get_fname(), cname.get_len_fname() + 1U);
   memcpy(a0.get(), cname.get_fname(), cname.get_len_fname() + 1U);
-  memcpy(a8.get(), c.get_wght()->get_fname(),
+  memcpy(a7.get(), c.get_wght()->get_fname(),
 	 c.get_wght()->get_len_fname() + 1U);
-  if (c.get_device() < 0) {
-    char *argv[] = { a0.get(), a1, a2, a3, a4, a5, a6, a7, a8.get(),
-		     nullptr };
-    c.open(path.get(), argv); }
-  else {
-    char a9[] = "-u";  char a10[16];
-    sprintf(a10, "%i", c.get_device());
-    char *argv[] = { a0.get(), a9, a10, a1, a2, a3, a4, a5, a6, a7,
-		     a8.get(), nullptr };
-    c.open(path.get(), argv); }
+  char *argv[] = { a0.get(), a1, a2, a3, a4, a5, a6, a7.get(),
+		   nullptr, nullptr, nullptr, nullptr,
+		   nullptr, nullptr, nullptr, nullptr };
+  int argc = 8;
+  char opt_q[] = "-q";
+  char opt_u[] = "-u";
+  char opt_u_value[256];
+  sprintf(opt_u_value, "%i", c.get_device());
+  if (!c.is_verbose()) argv[argc++] = opt_q;
+  if (0 <= c.get_device()) {
+    argv[argc++] = opt_u;
+    argv[argc++] = opt_u_value; }
+  c.open(path.get(), argv);
   
   c.ofs.open(c.flog.get_fname(), ios::trunc);
   if (!c.ofs) die(ERR_INT("cannot write to log"));
@@ -230,7 +235,7 @@ Pipe::Pipe() noexcept : _ngen_records(0) {}
 Pipe::~Pipe() noexcept {}
 void Pipe::start(const char *cname, const char *dlog,
 		 const vector<int> &devices,  const char *cstr_csa,
-		 uint max_csa) noexcept {
+		 uint max_csa, uint verbose_eng) noexcept {
   assert(cname && cstr_csa && dlog);
   if (devices.empty() || max_nchild < devices.size())
     die(ERR_INT("bad devices"));
@@ -238,6 +243,7 @@ void Pipe::start(const char *cname, const char *dlog,
   _dname_csa.reset_fname(cstr_csa);
   _nchild      = static_cast<uint>(devices.size());
   _max_csa     = max_csa;
+  _verbose_eng = verbose_eng;
   _children.reset(new USIEngine [devices.size()]);
   for (uint u = 0; u < _nchild; ++u) {
     USIEngine & c = _children[u];
@@ -247,7 +253,8 @@ void Pipe::start(const char *cname, const char *dlog,
     c.flog          = FName(dlog);
     c.flog.add_fmt_fname(fmt_log, u);
     c.set_id(u);
-    c.set_device(devices[u]); } }
+    c.set_device(devices[u]);
+    c.set_verbose(verbose_eng); } }
 
 bool Pipe::play_update(char *line, class USIEngine &c) noexcept {
   NodeRec &node = c.node;

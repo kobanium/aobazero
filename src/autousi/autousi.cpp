@@ -78,8 +78,9 @@ static void init() noexcept {
 			   {"SendBufSiz",    "8192"},
 			   {"MaxRetry",      "7"},
 			   {"MaxCSA",        "0"},
-			   {"PrintStatus",  "0"},
+			   {"PrintStatus",   "0"},
 			   {"PrintCSA",      "0"},
+			   {"VerboseEngine", "0"},
 			   {"KeepWeight",    "0"},
 			   {"Addr",          "127.0.0.1"},
 			   {"Port",          "20000"}};
@@ -97,6 +98,7 @@ static void init() noexcept {
   uint max_retry    = Config::get<uint>  (m, "MaxRetry",      is_posi);
   uint max_csa      = Config::get<uint>  (m, "MaxCSA");
   uint keep_wght    = Config::get<uint>  (m, "KeepWeight");
+  uint verbose_eng  = Config::get<uint>  (m, "VerboseEngine");
   uint port         = Config::get<ushort>(m, "Port");
   devices           = Config::getv<int>  (m, "Device");
   print_status      = Config::get<uint>  (m, "PrintStatus");
@@ -104,7 +106,8 @@ static void init() noexcept {
   Client::get().start(cstr_dwght, cstr_addr, port, recvTO, recv_bufsiz, sendTO,
 		      send_bufsiz, max_retry, size_queue, keep_wght);
   OSI::handle_signal(on_signal);
-  Pipe::get().start(cstr_cname, cstr_dlog, devices, cstr_csa, max_csa);
+  Pipe::get().start(cstr_cname, cstr_dlog, devices, cstr_csa, max_csa,
+		    verbose_eng);
   cout << "self-play start" << endl; }
 
 static void output() noexcept {
