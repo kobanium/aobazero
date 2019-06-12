@@ -15,11 +15,11 @@ static_assert(SAux::maxsize_moves == NNAux::nmove,
 	      "SAux::maxsize_size == NNAux::nmove");
 
 static void store(float *p, uint uch, uint usq, float f = 1.0f) noexcept {
-  assert(p && uch < NN::nch_input && usq < Sq::ok_size);
+  assert(p && uch < NNAux::nch_input && usq < Sq::ok_size);
   p[uch * Sq::ok_size + usq] = f; };
 
 static void store_plane(float *p, uint uch, float f = 1.0f) noexcept {
-  assert(p && uch < NN::nch_input);
+  assert(p && uch < NNAux::nch_input);
   fill_n(p + uch * Sq::ok_size, Sq::ok_size, f); };
 
 ushort NNAux::encode_nnmove(const Action &a, const Color &turn) noexcept {

@@ -4,6 +4,8 @@
 #include "iobase.hpp"
 #include "nnet-shogi.hpp"
 #include "nnet-cpu.hpp"
+#include "nnet-ocl.hpp"
+#include "option.hpp"
 #include "param.hpp"
 #include "shogibase.hpp"
 #include <algorithm>
@@ -60,9 +62,37 @@ static double policy_sum_e  = 0.0;
 static double policy_sum_se = 0.0;
 static double policy_max_e  = 0.0;
 
+static int opt_device_id = -1;
+static string opt_str_wght;
+
 static double absolute_error(double f1, double f2) noexcept {
   return std::fabs(f1 - f2); }
 
+static int get_options(int argc, const char * const *argv) noexcept {
+  assert(0 < argc && argv && argv[0]);
+  bool flag_err = false;
+  char *endptr;
+
+  while (! flag_err) {
+    int opt = Opt::get(argc, argv, "u:");
+    if (opt < 0) break;
+
+    switch (opt) {
+    case 'u': 
+      opt_device_id = strtol(Opt::arg, &endptr, 10);
+      if (endptr == Opt::arg || *endptr != '\0'
+	  || opt_device_id == LONG_MAX || opt_device_id < -1) flag_err = true;
+      break;
+    default: flag_err = true; break; } }
+
+  if (!flag_err && Opt::ind < argc) {
+    opt_str_wght = string(argv[Opt::ind++]);
+    return 0; }
+  
+  cerr << "Usage: " << Opt::cmd << " [-u device-id] weight" << endl;
+  return -1;
+}
+  
 template <uint N>
 class QueueTest {
   static_assert(0 < N, "0 < N");
@@ -73,7 +103,11 @@ class QueueTest {
   uint _sizes_nnmove[N];
   uint _npush;
   uint _ntest;
+#if defined(USE_CLBLAST)
+  NNetOCL _nnet;
+#else
   NNetCPU _nnet;
+#endif
   map<ushort, string> _tbl_nnmove2str[N];
   map<string, double> _policy_answers[N];
   double _value_answers[N];
@@ -123,11 +157,16 @@ public:
     _nnmoves(new ushort [N * SAux::maxsize_moves]),
     _probs(new float [N * SAux::maxsize_moves]), _npush(0), _ntest(0) {}
 
-  void reset(const FName &fname) noexcept {
+  void reset(const FName &fname, int device_id) noexcept {
     uint version;
     uint64_t digest;
     NNAux::wght_t wght = NNAux::read(fname, version, digest);
-    _nnet.reset(N, wght); }
+#if defined(USE_CLBLAST)
+    _nnet.reset(N, wght, device_id);
+#else
+    _nnet.reset(N, wght);
+#endif
+    (void)device_id; }
   
   void flush() noexcept {
     if (_npush == 0) return;
@@ -158,39 +197,7 @@ public:
     if (++_npush == N) flush(); }
 };
 
-static void do_test(istream &is) noexcept;
-
 static QueueTest<size_batch> queue_test;
-
-int main(int argc, char **argv) {
-  if (argc != 2) {
-    die(ERR_INT("Usage: %s weight", argv[0]));
-    return 1; }
-  
-  queue_test.reset(FName(argv[1]));
-  do_test(std::cin);
-  queue_test.flush();
-
-  if (0 < nelapsed) {
-    cout << "Average Time: "
-      << 0.001 * elapsed / static_cast<double>(nelapsed)
-	 << "ms" << endl; }
-  
-  if (0 < value_n) {
-    double factor = 1.0 / static_cast<double>(value_n);
-    cout << "Value (ABSOLUTE, " << value_n << " samples)\n";
-    cout << "  - MaxE: " << value_max_e << "\n";
-    cout << "  - ME:   " << value_sum_e * factor << "\n";
-    cout << "  - RMSE: " << std::sqrt(value_sum_se * factor) << "\n\n"; }
-    
-  if (0 < policy_n) {
-    double factor = 1.0 / static_cast<double>(policy_n);
-    cout << "Policy (ABSOLUTE, " << policy_n << " samples)\n";
-    cout << "  - MaxE: " << policy_max_e << "\n";
-    cout << "  - ME:   " << policy_sum_e * factor << "\n";
-    cout << "  - RMSE: " << std::sqrt(policy_sum_se * factor) << "\n\n"; }
-  
-  return 0; }
 
 static void do_test(istream &is) noexcept {
 
@@ -302,3 +309,31 @@ static void do_test(istream &is) noexcept {
     
     queue_test.push(input.get(), ms.size(), nnmoves2, value_answer,
 		    policy_answer, nnmove2str); } }
+
+int main(int argc, char **argv) {
+  if (get_options(argc, argv) < 0) return 1;
+  
+  queue_test.reset(FName(opt_str_wght.c_str()), opt_device_id);
+  do_test(std::cin);
+  queue_test.flush();
+
+  if (0 < nelapsed) {
+    cout << "Average Time: "
+      << 0.001 * elapsed / static_cast<double>(nelapsed)
+	 << "ms" << endl; }
+  
+  if (0 < value_n) {
+    double factor = 1.0 / static_cast<double>(value_n);
+    cout << "Value (ABSOLUTE, " << value_n << " samples)\n";
+    cout << "  - MaxE: " << value_max_e << "\n";
+    cout << "  - ME:   " << value_sum_e * factor << "\n";
+    cout << "  - RMSE: " << std::sqrt(value_sum_se * factor) << "\n\n"; }
+    
+  if (0 < policy_n) {
+    double factor = 1.0 / static_cast<double>(policy_n);
+    cout << "Policy (ABSOLUTE, " << policy_n << " samples)\n";
+    cout << "  - MaxE: " << policy_max_e << "\n";
+    cout << "  - ME:   " << policy_sum_e * factor << "\n";
+    cout << "  - RMSE: " << std::sqrt(policy_sum_se * factor) << "\n\n"; }
+  
+  return 0; }
