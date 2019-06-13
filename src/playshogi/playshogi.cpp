@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <cstring>
 #include <sstream>
+#include <random>
 using std::cerr;
 using std::cout;
 using std::current_exception;
