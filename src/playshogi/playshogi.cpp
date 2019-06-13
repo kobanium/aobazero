@@ -14,6 +14,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <sstream>
 using std::cerr;
 using std::cout;
 using std::current_exception;
@@ -40,7 +41,7 @@ public:
 static void play_update(USIEngine *players[], Node & node, int index,
 			char *line, string & startpos) noexcept;
 static void play_shogi(USIEngine & player_black, USIEngine & player_white,
-		       Node & node) noexcept;
+		       Node & node, int nplay) noexcept;
 static void addup_result(const Node & node, const Color & turn_player0,
 			 int nplay, uint result[][NodeType::ok_size][3])
   noexcept;
@@ -51,13 +52,16 @@ static int get_options(int argc, const char * const *argv) noexcept;
 static void child_out(USIEngine &c, const char *fmt, ...) noexcept;
 static void log_out(USIEngine &c, const char *fmt, ...) noexcept;
 static void close_flush(USIEngine &c) noexcept;
+static void load_book_file();
 static bool flag_f = false;
 static bool flag_r = false;
 static bool flag_u = false;
 static bool flag_s = false;
+static bool flag_b = false;
 static long int num_m = 1;
 static FName shell("/bin/sh");
 static string cmd0, cmd1;
+std::vector <string> book;
 
 static void on_terminate() {
   exception_ptr p = current_exception();
@@ -68,6 +72,7 @@ static void on_terminate() {
 int main(int argc, char **argv) {
   set_terminate(on_terminate);
   if (get_options(argc, argv) < 0) return 1;
+  if (flag_b) load_book_file();
   
   USIEngine player0(0, cmd0), player1(1, cmd1);
   bool is_first(true);
@@ -78,7 +83,7 @@ int main(int argc, char **argv) {
   start_engine(player1);
   for (int nplay = 0; nplay < num_m; ++nplay) {
     cout << "'\n'no.=" << nplay << ", player0="
-	 << ((turn_player0 == SAux::black) ? "black" : "white") << endl;
+	 << ((turn_player0 == SAux::black) ? "sente" : "gote") << endl;
     
     if (is_first) {
       is_first = false;
@@ -86,8 +91,8 @@ int main(int argc, char **argv) {
     else if (flag_r) cout << "/\nPI\n+" << endl;
 
     Node node;
-    if (turn_player0 == SAux::black) play_shogi(player0, player1, node);
-    else                             play_shogi(player1, player0, node);
+    if (turn_player0 == SAux::black) play_shogi(player0, player1, node, nplay);
+    else                             play_shogi(player1, player0, node, nplay);
     
     const NodeType & type = node.get_type();
     assert(type.is_term());
@@ -103,6 +108,18 @@ int main(int argc, char **argv) {
   return 0; }
 
 enum { win = 0, draw = 1, lose = 2 };
+
+int sum_result(Color turn, uint result[][NodeType::ok_size][3], int abso ) {
+  int n = result[turn.to_u()][SAux::repeated.to_u()   ][abso]
+        + result[turn.to_u()][SAux::maxlen_term.to_u()][abso];
+  if ( abso!=draw ) {
+    n = result[turn.to_u()][SAux::resigned.to_u()    ][abso]
+      + result[turn.to_u()][SAux::windclrd.to_u()    ][abso]
+      + result[turn.to_u()][SAux::illegal_bwin.to_u()][abso]
+      + result[turn.to_u()][SAux::illegal_wwin.to_u()][abso];
+  }
+  return n;
+}
 
 static void addup_result(const Node & node, const Color & turn_player0,
 			 int nplay, uint result[][NodeType::ok_size][3])
@@ -142,52 +159,66 @@ static void addup_result(const Node & node, const Color & turn_player0,
 		      + result[SAux::white.to_u()][ut][ur] ); }
 
   if (flag_s) {
-    cout << "'Results of player0 when it plays black:\n";
+    cout << "'Results of player0 when it plays sente:\n";
     result_out(SAux::black, result);
     cout << "'\n";
-    cout << "'Results of player0 when it plays white:\n";
+    cout << "'Results of player0 when it plays gote :\n";
     result_out(SAux::white, result);
     cout << "'\n"; }
   
   cout << "'Results of player0:\n";
-  result_out(SAux::black, tot); }
+  result_out(SAux::black, tot);
+
+  if ( 1 ) {
+    int nwin  = sum_result( SAux::black, tot, win);
+    int ndraw = sum_result( SAux::black, tot, draw);
+    int nlose = sum_result( SAux::black, tot, lose);
+    int ntot  = nwin + nlose + ndraw;
+    int bs_win  = sum_result( SAux::black, result, win);
+    int bs_lose = sum_result( SAux::black, result, lose);
+    int ws_win  = sum_result( SAux::white, result, win);
+    int ws_lose = sum_result( SAux::white, result, lose);
+    int s_win  = bs_win  + ws_lose;
+    int s_lose = bs_lose + ws_win;
+    int rep = tot[SAux::black.to_u()][SAux::repeated.to_u()][draw];
+    float s_rate = 0;
+    if ( s_win+s_lose ) s_rate = (float)s_win / (s_win + s_lose);
+    float wr = (float)(nwin + (float)ndraw/2) / ntot;
+    double elo = 0;
+    if ( wr != 0 && wr != 1.0 ) elo = -400.0 * log10(1.0 / wr - 1.0);
+    cerr << nwin << "-" << ndraw << "(" << rep << ")-" << nlose << " "
+         << "(s=" << s_win << "-" << s_lose << " ," << s_rate
+         << ") " << ntot << " ,m=" << node.get_len_path()
+         << " ,wr=" << wr << "(" << (int)elo << ")" << endl;
+  }
+
+}
 
 static void result_out(Color turn,
 		       uint result[][NodeType::ok_size][3]) noexcept {
+  int nwin  = sum_result( turn, result, win);
+  int ndraw = sum_result( turn, result, draw);
+  int nlose = sum_result( turn, result, lose);
+  int ntot  = nwin + nlose + ndraw;
   
-  int nwin = ( result[turn.to_u()][SAux::resigned.to_u()][win]
-	       + result[turn.to_u()][SAux::windclrd.to_u()][win]
-	       + result[turn.to_u()][SAux::illegal_bwin.to_u()][win]
-	       + result[turn.to_u()][SAux::illegal_wwin.to_u()][win] );
-  
-  int ndraw = ( result[turn.to_u()][SAux::repeated.to_u()][draw]
-		+ result[turn.to_u()][SAux::maxlen_term.to_u()][draw] );
-  
-  int nlose = ( result[turn.to_u()][SAux::resigned.to_u()][lose]
-		+ result[turn.to_u()][SAux::windclrd.to_u()][lose]
-		+ result[turn.to_u()][SAux::illegal_bwin.to_u()][lose]
-		+ result[turn.to_u()][SAux::illegal_wwin.to_u()][lose] );
-	    
-  int ntot = nwin + nlose + ndraw;
-  
-  cout << "'- Win " << nwin << " (resign "
+  cout << "'- Win : " << nwin << " (res "
        << result[turn.to_u()][SAux::resigned.to_u()][win]
-       << ", windecl "
+       << ", dcl "
        << result[turn.to_u()][SAux::windclrd.to_u()][win]
-       << ", pcheck "
+       << ", pck "
        << ( result[turn.to_u()][SAux::illegal_bwin.to_u()][win]
 	    + result[turn.to_u()][SAux::illegal_wwin.to_u()][win] )
        << ")\n";
   
-  cout << "'- Draw " << ndraw << " (rep "
+  cout << "'- Draw: " << ndraw << " (rep "
        << result[turn.to_u()][SAux::repeated.to_u()][draw]
        << ")\n";
   
-  cout << "'- Lose: " << nlose << " (resign "
+  cout << "'- Lose: " << nlose << " (res "
        << result[turn.to_u()][SAux::resigned.to_u()][lose]
-       << ", windecl "
+       << ", dcl "
        << result[turn.to_u()][SAux::windclrd.to_u()][lose]
-       << ", pcheck "
+       << ", pck "
        << ( result[turn.to_u()][SAux::illegal_bwin.to_u()][lose]
 	    + result[turn.to_u()][SAux::illegal_wwin.to_u()][lose] )
        << ")\n";
@@ -207,13 +238,38 @@ static void result_out(Color turn,
     double se    = sqrt( deno * corr * ( dwin * dwin * pwin
 					 + ddraw * ddraw * pdraw
 					 + dlose * dlose * plose ) );
-    cout << "'point: " << mean << " pm " << 1.96 * se << "\n"; } }
+    cout << "'point: " << mean << " pm " << 1.96 * se << "\n";
+  }
+}
 
 static void play_shogi(USIEngine & player_black, USIEngine & player_white,
-		       Node & node) noexcept {
+		       Node & node, int nplay) noexcept {
   assert(player_black.ok() && player_white.ok() && node.ok());
   OSI::Selector selector;
   string startpos("position startpos moves");
+  if ( flag_b && !flag_f ) {
+    startpos = "position " + book[nplay/2];
+    startpos.erase( --startpos.end() );
+    startpos.erase( --startpos.end() );
+    startpos.erase( --startpos.end() );
+    std::stringstream ss;
+    ss << startpos;
+    for (int i=0; i<24+3; i++) {
+      string token;
+      ss >> token;
+      if ( i < 3 ) continue;
+//    cerr << " " + token;
+      Action action = node.action_interpret(token.c_str(), SAux::usi);
+      if (!action.ok()) die(ERR_INT("cannot interpret book move"));
+      if (flag_r && action.is_move()) {
+        cout << node.get_turn().to_str() << action.to_str(SAux::csa);
+        if ( ((node.get_len_path()+1) % 10)==0 ) cout << endl;
+        else cout << ",";
+      }
+      node.take_action(action);
+    }
+//  cerr << startpos << endl;
+  }
   USIEngine *players[2] = { & player_black, & player_white };
   
   child_out(player_black, startpos.c_str());
@@ -257,7 +313,7 @@ static void play_update(USIEngine *players[], Node & node, int index,
   char *token = strtok(line, " ");
   if (strcmp(token, "bestmove")) return;
   token = strtok(nullptr, " ,\t");
-  
+
   Action action = node.action_interpret(token, SAux::usi);
   if (!action.ok()) {
     close_flush(*players[0]);
@@ -266,9 +322,11 @@ static void play_update(USIEngine *players[], Node & node, int index,
 		token, players[index]->get_id(),
 		static_cast<const char *>(node.to_str()))); }
   
-  if (flag_r && action.is_move())
-    cout << node.get_turn().to_str() << action.to_str(SAux::csa) << endl;
-
+  if (flag_r && action.is_move()) {
+    cout << node.get_turn().to_str() << action.to_str(SAux::csa);
+    if ( ((node.get_len_path()+1) % 10)==0 ) cout << endl;
+    else cout << ",";
+  }
   node.take_action(action);
   if (! node.get_type().is_term()) {
     startpos += " ";
@@ -365,7 +423,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
   char *endptr;
   
   while (! flag_err) {
-    int opt = Opt::get(argc, argv, "0:1:c:m:frsu");
+    int opt = Opt::get(argc, argv, "0:1:c:m:frsub");
     if (opt < 0) break;
     
     switch (opt) {
@@ -375,6 +433,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
     case 'r': flag_r = true; break;
     case 's': flag_s = true; break;
     case 'u': flag_u = true; break;
+    case 'b': flag_b = true; break;
     case 'c': shell.reset_fname(Opt::arg); break;
     case 'm':
       num_m = strtol(Opt::arg, &endptr, 10);
@@ -391,6 +450,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
     cout << "'Gameplays: " << num_m << "\n";
     cout << "'Fix color? " << (flag_f ? "Yes\n" : "No\n");
     cout << "'Out USI?   " << (flag_u ? "Yes\n" : "No\n");
+    cout << "'Book?      " << (flag_b ? "Yes\n" : "No\n");
     return 0; }
 
   cerr << "Usage: " << Opt::cmd << " [OPTION] -0 \"CMD0\" -1 \"CMD1\"\n";
@@ -402,11 +462,12 @@ static int get_options(int argc, const char * const *argv) noexcept {
     "Other options:\n"
     "  -m NUM    Generate NUM gameplays. NUM must be a positive integer.\n"
     "            Default value is 1.\n"
-    "  -f        Always assign the color of player0 black. If this is not\n"
-    "            specified, then black and white are assigned alternatively.\n"
+    "  -f        Always assign player0 is sente(black). If this is not\n"
+    "            specified, then sente and gote are assigned alternatively.\n"
     "  -r        Print CSA records.\n"
     "  -s        Print results in detail.\n"
     "  -u        Print verbose USI messages.\n"
+    "  -b        Use book upto 24 moves from records2016_10818.sfen.\n"
     "  -c SHELL  Use SHELL, e.g., /bin/csh, instead of /bin/sh.\n\n"
     "Example:\n"
     "  " << Opt::cmd <<
@@ -415,3 +476,26 @@ static int get_options(int argc, const char * const *argv) noexcept {
     "            (white)\n";
   
   return -1; }
+
+static void load_book_file() {
+  if ( flag_f ) die(ERR_INT("fix color is err when book is enable."));
+  FILE *fp = fopen("records2016_10818.sfen","r");
+  if ( fp==NULL ) die(ERR_INT("fail fopen book file."));
+  const int TMP_BUF_LEN = 256;
+  const int BOOK_SIZE = 10831;	// should be 10818...?;
+  for (;;) {
+    char one_line[TMP_BUF_LEN];
+    if ( fgets( one_line, TMP_BUF_LEN, fp ) == NULL ) break;
+//    book.push_back(std::to_string(book.size())+"\n");
+    book.push_back(one_line);
+  }
+  fclose(fp);
+  if ( book.size() != BOOK_SIZE ) die(ERR_INT("book size=%d err.",book.size()));
+
+  // shuffle
+  std::random_device seed_gen;
+  std::mt19937 engine(seed_gen());
+  std::shuffle(book.begin(), book.end(), engine);
+//  for (int i=0;i<10;i++) cerr << book[i];
+  cerr << "Load book lines=" << book.size() << "\n";
+}
