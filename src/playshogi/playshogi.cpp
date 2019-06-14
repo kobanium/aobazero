@@ -181,15 +181,18 @@ static void addup_result(const Node & node, const Color & turn_player0,
     int ws_lose = sum_result( SAux::white, result, lose);
     int s_win  = bs_win  + ws_lose;
     int s_lose = bs_lose + ws_win;
-    int rep = tot[SAux::black.to_u()][SAux::repeated.to_u()][draw];
+    int rep   = tot[SAux::black.to_u()][SAux::repeated.to_u()][draw];
+    int dcl_w = tot[SAux::black.to_u()][SAux::windclrd.to_u()][win];
+    int dcl_l = tot[SAux::black.to_u()][SAux::windclrd.to_u()][lose];
     float s_rate = 0;
     if ( s_win+s_lose ) s_rate = (float)s_win / (s_win + s_lose);
     float wr = (float)(nwin + (float)ndraw/2) / ntot;
     double elo = 0;
     if ( wr != 0 && wr != 1.0 ) elo = -400.0 * log10(1.0 / wr - 1.0);
-    cerr << nwin << "-" << ndraw << "(" << rep << ")-" << nlose << " "
-         << "(s=" << s_win << "-" << s_lose << " ," << s_rate
-         << ") " << ntot << " ,m=" << node.get_len_path()
+    cerr << nwin << "-" << ndraw << "-" << nlose << " " << ntot
+         <<  " (" << dcl_w << "-" << rep << "-" << dcl_l
+         << ") (s=" << s_win << "-" << s_lose << " ," << s_rate
+         << ")" << " ,m=" << node.get_len_path()
          << " ,wr=" << wr << "(" << (int)elo << ")" << endl;
   }
 
@@ -329,6 +332,10 @@ static void play_update(USIEngine *players[], Node & node, int index,
     else cout << ",";
   }
   node.take_action(action);
+  // send "%KACHI" (win declare) automatically.
+  if (node.get_type().is_interior() && node.is_nyugyoku())
+    node.take_action(SAux::windecl);
+
   if (! node.get_type().is_term()) {
     startpos += " ";
     startpos += string(token);
@@ -483,7 +490,7 @@ static void load_book_file() {
   FILE *fp = fopen("records2016_10818.sfen","r");
   if ( fp==NULL ) die(ERR_INT("fail fopen book file."));
   const int TMP_BUF_LEN = 256;
-  const int BOOK_SIZE = 10831;	// should be 10818...?;
+  const int BOOK_SIZE = 10831;	// should be 10818...?
   for (;;) {
     char one_line[TMP_BUF_LEN];
     if ( fgets( one_line, TMP_BUF_LEN, fp ) == NULL ) break;
