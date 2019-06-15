@@ -16,6 +16,8 @@
 #include <cstring>
 #include <sstream>
 #include <random>
+#include <ctime>
+#include <stdio.h>
 using std::cerr;
 using std::cout;
 using std::current_exception;
@@ -54,6 +56,7 @@ static void child_out(USIEngine &c, const char *fmt, ...) noexcept;
 static void log_out(USIEngine &c, const char *fmt, ...) noexcept;
 static void close_flush(USIEngine &c) noexcept;
 static void load_book_file();
+static void file_out(const char *fmt, ...);
 static bool flag_f = false;
 static bool flag_r = false;
 static bool flag_u = false;
@@ -63,6 +66,7 @@ static long int num_m = 1;
 static FName shell("/bin/sh");
 static string cmd0, cmd1;
 std::vector <string> book;
+static string file_out_name;
 
 static void on_terminate() {
   exception_ptr p = current_exception();
@@ -189,11 +193,16 @@ static void addup_result(const Node & node, const Color & turn_player0,
     float wr = (float)(nwin + (float)ndraw/2) / ntot;
     double elo = 0;
     if ( wr != 0 && wr != 1.0 ) elo = -400.0 * log10(1.0 / wr - 1.0);
-    cerr << nwin << "-" << ndraw << "-" << nlose << " " << ntot
-         <<  " (" << dcl_w << "-" << rep << "-" << dcl_l
-         << ") (s=" << s_win << "-" << s_lose << " ," << s_rate
-         << ")" << " ,m=" << node.get_len_path()
-         << " ,wr=" << wr << "(" << (int)elo << ")" << endl;
+    double ci = 1.96*sqrt(wr*(1-wr)/ntot);	// 95% Confidence interval
+    std::time_t tt = std::time(nullptr);
+    struct std::tm *tb = std::localtime(&tt);
+    const int BUFSIZE = 256;
+    char str[BUFSIZE];
+    snprintf(str,BUFSIZE,"%4d-%02d-%02d %02d:%02d:%02d %d-%d-%d %d (%d-%d-%d) (s=%d-%d,%5.3f) ,m=%3d,wr=%5.3f(%5.3f)(%4d)\n",
+      tb->tm_year+1900, tb->tm_mon+1, tb->tm_mday, tb->tm_hour,tb->tm_min,tb->tm_sec,
+      nwin, ndraw, nlose, ntot, dcl_w,rep,dcl_l, s_win,s_lose,s_rate, node.get_len_path(), wr, ci, (int)elo );
+    cerr << str;
+    file_out("%s",str);
   }
 
 }
@@ -425,6 +434,18 @@ static void close_flush(USIEngine &c) noexcept {
   cout << flush;
   c.close(); }
 
+static void file_out(const char *fmt, ...) {
+  FILE *fp = fopen(file_out_name.c_str(),"a");
+  if ( fp==NULL ) { cout << "fopen Err.\n"; return; }
+  char buf[65536];
+  va_list list;
+  va_start(list, fmt);
+  int nb = vsnprintf(buf, sizeof(buf), fmt, list);
+  va_end(list);
+  fprintf(fp,"%s",buf);
+  fclose(fp);
+}
+
 static int get_options(int argc, const char * const *argv) noexcept {
   assert(0 < argc && argv && argv[0]);
   bool flag_err = false;
@@ -451,6 +472,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
     default: flag_err = true; break; } }
 
   if (!flag_err && 0 < cmd0.size() && 0 < cmd1.size()) {
+    cout << "\n'----------------------------------------------------------------\n";
     cout << "'Player0:   " << shell.get_fname()
 	 << " -c \"" << cmd0 << "\"\n";
     cout << "'Player1:   " << shell.get_fname()
@@ -459,6 +481,16 @@ static int get_options(int argc, const char * const *argv) noexcept {
     cout << "'Fix color? " << (flag_f ? "Yes\n" : "No\n");
     cout << "'Out USI?   " << (flag_u ? "Yes\n" : "No\n");
     cout << "'Book?      " << (flag_b ? "Yes\n" : "No\n");
+
+    std::time_t tt = std::time(nullptr);
+    struct std::tm *tb = std::localtime(&tt);
+    const int BUFSIZE = 256;
+    char str[BUFSIZE];
+    snprintf(str,BUFSIZE,"%4d%02d%02d_%02d%02d%02d.txt",tb->tm_year+1900, tb->tm_mon+1, tb->tm_mday, tb->tm_hour,tb->tm_min,tb->tm_sec);
+    file_out_name = str;
+    file_out("Player0: %s\n",cmd0.c_str());
+    file_out("Player1: %s\n",cmd1.c_str());
+    cout << "'" << file_out_name << "\n";
     return 0; }
 
   cerr << "Usage: " << Opt::cmd << " [OPTION] -0 \"CMD0\" -1 \"CMD1\"\n";
