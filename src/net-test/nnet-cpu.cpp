@@ -96,7 +96,7 @@ constexpr float bn_eps       = 1e-5f;
 
 static void blas_set_num_thread_one() noexcept {
 #if defined(_OPENMP) && defined(USE_MKL)
-  mkl_set_num_threads(1);
+  mkl_set_num_threads_local(1);
 #elif defined(_OPENMP) && defined(USE_OPENBLAS)
   openblas_set_num_threads(1);
 #endif
@@ -104,7 +104,7 @@ static void blas_set_num_thread_one() noexcept {
 
 static void blas_set_num_thread_all() noexcept {
 #if defined(_OPENMP) && defined(USE_MKL)
-  mkl_set_num_threads(omp_get_max_threads());
+  mkl_set_num_threads_local(omp_get_max_threads());
 #elif defined(_OPENMP) && defined(USE_OPENBLAS)
   openblas_set_num_threads(omp_get_max_threads());
 #endif
@@ -128,7 +128,7 @@ void NNetCPU::reset(uint maxsize_batch,
   omp_set_num_threads(omp_get_max_threads());
 #endif
 #if defined(USE_MKL)
-  mkl_set_num_threads(1);
+  mkl_set_num_threads_local(1);
 #else
   openblas_set_num_threads(1);
 #endif

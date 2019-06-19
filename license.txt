@@ -9,8 +9,8 @@ This package contains part of source code from Leela Zero in
 src/usi_engine/ [1], CLBlast in src/usi_engine/kernels/clblast/ [2],
 OpenCL in src/usi_engine/CL/ [3], and half in src/usi_engine/half [4]. This
 package also contains prerequisite programs to build Windows x64 binary from
-CLBlast [2], OpenCL [3], liblzma [5] built by using Visual Studio Community
-2017 [6] and from Intel Math Kernel Library [7] in win/. We place detailed
+OpenCL [3], liblzma [5] built by using Visual Studio Community 2017 [6] and
+from Intel Math Kernel Library [7] in win/. We place detailed
 license information under the directory licenses/.
 
 Please use the licensing statement of Unlicense (https://unlicense.org)

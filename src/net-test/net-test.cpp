@@ -103,7 +103,7 @@ class QueueTest {
   uint _sizes_nnmove[N];
   uint _npush;
   uint _ntest;
-#if defined(USE_CLBLAST)
+#if defined(USE_OPENCL)
   NNetOCL _nnet;
 #else
   NNetCPU _nnet;
@@ -161,7 +161,7 @@ public:
     uint version;
     uint64_t digest;
     NNAux::wght_t wght = NNAux::read(fname, version, digest);
-#if defined(USE_CLBLAST)
+#if defined(USE_OPENCL)
     _nnet.reset(N, wght, device_id);
 #else
     _nnet.reset(N, wght);

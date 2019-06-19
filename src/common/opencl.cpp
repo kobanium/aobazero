@@ -1,3 +1,4 @@
+#if defined(USE_OPENCL)
 #include "err.hpp"
 #include "opencl.hpp"
 #include <memory>
@@ -48,13 +49,11 @@ OCL::Events::Events() noexcept : _num(0) {}
 OCL::Events::~Events() noexcept {}
 OCL::Events::Events(uint num) noexcept : _num(num),
 					 _impl(new Event_impl [num]) {}
-OCL::Events::Events(Events &&events) noexcept
-  : _num(events._num), _impl(new Event_impl [events._num]) {
-  for (uint u = 0; u < _num; ++u) _impl[u] = move(events._impl[u]); }
+OCL::Events::Events(Events &&events) noexcept : _num(events._num) {
+  _impl.swap(events._impl); }
 Events &OCL::Events::operator=(Events &&events) noexcept {
   _num = events._num;
-  _impl.reset(new Event_impl [_num]);
-  for (uint u = 0; u < _num; ++u) { _impl[u] = move(events._impl[u]); }
+  _impl.swap(events._impl);
   return *this; }
 Event_impl &OCL::Events::get(uint u) noexcept {
   assert(u < _num); return _impl[u]; }
@@ -111,6 +110,7 @@ public:
     k._kernel = nullptr;
     k._device = nullptr; }
   ~Kernel_impl() noexcept { if (_kernel) clReleaseKernel(_kernel); }
+  cl_kernel get() const noexcept { return _kernel; }
   void set_arg(uint index, size_t size, const void *value) const noexcept {
     cl_int ret = clSetKernelArg(_kernel, index, size, value);
     if (ret != CL_SUCCESS)
@@ -132,6 +132,7 @@ OCL::Kernel::~Kernel() noexcept {}
 OCL::Kernel::Kernel(Kernel_impl &&k_impl) noexcept
   : _impl(new Kernel_impl(move(k_impl))) {}
 OCL::Kernel::Kernel(Kernel &&k) noexcept :  _impl(move(k._impl)) {}
+const Kernel_impl &OCL::Kernel::get() const noexcept { return *_impl; }
 Kernel &OCL::Kernel::operator=(Kernel &&k) noexcept {
   assert(k.ok()); _impl = move(k._impl); return *this; }
 bool OCL::Kernel::ok() const noexcept { return _impl && _impl->ok(); }
@@ -142,10 +143,10 @@ void OCL::Kernel::set_arg(uint index, const Memory &m)
   const noexcept { return _impl->set_arg(index, m); }
 string OCL::Kernel::gen_info() const noexcept {
   stringstream ss;
-  ss << "    Work-Group Size:     " << gen_work_group_size() << "\n"
-     << "    local mem size:      " << gen_local_mem_size() << "\n"
+  ss << "    Max Work-Group Size: " << gen_work_group_size()   << "\n"
+     << "    Local Mem Size:      " << gen_local_mem_size()    << "\n"
      << "    Preferred WGS multi: " << gen_pref_wgs_multiple() << "\n"
-     << "    private mem size:    " << gen_private_mem_size() << "\n";
+     << "    private mem size:    " << gen_private_mem_size()  << "\n";
   return ss.str(); }
 size_t OCL::Kernel::gen_work_group_size() const noexcept {
   return _impl->gen_info<size_t>(CL_KERNEL_WORK_GROUP_SIZE); }
@@ -157,13 +158,13 @@ size_t OCL::Kernel::gen_pref_wgs_multiple() const noexcept {
 cl_ulong OCL::Kernel::gen_private_mem_size() const noexcept {
   return _impl->gen_info<cl_ulong>(CL_KERNEL_PRIVATE_MEM_SIZE); }
 
-// cl_platform_id
-// cl_device, cl_context, cl_command_queue, and cl_program
+#include <iostream>
 class OCL::Device_impl {
   cl_device_id _id;
   cl_context _context;
   cl_command_queue _queue;
   cl_program _program;
+  
 public:
   explicit Device_impl(const cl_device_id &id) noexcept : _id(id),
 							  _program(nullptr) {
@@ -220,25 +221,60 @@ public:
     return Memory_impl(_context, flags, size); }
   Kernel gen_kernel(const char *name) const noexcept {
     assert(name); return Kernel_impl(_program, _id, name); }
-
-  void push_write(const Memory_impl &m_impl, size_t size, const float *p,
-		  Event_impl &e_impl) const noexcept {
+  void finish() const noexcept {
+    cl_int ret = clFinish(_queue);
+    if (ret != CL_SUCCESS)
+      die(ERR_INT("clFinish() failure. Error Code: %d", ret)); }
+  void push_barrier() const noexcept {
+    cl_int ret = clEnqueueBarrier(_queue);
+    if (ret != CL_SUCCESS)
+      die(ERR_INT("clEnqueueBarrier() failed. Error Code: %d", ret)); }
+  void push_write(const Memory_impl &m_impl, size_t size, const float *p)
+    const noexcept {
     assert(m_impl.ok() && p);
     cl_int ret = clEnqueueWriteBuffer(_queue, m_impl.get(), CL_FALSE, 0,
-				      size, p, 0, nullptr, e_impl.get_p());
+				      size, p, 0, nullptr, nullptr);
     if (ret != CL_SUCCESS)
-      die(ERR_INT("clEnqueueWriteBuffer() failed. Error Code: %d", ret)); }
+      die(ERR_INT("clEnqueueWriteBuffer() failed. Error Code: %d", ret));
+    push_barrier(); }
 
-  void push_read(const Memory_impl &m_impl, size_t size, float *p,
-		 const Event_impl &e_impl_wait, Event_impl &e_impl)
+  void push_read(const Memory_impl &m_impl, size_t size, float *p)
     const noexcept {
     assert(m_impl.ok() && p);
     cl_int ret = clEnqueueReadBuffer(_queue, m_impl.get(), CL_FALSE, 0, size,
-				     p, 1U, e_impl_wait.get_p(),
-				     e_impl.get_p());
+				     p, 0, nullptr, nullptr);
     if (ret != CL_SUCCESS)
-      die(ERR_INT("clEnqueueWriteBuffer() failed. Error Code: %d", ret)); }
+      die(ERR_INT("clEnqueueReadBuffer() failed. Error Code: %d", ret));
+    push_barrier(); }
 
+  void push_kernel(const Kernel_impl &k_impl, size_t size_global)
+    const noexcept {
+    assert(k_impl.ok() && 0 < size_global);
+    cl_int ret;
+    size_t size_local
+      = k_impl.gen_info<size_t>(CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE);
+    size_t off_g = 0;
+    while (true) {
+      size_t size_g = (size_global / size_local) * size_local;
+      if (size_g) {
+	size_global -= size_g;
+	ret = clEnqueueNDRangeKernel(_queue, k_impl.get(), 1U, &off_g, &size_g,
+				     &size_local, 0, nullptr, nullptr);
+	if (ret != CL_SUCCESS)
+	  die(ERR_INT("clEnqueNDRangeKernel() failed. Error Code: %d", ret));
+	if (size_global == 0) return;
+	off_g += size_g; }
+      size_local /= 2U; }
+    push_barrier(); }
+  
+  void enqueue_kernel(const Kernel_impl &k_impl, uint dim, size_t *size_g,
+		      size_t *size_l) const noexcept {
+    assert(k_impl.ok() && 0 < dim && dim < 4 && size_g && size_l);
+    cl_int ret = clEnqueueNDRangeKernel(_queue, k_impl.get(), dim, nullptr,
+					size_g, size_l, 0, nullptr, nullptr);
+    if (ret != CL_SUCCESS)
+      die(ERR_INT("clEnqueNDRangeKernel() failed. Error Code: %d", ret)); }
+  
   string gen_info_string(const cl_device_info &name) noexcept {
     size_t size;
     cl_int ret = clGetDeviceInfo(_id, name, 0, nullptr, &size);
@@ -351,18 +387,24 @@ void OCL::Device::build_program(const char *code) noexcept {
   return _impl->build_program(code); }
 Kernel OCL::Device::gen_kernel(const char *name) const noexcept {
   return Kernel(_impl->gen_kernel(name)); }
-void OCL::Device::push_write(const Memory &m, size_t size, const float *p,
-			     Event_impl &e_impl) const noexcept {
-  return _impl->push_write(m.get(), size, p, e_impl); }
-void OCL::Device::push_read(const Memory &m, size_t size, float *p,
-			    const Event_impl &event_wait, Event_impl &e_impl)
+void OCL::Device::finish() const noexcept { return _impl->finish(); }
+void OCL::Device::push_barrier() const noexcept { _impl->push_barrier(); }
+void OCL::Device::push_write(const Memory &m, size_t size, const float *p)
   const noexcept {
-  return _impl->push_read(m.get(), size, p, event_wait, e_impl); }
-Memory OCL::Device::gen_memory_r(size_t size) const noexcept {
+  assert(m.ok()); return _impl->push_write(m.get(), size, p); }
+void OCL::Device::push_read(const Memory &m, size_t size, float *p)
+  const noexcept { assert(m.ok()); _impl->push_read(m.get(), size, p); }
+void OCL::Device::push_kernel(const Kernel &k, size_t size_global)
+  const noexcept { assert(k.ok()); _impl->push_kernel(k.get(), size_global); }
+void OCL::Device::enqueue_kernel(const Kernel &k, uint dim,
+				 size_t *size_g, size_t *size_l)
+  const noexcept {
+  assert(k.ok()); _impl->enqueue_kernel(k.get(), dim, size_g, size_l); }
+Memory OCL::Device::gen_mem_r(size_t size) const noexcept {
   return Memory(_impl->gen_memory(CL_MEM_READ_ONLY, size)); }
-Memory OCL::Device::gen_memory_w(size_t size) const noexcept {
+Memory OCL::Device::gen_mem_w(size_t size) const noexcept {
   return Memory(_impl->gen_memory(CL_MEM_WRITE_ONLY, size)); }
-Memory OCL::Device::gen_memory_rw(size_t size) const noexcept {
+Memory OCL::Device::gen_mem_rw(size_t size) const noexcept {
   return Memory(_impl->gen_memory(CL_MEM_READ_WRITE, size)); }
 bool OCL::Device::ok() const noexcept { return _impl && _impl->ok(); }
 string OCL::Device::gen_info() const noexcept {
@@ -375,13 +417,14 @@ string OCL::Device::gen_info() const noexcept {
      << "  Max Clock Freq (MHz): " << gen_max_clock_frequency() << "\n"
      << "  Global Mem Size:      " << gen_global_mem_size() << "\n"
      << "  Max Mem Alloc Size:   " << gen_max_mem_alloc_size() << "\n"
+     << "  Local Mem type:       " << gen_local_mem_type() << "\n"
      << "  Local Mem Size:       " << gen_local_mem_size() << "\n";
   return ss.str(); }
 Platform OCL::Device::gen_platform() const noexcept {
   cl_platform_id id = _impl->gen_info<cl_platform_id>(CL_DEVICE_PLATFORM);
   return Platform(Platform_impl(id)); }
 string OCL::Device::gen_type() const noexcept {
-  cl_device_type type = _impl->gen_info<cl_device_type>(CL_DEVICE_TYPE);
+  auto type = _impl->gen_info<cl_device_type>(CL_DEVICE_TYPE);
   auto func = [](string &str, const char *p){
     if (str.size()) str += " ";
     str += p; };
@@ -391,6 +434,14 @@ string OCL::Device::gen_type() const noexcept {
   if (type & CL_DEVICE_TYPE_ACCELERATOR) func(str, "ACCELERATOR");
   if (type & CL_DEVICE_TYPE_DEFAULT)     func(str, "DEFAULT");
   return str; }
+string OCL::Device::gen_local_mem_type() const noexcept {
+  auto type
+    = _impl->gen_info<cl_device_local_mem_type>(CL_DEVICE_LOCAL_MEM_TYPE);
+  if (type == CL_LOCAL)  return string("LOCAL");
+  if (type == CL_GLOBAL) return string("GLOBAL");
+  die(ERR_INT("bad local memory type"));
+  return string(""); }
+
 string OCL::Device::gen_name() const noexcept {
   return _impl->gen_info_string(CL_DEVICE_NAME); }
 string OCL::Device::gen_driver_version() const noexcept {
@@ -407,4 +458,4 @@ size_t OCL::Device::gen_max_work_group_size() const noexcept {
   return _impl->gen_info<size_t>(CL_DEVICE_MAX_WORK_GROUP_SIZE); }
 uint OCL::Device::gen_max_clock_frequency() const noexcept {
   return _impl->gen_info<cl_uint>(CL_DEVICE_MAX_CLOCK_FREQUENCY); }
-
+#endif

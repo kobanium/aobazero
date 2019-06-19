@@ -1,6 +1,7 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
 #pragma once
+#if defined(USE_OPENCL)
 #include <memory>
 #include <string>
 #include <vector>
@@ -14,7 +15,7 @@ namespace OCL {
   class Memory_impl;
   class Kernel_impl;
   class Event_impl;
-
+  
   class Events {
     uint _num;
     std::unique_ptr<Event_impl []> _impl;
@@ -37,6 +38,7 @@ namespace OCL {
     Memory(Memory_impl &&m_impl) noexcept;
     Memory(Memory &&m) noexcept;
     Memory &operator=(Memory &&m) noexcept;
+    Memory_impl &get() noexcept;
     const Memory_impl &get() const noexcept;
     bool ok() const noexcept;
   };
@@ -49,6 +51,7 @@ namespace OCL {
     Kernel(Kernel_impl &&k_impl) noexcept;
     Kernel(Kernel &&k) noexcept;
     Kernel &operator=(Kernel &&k) noexcept;
+    const Kernel_impl &get() const noexcept;
     bool ok() const noexcept;
     void set_arg(uint index, size_t size, const void *value) const noexcept;
     void set_arg(uint index, const Memory &m) const noexcept;
@@ -68,18 +71,22 @@ namespace OCL {
     Device(Device &&d) noexcept;
     Device &operator=(Device &&d) noexcept;
     void build_program(const char *code) noexcept;
-    Memory gen_memory_r(size_t size) const noexcept;
-    Memory gen_memory_w(size_t size) const noexcept;
-    Memory gen_memory_rw(size_t size) const noexcept;
+    Memory gen_mem_r(size_t size) const noexcept;
+    Memory gen_mem_w(size_t size) const noexcept;
+    Memory gen_mem_rw(size_t size) const noexcept;
     Kernel gen_kernel(const char *name) const noexcept;
-    void push_write(const Memory &m, size_t size, const float *p,
-		    Event_impl &e_impl) const noexcept;
-    void push_read(const Memory &m, size_t size, float *p,
-		   const Event_impl &event_wait, Event_impl &event)
+    void finish() const noexcept;
+    void push_barrier() const noexcept;
+    void push_write(const Memory &m, size_t size, const float *p)
       const noexcept;
+    void push_read(const Memory &m, size_t size, float *p) const noexcept;
+    void push_kernel(const Kernel &k, size_t size_global) const noexcept;
+    void enqueue_kernel(const Kernel &k, uint dim, size_t *size_global,
+			size_t *size_local) const noexcept;
     bool ok() const noexcept;
     std::string gen_info() const noexcept;
     std::string gen_type() const noexcept;
+    std::string gen_local_mem_type() const noexcept;
     std::string gen_name() const noexcept;
     std::string gen_driver_version() const noexcept;
     Platform gen_platform() const noexcept;
@@ -108,3 +115,4 @@ namespace OCL {
   };
   std::vector<Platform> gen_platforms() noexcept;
 }
+#endif

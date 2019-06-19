@@ -1,7 +1,7 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
 #pragma once
-#if defined(USE_CLBLAST)
+#if defined(USE_OPENCL)
 #include "nnet.hpp"
 #include "opencl.hpp"
 #include <memory>
@@ -13,18 +13,22 @@ class NNetOCL {
   using uint   = unsigned int;
   using ushort = unsigned short;
   using row_t  = std::unique_ptr<float []>;
-  struct ResWght { row_t matU, mean, sd_inv; };
-  OCL::Device _cl_device;
+  struct CLResWght { OCL::Memory matU, mean, sd_inv; };
+  OCL::Device _cl_dev;
   OCL::Kernel _cl_compute_matV_input;
-  OCL::Memory _cl_input, _cl_output, _cl_matM, _cl_matV;
-  OCL::Events _cl_events;
-  row_t _fslot[3];
+  OCL::Kernel _cl_compute_matM_input;
+  OCL::Kernel _cl_compute_matV;
+  OCL::Kernel _cl_compute_matM;
+  OCL::Kernel _cl_compute_matM_1x3;
+  OCL::Kernel _cl_compute_matA_BNReLU;
+  OCL::Kernel _cl_compute_matA_BNReLU_join;
+  OCL::Memory _cl_input, _cl_bypass, _cl_output, _cl_matM, _cl_matV;
+  std::vector<CLResWght> _cl_reswghts;
+  row_t _fslot[2];
 
   uint _maxsize_batch, _maxsize_out;
   uint _conv3x3_nin_max, _conv3x3_nout_max;
   uint _resnet_nout;
-  row_t _matM, _matV;
-  std::vector<ResWght> _reswghts;
   uint _head1_nout, _policy1_nout, _value1_nout;
   row_t _head1_weight, _head1_mean, _head1_sd_inv;
 
