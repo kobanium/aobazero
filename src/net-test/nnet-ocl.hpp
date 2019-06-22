@@ -15,11 +15,9 @@ class NNetOCL {
   using row_t  = std::unique_ptr<float []>;
   struct CLResWght { OCL::Memory matU, mean, sd_inv; };
   OCL::Device _cl_dev;
+  OCL::Kernel _cl_sgemm_batch;
   OCL::Kernel _cl_compute_matV_input;
-  OCL::Kernel _cl_compute_matM_input;
   OCL::Kernel _cl_compute_matV;
-  OCL::Kernel _cl_compute_matM;
-  OCL::Kernel _cl_compute_matM_1x3;
   OCL::Kernel _cl_compute_matA_BNReLU;
   OCL::Kernel _cl_compute_matA_BNReLU_join;
   OCL::Memory _cl_input, _cl_bypass, _cl_output, _cl_matM, _cl_matV;

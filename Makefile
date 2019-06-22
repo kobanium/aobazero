@@ -60,8 +60,8 @@ GENCODE_OBJS   := src/gencode/gencode.o
 PLAYSHOGI_OBJS := src/playshogi/playshogi.o src/common/option.o src/common/err.o src/common/iobase.o src/common/xzi.o src/common/shogibase.o src/common/osi.o
 CRC64_OBJS     := src/crc64/crc64.o src/common/xzi.o src/common/err.o src/common/iobase.o src/common/osi.o
 EXTRACT_OBJS   := src/extract/extract.o src/common/xzi.o src/common/err.o src/common/iobase.o src/common/osi.o
-OCLDEVS_OBJS   := src/ocldevs/ocldevs.o src/common/err.o
-NET_TEST_OBJS  := src/net-test/net-test.o src/net-test/nnet.o src/net-test/nnet-shogi.o src/net-test/nnet-cpu.o src/common/err.o src/common/iobase.o src/common/shogibase.o src/common/xzi.o src/common/osi.o 
+OCLDEVS_OBJS   := src/ocldevs/ocldevs.o src/common/err.o src/common/opencl.o
+NET_TEST_OBJS  := src/net-test/net-test.o src/net-test/nnet.o src/net-test/nnet-shogi.o src/net-test/nnet-cpu.o src/net-test/nnet-ocl.o src/common/err.o src/common/iobase.o src/common/shogibase.o src/common/xzi.o src/common/osi.o src/common/option.o src/common/opencl.o
 OBJS           := $(AUTOUSI_OBJS) $(SERVER_OBJS) $(GENCODE_OBJS) $(PLAYSHOGI_OBJS) $(CRC64_OBJS) $(EXTRACT_OBJS) $(OCLDEVS_OBJS) $(NET_TEST_OBJS)
 INC_OUT        := src/common/tbl_zkey.inc src/common/tbl_board.inc src/common/tbl_sq.inc src/common/tbl_bmap.inc
 

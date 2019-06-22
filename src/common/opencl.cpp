@@ -9,6 +9,7 @@
 #include <cassert>
 #include <cstdint>
 #define CL_TARGET_OPENCL_VERSION 110
+#define CL_USE_DEPRECATED_OPENCL_1_1_APIS
 #ifdef __APPLE__
 #  include <OpenCL/opencl.h>
 #else
@@ -235,8 +236,7 @@ public:
     cl_int ret = clEnqueueWriteBuffer(_queue, m_impl.get(), CL_FALSE, 0,
 				      size, p, 0, nullptr, nullptr);
     if (ret != CL_SUCCESS)
-      die(ERR_INT("clEnqueueWriteBuffer() failed. Error Code: %d", ret));
-    push_barrier(); }
+      die(ERR_INT("clEnqueueWriteBuffer() failed. Error Code: %d", ret)); }
 
   void push_read(const Memory_impl &m_impl, size_t size, float *p)
     const noexcept {
@@ -244,8 +244,7 @@ public:
     cl_int ret = clEnqueueReadBuffer(_queue, m_impl.get(), CL_FALSE, 0, size,
 				     p, 0, nullptr, nullptr);
     if (ret != CL_SUCCESS)
-      die(ERR_INT("clEnqueueReadBuffer() failed. Error Code: %d", ret));
-    push_barrier(); }
+      die(ERR_INT("clEnqueueReadBuffer() failed. Error Code: %d", ret)); }
 
   void push_kernel(const Kernel_impl &k_impl, size_t size_global)
     const noexcept {
@@ -264,8 +263,7 @@ public:
 	  die(ERR_INT("clEnqueNDRangeKernel() failed. Error Code: %d", ret));
 	if (size_global == 0) return;
 	off_g += size_g; }
-      size_local /= 2U; }
-    push_barrier(); }
+      size_local /= 2U; } }
   
   void enqueue_kernel(const Kernel_impl &k_impl, uint dim, size_t *size_g,
 		      size_t *size_l) const noexcept {

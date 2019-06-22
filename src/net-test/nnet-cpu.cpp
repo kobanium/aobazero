@@ -669,7 +669,7 @@ std::cout << std::endl;
 std::cout << elapsed / static_cast<double>(nelapsed) << std::endl;
 std::cout << std::endl;
 */
-
+#include <iostream>
 void NNetCPU::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
 		 const ushort *nnmoves, float *probs, float *values) noexcept {
   assert(input && sizes_nnmove && nnmoves && probs && values);
@@ -683,6 +683,17 @@ void NNetCPU::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
   compute_matV_input(size_batch, input, _matV.get());
   compute_matM(_resnet_nout, NNAux::nch_input, size_batch,
 	       _reswghts[0].matU.get(), _matV.get(), _matM.get());
+  for (uint u = size_tile_in - 1U; u < size_tile_in; ++u)
+    for (uint m = 0; m < _resnet_nout; ++m)
+      for (uint n = 0; n < size_batch * ntile; ++n) {
+	std::cout << u << " " << m << " "
+		  << _matM[u * _resnet_nout * size_batch * ntile
+			   + m * size_batch * ntile
+			   + n]
+		  << std::endl;
+      }
+  std::terminate();
+  
   compute_matA_BNReLU_fork_matV(_resnet_nout, size_batch, _matM.get(),
 				_reswghts[0].mean.get(),
 				_reswghts[0].sd_inv.get(),

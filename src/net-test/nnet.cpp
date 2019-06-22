@@ -37,7 +37,7 @@ static pair<uint, row_t> read_row(char *line) noexcept {
     token = OSI::strtok(nullptr, " ", &saveptr); }
   
   pair<uint, row_t> ret(static_cast<uint>(queue_float.size()),
-			new float [queue_float.size()]);
+			unique_ptr<float []>(new float [queue_float.size()]));
   uint u = 0;
   while(!queue_float.empty()) {
     ret.second[u++] = queue_float.front();

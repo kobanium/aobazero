@@ -42,25 +42,41 @@ static double elapsed_sum = 0.0;
 static uint nelapsed      = 0;
 
 constexpr char msg_bad_wght_dim[] = "bad weight dimension";
-constexpr uint len_kernel    = 3U;
-constexpr uint size_kernel   = len_kernel * len_kernel;
-constexpr uint len_tile_out  = 3U;
-constexpr uint len_tile_in   = 5U;
-constexpr uint size_tile_in  = len_tile_in * len_tile_in;
-constexpr uint ntile_h       = 3U;
-constexpr uint ntile_w       = 3U;
-constexpr uint ntile         = ntile_h * ntile_w;
-constexpr uint size_plane_in = size_tile_in * ntile;
-constexpr uint pad           = 1U;
-constexpr uint matM_pwM      = 8U;
-constexpr uint matM_pwN      = 2U;
+constexpr uint len_kernel      = 3U;
+constexpr uint size_kernel     = len_kernel * len_kernel;
+constexpr uint len_tile_out    = 3U;
+constexpr uint len_tile_in     = 5U;
+constexpr uint size_tile_in    = len_tile_in * len_tile_in;
+constexpr uint ntile_h         = 3U;
+constexpr uint ntile_w         = 3U;
+constexpr uint ntile           = ntile_h * ntile_w;
+constexpr uint size_plane_in   = size_tile_in * ntile;
+constexpr uint pad             = 1U;
 
-constexpr uint matM_lwMN     = 4U;
-constexpr uint matM_lwK      = 16U;
+constexpr uint sgemm_nl        = 16U;
+constexpr uint sgemm_npm       = 8U;
+constexpr uint sgemm_npn       = 1U;
+constexpr uint sgemm_npk       = 1U;
+constexpr uint sgemm_m_multi   = sgemm_nl * sgemm_npm;
+constexpr uint sgemm_n_multi   = sgemm_nl * sgemm_npn;
+constexpr uint sgemm_k_multi   = sgemm_nl * sgemm_npk;
 
 constexpr float bn_factor    = 1.0f / 999.982f;
 constexpr float bn_eps       = 1e-5f;
-
+/*
+  dev.finish();
+  steady_clock::time_point start = steady_clock::now();
+  dev.finish();
+  steady_clock::time_point end = steady_clock::now();
+  double elapsed
+    = static_cast<double>(duration_cast<microseconds>(end - start).count());
+  elapsed_sum += elapsed;
+  nelapsed    += 1U;
+  std::cout << std::endl;
+  std::cout << elapsed << std::endl;
+  std::cout << elapsed_sum / static_cast<double>(nelapsed) << std::endl;
+  std::cout << std::endl;
+*/
 const string code_common =
   "#define NCH_INPUT "    + to_string(NNAux::nch_input)  + "\n"
   "#define SIZE_PLANE "   + to_string(NNAux::size_plane) + "\n"
@@ -73,10 +89,10 @@ const string code_common =
   "#define NTILE_W "      + to_string(ntile_w)           + "\n"
   "#define NTILE "        + to_string(ntile)             + "\n"
   "#define PAD "          + to_string(pad)               + "\n"
-  "#define MATM_PWM "     + to_string(matM_pwM)          + "\n"
-  "#define MATM_PWN "     + to_string(matM_pwN)          + "\n"
-  "#define MATM_LWMN "    + to_string(matM_lwMN)         + "\n"
-  "#define MATM_LWK "     + to_string(matM_lwK)          + R"(
+  "#define SGEMM_NL "     + to_string(sgemm_nl)          + "\n"
+  "#define SGEMM_NPM "    + to_string(sgemm_npm)         + "\n"
+  "#define SGEMM_NPN "    + to_string(sgemm_npn)         + "\n"
+  "#define SGEMM_NPK "    + to_string(sgemm_npk)         + R"(
 #define uint unsigned int
 float x1(float x) { return x; }
 float x2(float x) { return x + x; }
@@ -87,11 +103,8 @@ float x9(float x) { float y = x + x; y += y; return y + y + x; }
 )";
 
 const string code_compute_matV = R"(
-void compute_matV_child(uint nchxnb, uint chb, uint uh, uint uw,
+void compute_matV_child(uint nk, uint nn, uint ch, uint ub, uint uh, uint uw,
                         __global const float *fin, __global float *matV) {
-  uint uca = NTILE * nchxnb * LEN_TILE_IN;
-  uint ucb = NTILE * nchxnb;
-  uint ucc = chb * NTILE + uh * NTILE_W + uw;
   int y0 = uh * LEN_TILE_OUT - PAD;
   int x0 = uw * LEN_TILE_OUT - PAD;
   float md[LEN_TILE_IN][LEN_TILE_IN];
@@ -101,6 +114,9 @@ void compute_matV_child(uint nchxnb, uint chb, uint uh, uint uw,
         md[y][x] = fin[(y0 + y) * WIDTH + x0 + x];
       else md[y][x] = 0.0f;
 
+  uint uca = nk * nn * LEN_TILE_IN;
+  uint ucb = nk * nn;
+  uint ucc = ch * nn + ub * NTILE + uh * NTILE_W + uw;
   matV[ucc + uca*0U + ucb*0U]
     = (+ x4(md[0][0]) - x2(md[0][1]) - x4(md[0][2]) + x2(md[0][3])
        - x2(md[1][0]) + x1(md[1][1]) + x2(md[1][2]) - x1(md[1][3])
@@ -201,51 +217,54 @@ void compute_matV_child(uint nchxnb, uint chb, uint uh, uint uw,
        - x4(md[3][1]) + x2(md[3][2]) + x4(md[3][3]) - x2(md[3][4])
        + x2(md[4][1]) - x1(md[4][2]) - x2(md[4][3]) + x1(md[4][4])); }
 
-__kernel void compute_matV_input(uint nb, __global const float *fin,
+__kernel void compute_matV_input(uint nb, uint nk, uint nn,
+                                 __global const float *fin,
                                  __global float *matV) {
-  uint nchxnb = NCH_INPUT * nb;
-  uint gid    = get_global_id(0);
-  uint loop   = gid / NTILE;
-  uint utile  = gid % NTILE;
-  uint ub     = loop / NCH_INPUT;
-  uint ch     = loop % NCH_INPUT;
-  uint chb    = ch * nb + ub;
-  uint uh     = utile / NTILE_W;
-  uint uw     = utile % NTILE_W;
-  __global const float *fin_off = fin + loop * SIZE_PLANE;
-  compute_matV_child(nchxnb, chb, uh, uw, fin_off, matV); }
+  uint gid   = get_global_id(0);
+  uint loop  = gid / NTILE;
+  uint utile = gid % NTILE;
+  uint ub    = loop / NCH_INPUT;
+  uint ch    = loop % NCH_INPUT;
+  uint chb   = ch * nb + ub;
+  uint uh    = utile / NTILE_W;
+  uint uw    = utile % NTILE_W;
+  fin       += loop * SIZE_PLANE;
+  compute_matV_child(nk, nn, ch, ub, uh, uw, fin, matV); }
 
-__kernel void compute_matV(uint nb, __global const float *fin,
+__kernel void compute_matV(uint nb, uint nk, uint nn,
+                           __global const float *fin,
                            __global float *matV) {
-  uint nchxnb = NCH_RESNET * nb;
-  uint gid    = get_global_id(0);
-  uint chb    = gid / NTILE;
-  uint utile  = gid % NTILE;
-  uint uh     = utile / NTILE_W;
-  uint uw     = utile % NTILE_W;
-  fin        += chb * SIZE_PLANE;
-  compute_matV_child(nchxnb, chb, uh, uw, fin, matV); }
+  uint gid   = get_global_id(0);
+  uint chb   = gid / NTILE;
+  uint utile = gid % NTILE;
+  uint ch    = chb / nb;
+  uint ub    = chb % nb;
+  uint uh    = utile / NTILE_W;
+  uint uw    = utile % NTILE_W;
+  fin       += chb * SIZE_PLANE;
+  compute_matV_child(nk, nn, ch, ub, uh, uw, fin, matV); }
 )";
 
 const string code_compute_matA = R"(
 float compute_BNReLU(float sd_inv, float mean, float x) {
   return max(0.0f, sd_inv * (x - mean)); }
 
-__kernel void compute_matA_BNReLU(uint nb,
+__kernel void compute_matA_BNReLU(uint nb, uint offc, uint ldc,
                                   __global const float *matM,
                                   __global const float *mean_array,
                                   __global const float *sd_inv_array,
                                   __global float *fout) {
-  uint gid    = get_global_id(0);
-  uint size_g = NTILE * NCH_RESNET * nb;
+  uint gid   = get_global_id(0);
+  uint chb   = gid / NTILE;
+  uint utile = gid % NTILE;
+  uint ch    = chb / nb;
+  uint ub    = chb % nb;
   float mm[LEN_TILE_IN][LEN_TILE_IN];
   for (uint uh_in = 0; uh_in < LEN_TILE_IN; ++uh_in)
     for (uint uw_in = 0; uw_in < LEN_TILE_IN; ++uw_in)
-      mm[uh_in][uw_in] = matM[(uh_in * LEN_TILE_IN + uw_in) * size_g + gid];
+      mm[uh_in][uw_in] = matM[(uh_in * LEN_TILE_IN + uw_in) * offc
+                              + ch * ldc + ub * NTILE + utile];
 
-  uint chb     = gid / NTILE;
-  uint utile   = gid % NTILE;
-  uint ch      = chb / nb;
   uint uh      = utile / NTILE_W;
   uint uw      = utile % NTILE_W;
   uint ucd     = chb * SIZE_PLANE + (uh * WIDTH + uw) * LEN_TILE_OUT;
@@ -306,21 +325,22 @@ __kernel void compute_matA_BNReLU(uint nb,
 float compute_BNReLU_join(float join, float sd_inv, float mean, float x) {
   return max(0.0f, join + sd_inv * (x - mean)); }
 
-__kernel void compute_matA_BNReLU_join(uint nb,
+__kernel void compute_matA_BNReLU_join(uint nb, uint offc, uint ldc,
                                        __global const float *matM,
                                        __global const float *mean_array,
                                        __global const float *sd_inv_array,
                                        __global float *fout) {
-  uint gid    = get_global_id(0);
-  uint size_g = NTILE * NCH_RESNET * nb;
+  uint gid   = get_global_id(0);
+  uint chb   = gid / NTILE;
+  uint utile = gid % NTILE;
+  uint ch    = chb / nb;
+  uint ub    = chb % nb;
   float mm[LEN_TILE_IN][LEN_TILE_IN];
   for (uint uh_in = 0; uh_in < LEN_TILE_IN; ++uh_in)
     for (uint uw_in = 0; uw_in < LEN_TILE_IN; ++uw_in)
-      mm[uh_in][uw_in] = matM[(uh_in * LEN_TILE_IN + uw_in) * size_g + gid];
+      mm[uh_in][uw_in] = matM[(uh_in * LEN_TILE_IN + uw_in) * offc
+                              + ch * ldc + ub * NTILE + utile];
 
-  uint chb     = gid / NTILE;
-  uint utile   = gid % NTILE;
-  uint ch      = chb / nb;
   uint uh      = utile / NTILE_W;
   uint uw      = utile % NTILE_W;
   uint ucd     = chb * SIZE_PLANE + (uh * WIDTH + uw) * LEN_TILE_OUT;
@@ -380,165 +400,86 @@ __kernel void compute_matA_BNReLU_join(uint nb,
 )";
 
 const string code_compute_matM = R"(
-__kernel void compute_matM_input(uint nn, __global const float *matA,
-                                 __global const float *matB,
-                                 __global float *matC) {
-  uint nm    = NCH_RESNET;
-  uint nk    = NCH_INPUT;
+__kernel
+void sgemm_batch(uint nn, uint nk,
+                 __global const float *gA, uint offa,
+                 __global const float *gB, uint offb,
+                 __global float *gC, uint offc) {
+  uint ub  = get_global_id(2);
+  uint ugm = get_group_id(1);
+  uint ugn = get_group_id(0);
+  uint ulm = get_local_id(1);
+  uint uln = get_local_id(0);
+  uint ngk = nk / (SGEMM_NL * SGEMM_NPK);
+  gA += ub*offa + ugm*SGEMM_NL*SGEMM_NPM*nk;
+  gB += ub*offb + ugn*SGEMM_NL*SGEMM_NPN;
+  gC += ub*offc + ugm*SGEMM_NL*SGEMM_NPM*nn + ugn*SGEMM_NL*SGEMM_NPN;
+
+  __local float lA[SGEMM_NL*SGEMM_NPM][SGEMM_NL*SGEMM_NPK];
+  __local float lB[SGEMM_NL*SGEMM_NPK][SGEMM_NL*SGEMM_NPN];
+  float pC[SGEMM_NPM][SGEMM_NPN];
+  float pB[SGEMM_NPN];
+  float pA;
+
+  for (uint upm = 0; upm < SGEMM_NPM; ++upm)
+    for (uint upn = 0; upn < SGEMM_NPN; ++upn) pC[upm][upn] = 0.0f;
+
+  for (uint ugk = 0; ugk < ngk; ++ugk) {
+
+    for (uint upm = 0; upm < SGEMM_NPM; ++upm)
+      for (uint upk = 0; upk < SGEMM_NPK; ++upk)
+        lA[ulm*SGEMM_NPM + upm][uln*SGEMM_NPK + upk]
+          = gA[(ulm*SGEMM_NPM + upm)*nk + uln*SGEMM_NPK + upk];
+
+    for (uint upk = 0; upk < SGEMM_NPK; ++upk)
+      for (uint upn = 0; upn < SGEMM_NPN; ++upn)
+        lB[ulm*SGEMM_NPK + upk][uln*SGEMM_NPN + upn]
+          = gB[(ulm*SGEMM_NPK + upk)*nn + uln*SGEMM_NPN + upn];
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (uint ulpk = 0; ulpk < SGEMM_NL*SGEMM_NPK; ++ulpk) {
+      for (uint upn = 0; upn < SGEMM_NPN; ++ upn)
+        pB[upn] = lB[ulpk][uln*SGEMM_NPN + upn];
+
+      for (uint upm = 0; upm < SGEMM_NPM; ++ upm) {
+        pA = lA[ulm*SGEMM_NPM + upm][ulpk];
+        for (uint upn = 0; upn < SGEMM_NPN; ++ upn)
+          pC[upm][upn] += pA * pB[upn]; } }
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    gA += SGEMM_NL*SGEMM_NPK;
+    gB += SGEMM_NL*SGEMM_NPK*nn; }
+  
+  for (uint upm = 0; upm < SGEMM_NPM; ++upm)
+    for (uint upn = 0; upn < SGEMM_NPN; ++upn)
+      gC[(ulm*SGEMM_NPM + upm)*nn + uln*SGEMM_NPN + upn] = pC[upm][upn]; }
+
+#if 0
+__kernel void
+sgemm_batch(uint nm, uint nn, uint nk,
+            __global const float *gA, uint offa, uint lda,
+            __global const float *gB, uint offb, uint ldb,
+            __global float *gC, uint offc, uint ldc) {
   uint areac = nm * nn;
   uint gid   = get_global_id(0);
-  uint uloc  = gid / areac;
+  uint ub    = gid / areac;
   uint uc    = gid % areac;
   uint um    = uc / nn;
   uint un    = uc % nn;
-  matA      += uloc * nm * nk + um * nk;
-  matB      += uloc * nk * nn + un;
+  gA        += ub * offa + um * lda;
+  gB        += ub * offb + un;
+  gC        += ub * offc + um * ldc + un;
   float sum  = 0.0f;
   for (uint uk = 0; uk < nk; ++uk) {
-    sum  += *matA * *matB;
-    matA += 1;
-    matB += nn; }
-  matC[gid] = sum; }
-
-/*
-__kernel void compute_matM(uint nn, __global const float *matA,
-                           __global const float *matB, __global float *matC) {
-  uint nm    = NCH_RESNET;
-  uint nk    = NCH_RESNET;
-  uint areac = nm * nn;
-  uint gid   = get_global_id(0);
-  uint uloc  = gid / areac;
-  uint uc    = gid % areac;
-  uint um    = uc / nn;
-  uint un    = uc % nn;
-  matA      += uloc * nm * nk + um * nk;
-  matB      += uloc * nk * nn + un;
-  float sum  = 0.0f;
-  for (uint uk = 0; uk < nk; ++uk) {
-    sum  += *matA * *matB;
-    matA += 1;
-    matB += nn; }
-  matC[gid] = sum; } */
-
-__kernel void compute_matM_l(uint nn, __global const float *gA,
-                             __global const float *gB, __global float *gC) {
-  uint nm   = NCH_RESNET;
-  uint nk   = NCH_RESNET;
-  uint uloc = get_global_id(0);
-  uint um   = get_global_id(1);
-  uint un   = get_global_id(2);
-  uint ulm  = get_group_id(1);
-  uint uln  = get_group_id(2);
-  uint um1  = get_local_id(1);
-  uint un1  = get_local_id(2);
-  uint um0  = ulm * MATM_LWMN;
-  uint un0  = uln * MATM_LWMN;
-  uint nlk  = nk / MATM_LWK;
-  uint lpt  = MATM_LWK / MATM_LWMN;
-  gA       += uloc * nm * nk + um0 * nk;
-  gB       += uloc * nk * nn + un0;
-  gC       += uloc * nm * nn + um0 * nn + un0;
-
-  __local float lA[MATM_LWMN][MATM_LWK];
-  __local float lB[MATM_LWK][MATM_LWMN];
-  float sum = 0.0f;
-  for (uint ulk = 0; ulk < nlk; ++ulk) {
-
-    for (uint u = 0; u < lpt; ++u) {
-      lA[um1][un1*lpt + u] = gA[um1*nk + un1*lpt + u];
-      lB[um1*lpt + u][un1] = gB[(um1*lpt + u) * nn + un1]; }
-
-    barrier(CLK_LOCAL_MEM_FENCE);
-    for (uint uk = 0; uk < MATM_LWK; ++uk)
-      sum += lA[um1][uk] * lB[uk][un1];
-    barrier(CLK_LOCAL_MEM_FENCE);
-
-    gA += MATM_LWK;
-    gB += MATM_LWK * nn; }
-  gC[um1*nn + un1] = sum; }
-
-/* (NCH_RESNET % MATM_PWM) == 0 */
-/* (nn         % MATM_PWN) == 0 */
-__kernel void compute_matM_p(uint nn, __global const float *gA,
-                             __global const float *gB, __global float *gC) {
-  uint nm   = NCH_RESNET;
-  uint nk   = NCH_RESNET;
-  uint npm  = NCH_RESNET / MATM_PWM;
-  uint npn  = nn / MATM_PWN;
-  uint npc  = npm * npn;
-  uint gid  = get_global_id(0);
-  uint uloc = gid / npc;
-  uint upc  = gid % npc;
-  uint upm  = upc / npn;
-  uint upn  = upc % npn;
-  uint um0  = upm * MATM_PWM;
-  uint un0  = upn * MATM_PWN;
-  gA       += uloc * nm * nk + um0 * nk;
-  gB       += uloc * nk * nn + un0;
-  gC       += uloc * nm * nn + um0 * nn + un0;
-  float pC[MATM_PWM][MATM_PWN];
-  for (uint um1 = 0; um1 < MATM_PWM; ++um1)
-    for (uint un1 = 0; un1 < MATM_PWN; ++un1)
-      pC[um1][un1] = 0.0f;
-
-  for (uint uk = 0; uk < nk; ++uk) {
-
-    float pB[MATM_PWN];
-    for (uint un1 = 0; un1 < MATM_PWN; ++un1)
-      pB[un1] = gB[un1];
-
-    for (uint um1 = 0; um1 < MATM_PWM; ++um1) {
-      float pA = gA[um1*nk];
-      for (uint un1 = 0; un1 < MATM_PWN; ++un1)
-        pC[um1][un1] += pA * pB[un1]; }
-
-    gA += 1U;
-    gB += nn; }
-
-  for (uint um1 = 0; um1 < MATM_PWM; ++um1) {
-    for (uint un1 = 0; un1 < MATM_PWN; ++un1) gC[un1] = pC[um1][un1];
-    gC += nn; } }
-/*
-__kernel void sgemm_PWM_PWN(uint nn, __global const float *gA,
-                            __global const float *gB, __global float *gC) {
-  uint nm   = NCH_RESNET;
-  uint nk   = NCH_RESNET;
-  uint npm  = NCH_RESNET / MATM_PWM;
-  uint npn  = nn / MATM_PWN;
-  uint npc  = npm * npn;
-  uint gid  = get_global_id(0);
-  uint uloc = gid / npc;
-  uint upc  = gid % npc;
-  uint upm  = upc / npn;
-  uint upn  = upc % npn;
-  uint um0  = upm * MATM_PWM;
-  uint un0  = upn * MATM_PWN;
-  gA       += uloc * nm * nk + um0 * nk;
-  gB       += uloc * nk * nn + un0;
-  gC       += uloc * nm * nn + um0 * nn + un0;
-  float pC[MATM_PWM][MATM_PWN];
-  for (uint um1 = 0; um1 < MATM_PWM; ++um1)
-    for (uint un1 = 0; un1 < MATM_PWN; ++un1)
-      pC[um1][un1] = 0.0f;
-
-  for (uint uk = 0; uk < nk; ++uk) {
-
-    float pB[MATM_PWN];
-    for (uint un1 = 0; un1 < MATM_PWN; ++un1)
-      pB[un1] = gB[un1];
-
-    for (uint um1 = 0; um1 < MATM_PWM; ++um1) {
-      float pA = gA[um1*nk];
-      for (uint un1 = 0; un1 < MATM_PWN; ++un1)
-        pC[um1][un1] += pA * pB[un1]; }
-
-    gA += 1U;
-    gB += nn; }
-
-  for (uint um1 = 0; um1 < MATM_PWM; ++um1) {
-    for (uint un1 = 0; un1 < MATM_PWN; ++un1) gC[un1] = pC[um1][un1];
-    gC += nn; } }*/
+    sum  += *gA * *gB;
+    gA   += 1;
+    gB   += ldb; }
+  *gC = sum; }
+#endif
 )";
+
+static uint ceil_multi(uint u, uint mul) noexcept {
+  return ((u + mul - 1U) / mul) * mul; }
 
 static void softmax(uint n, float *p) noexcept {
   assert(0 < n && p);
@@ -577,8 +518,6 @@ static void get_best_device(OCL::Device &device_best) noexcept {
 	device_best = move(device); }
       id += 1U; } } }
 
-//struct ResWght { row_t matU, mean, sd_inv; };
-//std::vector<ResWght> _reswghts;
 void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
 		    int device_id) noexcept {
   assert(0 < maxsize_batch);
@@ -602,42 +541,47 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
 
   load(wght);
   for (auto &f : _fslot) f.reset(new float [_maxsize_batch * _maxsize_out]);
-  
+  uint sizeV = (size_tile_in
+		* ceil_multi(_conv3x3_nin_max, sgemm_k_multi)
+		* ceil_multi(_maxsize_batch * ntile, sgemm_n_multi));
+  uint sizeM = (size_tile_in
+		* ceil_multi(_conv3x3_nout_max, sgemm_m_multi)
+		* ceil_multi(_maxsize_batch * ntile, sgemm_n_multi));
   _cl_input  = _cl_dev.gen_mem_r(sizeof(float) * _maxsize_batch
 				 * NNAux::nch_input * NNAux::size_plane);
-  _cl_matV   = _cl_dev.gen_mem_r(sizeof(float) * _maxsize_batch
-				 * _conv3x3_nin_max * size_plane_in);
-  _cl_matM   = _cl_dev.gen_mem_r(sizeof(float) * _maxsize_batch
-				 * _conv3x3_nout_max * size_plane_in);
+  _cl_matV   = _cl_dev.gen_mem_rw(sizeof(float) * sizeV);
+  _cl_matM   = _cl_dev.gen_mem_rw(sizeof(float) * sizeM);
   _cl_bypass = _cl_dev.gen_mem_rw(sizeof(float) * _maxsize_batch
 				  * _maxsize_out);
   _cl_output = _cl_dev.gen_mem_rw(sizeof(float) * _maxsize_batch
 				  * _maxsize_out);
-
+  row_t matV(new float [sizeV]);
+  row_t matM(new float [sizeM]);
+  fill_n(matV.get(), sizeV, 0.0f);
+  fill_n(matM.get(), sizeM, 0.0f);
+  _cl_dev.push_write(_cl_matV, sizeof(float) * sizeV, matV.get());
+  _cl_dev.push_write(_cl_matM, sizeof(float) * sizeM, matM.get());
+  _cl_dev.finish();
+  
   string code0 = "#define NCH_RESNET " + to_string(_resnet_nout) + "\n";
   string code  = (code0 + code_common + code_compute_matM
 		  + code_compute_matV + code_compute_matA);
   
   _cl_dev.build_program(code.c_str());
+  _cl_sgemm_batch = _cl_dev.gen_kernel("sgemm_batch");
+  assert(_cl_sgemm_batch.ok());
+  std::cout << "  - Kernel: sgemm_batch\n";
+  std::cout << _cl_sgemm_batch.gen_info();
+  
   _cl_compute_matV_input = _cl_dev.gen_kernel("compute_matV_input");
   assert(_cl_compute_matV_input.ok());
   std::cout << "  - Kernel: compute_matV_input\n";
   std::cout << _cl_compute_matV_input.gen_info();
   
-  _cl_compute_matM_input = _cl_dev.gen_kernel("compute_matM_input");
-  assert(_cl_compute_matM_input.ok());
-  std::cout << "  - Kernel: compute_matM_input\n";
-  std::cout << _cl_compute_matM_input.gen_info();
-  
   _cl_compute_matV = _cl_dev.gen_kernel("compute_matV");
   assert(_cl_compute_matV.ok());
   std::cout << "  - Kernel: compute_matV\n";
   std::cout << _cl_compute_matV.gen_info();
-  
-  _cl_compute_matM = _cl_dev.gen_kernel("compute_matM_p");
-  assert(_cl_compute_matM.ok());
-  std::cout << "  - Kernel: compute_matM_p\n";
-  std::cout << _cl_compute_matM.gen_info();
   
   _cl_compute_matA_BNReLU = _cl_dev.gen_kernel("compute_matA_BNReLU");
   assert(_cl_compute_matA_BNReLU.ok());
@@ -653,26 +597,31 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
 
 // in:  weight[nout][nin][size_kernel]
 // ret: matrix_U[size_tile_in][nout][nin]
-static row_t gen_matU(uint nout, uint nin, const float *weight) {
+static row_t gen_matU(uint nout, uint nin, const float *weight, uint &size)
+  noexcept {
   assert(0 < nout && 0 < nin && weight);
   constexpr float matG[5][3] = { +1.0f / 2.0f, +0.0f,        +0.0f,
 				 -1.0f / 2.0f, -1.0f / 2.0f, -1.0f / 2.0f,
 				 -1.0f / 6.0f, +1.0f / 6.0f, -1.0f / 6.0f,
 				 +1.0f / 6.0f, +1.0f / 3.0f, +2.0f / 3.0f,
 				 +0.0f,        +0.0f,        +1.0f };
-
-  row_t matU(new float [size_tile_in * nout * nin]);
-  const uint nout_in = nout * nin;
-  for (uint ch_io = 0; ch_io < nout_in; ++ch_io) {
-    const float *mg = weight + ch_io * size_kernel;
-    for (uint uh = 0; uh < len_tile_in; ++uh)
-      for (uint uw = 0; uw < len_tile_in; ++uw) {
-	float fsum = 0.0;
-	for (uint u1 = 0; u1 < len_kernel; ++u1)
-	  for (uint u2 = 0; u2 < len_kernel; ++u2)
-	    fsum += matG[uh][u1] * matG[uw][u2] * mg[u1 * len_kernel + u2];
-	matU[(uh * len_tile_in + uw) * nout_in + ch_io] = fsum; } }
-  
+  uint ld  = ceil_multi(nin, sgemm_k_multi);
+  uint off = ceil_multi(nout, sgemm_m_multi) * ld;
+  size     = size_tile_in * off;
+  row_t matU(new float [size]);
+  fill_n(matU.get(), size, 0.0f);
+  for (uint ch_out = 0; ch_out < nout; ++ch_out)
+    for (uint ch_in = 0; ch_in < nin; ++ch_in) {
+      const float *mg = weight + (ch_out * nin + ch_in) * size_kernel;
+      for (uint uh = 0; uh < len_tile_in; ++uh)
+	for (uint uw = 0; uw < len_tile_in; ++uw) {
+	  float fsum = 0.0;
+	  for (uint u1 = 0; u1 < len_kernel; ++u1)
+	    for (uint u2 = 0; u2 < len_kernel; ++u2)
+	      fsum += matG[uh][u1] * matG[uw][u2] * mg[u1 * len_kernel + u2];
+	  matU[(uh * len_tile_in + uw) * off
+	       + ch_out * ld
+	       + ch_in] = fsum; } }
   return matU; }
 
 static row_t gen_mean(uint nch, const float *bias, const float *mean)
@@ -740,15 +689,15 @@ void NNetOCL::load(const vector<pair<uint, row_t>> &wght) noexcept {
 	|| wght[index + 2U].first != _resnet_nout
 	|| wght[index + 3U].first != _resnet_nout)
       die(ERR_INT(msg_bad_wght_dim));
-    size_t size_matU = size_tile_in * _resnet_nout * nin;
-    OCL::Memory cl_matU   = _cl_dev.gen_mem_rw(sizeof(float) * size_matU);
+    uint sizeU;
+    row_t matU = gen_matU(_resnet_nout, nin, wght[index].second.get(), sizeU);
+    OCL::Memory cl_matU   = _cl_dev.gen_mem_rw(sizeof(float) * sizeU);
     OCL::Memory cl_mean   = _cl_dev.gen_mem_rw(sizeof(float) * _resnet_nout);
     OCL::Memory cl_sd_inv = _cl_dev.gen_mem_rw(sizeof(float) * _resnet_nout);
-    row_t matU   = gen_matU(_resnet_nout, nin, wght[index].second.get());
-    row_t mean   = gen_mean(_resnet_nout, wght[index + 1U].second.get(),
+    row_t mean = gen_mean(_resnet_nout, wght[index + 1U].second.get(),
 			    wght[index + 2U].second.get());
     row_t sd_inv = gen_sd_inv(_resnet_nout, wght[index + 3U].second.get());
-    _cl_dev.push_write(cl_matU,   sizeof(float) * size_matU, matU.get());
+    _cl_dev.push_write(cl_matU,   sizeof(float) * sizeU, matU.get());
     _cl_dev.push_write(cl_mean,   sizeof(float) * _resnet_nout, mean.get());
     _cl_dev.push_write(cl_sd_inv, sizeof(float) * _resnet_nout, sd_inv.get());
     _cl_reswghts.push_back({move(cl_matU), move(cl_mean), move(cl_sd_inv)});
@@ -876,130 +825,74 @@ compute_probs(uint nch, uint size_batch, const uint *sizes_nnmove,
       probs_b[u] += bias[ch]; }
     softmax(sizes_nnmove[ub], probs_b); } }
 
-static void push_compute_matV_input(uint nb,
-				    const OCL::Device &dev,
-				    const OCL::Kernel &ker,
-				    const OCL::Memory &input,
-				    const OCL::Memory &matV) noexcept {
-  assert(0 < nb && dev.ok() && ker.ok() && input.ok() && matV.ok());
-  ker.set_arg(0, sizeof(nb), &nb);
-  ker.set_arg(1, input);
-  ker.set_arg(2, matV);
-  dev.push_kernel(ker, ntile * NNAux::nch_input * nb); }
-
-static void push_compute_matM_input(uint nout, uint nb,
-				    const OCL::Device &dev,
-				    const OCL::Kernel &ker,
-				    const OCL::Memory &matU,
-				    const OCL::Memory &matV,
-				    const OCL::Memory &matM) noexcept {
-  assert(0 < nout && 0 < nb && dev.ok() && ker.ok() && matU.ok() && matV.ok()
-	 && matM.ok());
-  uint nn = nb * ntile;
+static void
+push_sgemm_batch(const OCL::Device &dev, const OCL::Kernel &ker,
+		 uint nm, uint nn, uint nk,
+		 const OCL::Memory &mA, const OCL::Memory &mB,
+		 const OCL::Memory &mC) noexcept {
+  assert(dev.ok() && ker.ok() && 0 < nm && 0 < nn && 0 < nk);
+  assert(mA.ok() && 0 < lda && mB.ok() && 0 < ldb && mC.ok() && 0 < ldc);
+  assert((nm % sgemm_pwm) == 0 && (nn % sgemm_pwn) == 0);
+  nm = ceil_multi(nm, sgemm_m_multi);
+  nn = ceil_multi(nn, sgemm_n_multi);
+  nk = ceil_multi(nk, sgemm_k_multi);
+  uint offa = nm * nk;
+  uint offb = nk * nn;
+  uint offc = nm * nn;
   ker.set_arg(0, sizeof(nn), &nn);
-  ker.set_arg(1, matU);
-  ker.set_arg(2, matV);
-  ker.set_arg(3, matM);
-  dev.push_kernel(ker, size_tile_in * nout * nb * ntile); }
-
-static void push_compute_matV(uint nin, uint nb,
-			      const OCL::Device &dev,
-			      const OCL::Kernel &ker,
-			      const OCL::Memory &input,
-			      const OCL::Memory &matV) noexcept {
-  assert(0 < nin && 0 < nb && dev.ok() && ker.ok() && input.ok()
-	 && matV.ok());
-  ker.set_arg(0, sizeof(nb), &nb);
-  ker.set_arg(1, input);
-  ker.set_arg(2, matV);
-  dev.push_kernel(ker, ntile * nin * nb); }
-
-static void push_compute_matM(uint nout, uint nb,
-			      const OCL::Device &dev,
-			      const OCL::Kernel &ker,
-			      const OCL::Memory &matU,
-			      const OCL::Memory &matV,
-			      const OCL::Memory &matM) noexcept {
-  assert(0 < nout && 0 < nb && dev.ok() && ker.ok() && matU.ok() && matV.ok()
-	 && matM.ok());
-  /*
-  uint nn = nb * ntile;
-  ker.set_arg(0, sizeof(nn), &nn);
-  ker.set_arg(1, matU);
-  ker.set_arg(2, matV);
-  ker.set_arg(3, matM);
-  assert((nout % matM_lwMN) == 0
-	 && (nout % matM_lwK) == 0
-	 && (nn % matM_lwMN) == 0);
-  size_t size_g[3] = { size_tile_in, nout, nn };
-  size_t size_l[3] = { 1U, matM_lwMN, matM_lwMN };
-  
-
+  ker.set_arg(1, sizeof(nk), &nk);
+  ker.set_arg(2, mA);
+  ker.set_arg(3, sizeof(offa), &offa);
+  ker.set_arg(4, mB);
+  ker.set_arg(5, sizeof(offb), &offb);
+  ker.set_arg(6, mC);
+  ker.set_arg(7, sizeof(offc), &offc);
+  size_t size_g[3] = { nn / sgemm_npn, nm / sgemm_npm, size_tile_in };
+  size_t size_l[3] = { sgemm_nl, sgemm_nl, 1U };
   dev.enqueue_kernel(ker, 3U, size_g, size_l);
-  dev.push_barrier();
-  */
-    
-  uint nn = nb * ntile;
-  assert((nout % matM_pwM) == 0 && (nn % matM_pwN) == 0);
-  ker.set_arg(0, sizeof(nn), &nn);
-  ker.set_arg(1, matU);
-  ker.set_arg(2, matV);
-  ker.set_arg(3, matM);
-  /*
-  dev.finish();
-  steady_clock::time_point start = steady_clock::now();
-  */	     
-  dev.push_kernel(ker, (size_tile_in * (nout / matM_pwM) * (nn / matM_pwN)));
-  /*
-  dev.finish();
-  steady_clock::time_point end = steady_clock::now();
-  double elapsed
-    = static_cast<double>(duration_cast<microseconds>(end - start).count());
-  elapsed_sum += elapsed;
-  nelapsed    += 1U;
-  std::cout << std::endl;
-  std::cout << elapsed << std::endl;
-  std::cout << elapsed_sum / static_cast<double>(nelapsed) << std::endl;
-  std::cout << std::endl; */
 }
 
-static void push_compute_matA_BNReLU(uint nout, uint nb,
-				     const OCL::Device &dev,
-				     const OCL::Kernel &ker,
-				     const OCL::Memory &matM,
-				     const OCL::Memory &mean,
-				     const OCL::Memory &sd_inv,
-				     const OCL::Memory &output) {
-  assert(0 < nout && 0 < nb && dev.ok() && ker.ok() && matM.ok()
-	 && output.ok());
+static void
+push_compute_matV(const OCL::Device &dev, const OCL::Kernel &ker,
+		  uint nch, uint nb,
+		  const OCL::Memory &input,
+		  const OCL::Memory &matV) noexcept {
+  assert(dev.ok() && ker.ok() && 0 < nch && 0 < nb && input.ok() && matV.ok());
+  uint nk = ceil_multi(nch, sgemm_k_multi);
+  uint nn = ceil_multi(nb * ntile, sgemm_n_multi);
   ker.set_arg(0, sizeof(nb), &nb);
-  ker.set_arg(1, matM);
-  ker.set_arg(2, mean);
-  ker.set_arg(3, sd_inv);
-  ker.set_arg(4, output);
-  dev.push_kernel(ker, ntile * nout * nb); }
+  ker.set_arg(1, sizeof(nk), &nk);
+  ker.set_arg(2, sizeof(nn), &nn);
+  ker.set_arg(3, input);
+  ker.set_arg(4, matV);
+  dev.push_kernel(ker, ntile * nch * nb); }
 
-static void push_compute_matA_BNReLU_join(uint nout, uint nb,
-					  const OCL::Device &dev,
-					  const OCL::Kernel &ker,
-					  const OCL::Memory &matM,
-					  const OCL::Memory &mean,
-					  const OCL::Memory &sd_inv,
-					  const OCL::Memory &output) {
-  assert(0 < nout && 0 < nb && dev.ok() && ker.ok() && matM.ok()
-	 && mean.ok() && sd_inv.ok() && bypass.ok());
-  ker.set_arg(0, sizeof(nb), &nb);
-  ker.set_arg(1, matM);
-  ker.set_arg(2, mean);
-  ker.set_arg(3, sd_inv);
-  ker.set_arg(4, output);
-  dev.push_kernel(ker, ntile * nout * nb); }
+static void
+push_compute_matA_BNReLU(const OCL::Device &dev, const OCL::Kernel &ker,
+			 uint nch, uint nb,
+			 const OCL::Memory &matM,
+			 const OCL::Memory &mean, const OCL::Memory &sd_inv,
+			 const OCL::Memory &output) noexcept {
+  assert(dev.ok() && ker.ok() && 0 < nch && 0 < nb
+	 && matM.ok() && mean.ok() && sd_inv.ok() && output.ok());
+  uint lnm  = ceil_multi(nch, sgemm_m_multi);
+  uint ldc  = ceil_multi(nb * ntile, sgemm_n_multi);
+  uint offc = lnm * ldc;
+  ker.set_arg(0, sizeof(nb),   &nb);
+  ker.set_arg(1, sizeof(offc), &offc);
+  ker.set_arg(2, sizeof(ldc),  &ldc);
+  ker.set_arg(3, matM);
+  ker.set_arg(4, mean);
+  ker.set_arg(5, sd_inv);
+  ker.set_arg(6, output);
+  dev.push_kernel(ker, nch * nb * ntile); }
 
 void NNetOCL::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
 		 const ushort *nnmoves, float *probs, float *values) noexcept {
   assert(input && sizes_nnmove && nnmoves && probs && values);
   if (size_batch == 0 || _maxsize_batch < size_batch)
     die(ERR_INT("size_batch == 0"));
+
   // feed forward input layers
   // body part
   float *fbody = _fslot[0].get();
@@ -1008,46 +901,117 @@ void NNetOCL::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
   _cl_dev.push_write(_cl_input,
 		     size_batch * NNAux::nch_input * NNAux::size_plane
 		     * sizeof(float), input);
-  push_compute_matV_input(size_batch, _cl_dev, _cl_compute_matV_input,
-			  _cl_input, _cl_matV);
-  push_compute_matM_input(_resnet_nout, size_batch, _cl_dev,
-			  _cl_compute_matM_input, _cl_reswghts[0].matU,
-			  _cl_matV, _cl_matM);
-  push_compute_matA_BNReLU(_resnet_nout, size_batch, _cl_dev,
-			   _cl_compute_matA_BNReLU, _cl_matM,
+  push_compute_matV(_cl_dev, _cl_compute_matV_input,
+		    NNAux::nch_input, size_batch, _cl_input, _cl_matV);
+  /*
+  row_t row(new float[size_tile_in
+		      * ceil_multi(NNAux::nch_input, sgemm_k_multi)
+		      * ceil_multi(size_batch * ntile, sgemm_n_multi)]);
+  _cl_dev.push_read(_cl_matV,
+		    size_tile_in
+		    * ceil_multi(NNAux::nch_input, sgemm_k_multi)
+		    * ceil_multi(size_batch * ntile, sgemm_n_multi)
+		    * sizeof(float), row.get());
+  _cl_dev.finish();
+  for (uint u0 = 0; u0 < size_tile_in; ++u0)
+    for (uint u1 = 0; u1 < NNAux::nch_input; ++u1)
+      for (uint u2 = 0; u2 < size_batch * ntile; ++u2)
+	std::cout << u0 << " "
+		  << row[u0
+			 * ceil_multi(NNAux::nch_input, sgemm_k_multi)
+			 * ceil_multi(size_batch * ntile, sgemm_n_multi)
+			 + u1 * ceil_multi(size_batch * ntile, sgemm_n_multi)
+			 + u2]
+		  << std::endl;
+		  std::terminate(); */
+
+  push_sgemm_batch(_cl_dev, _cl_sgemm_batch,
+		   _resnet_nout, size_batch * ntile, NNAux::nch_input,
+		   _cl_reswghts[0].matU, _cl_matV, _cl_matM);
+  /*
+  row_t row(new float[size_tile_in
+		      * ceil_multi(_resnet_nout, sgemm_m_multi)
+		      * ceil_multi(size_batch * ntile, sgemm_n_multi)]);
+  _cl_dev.push_read(_cl_matM,
+		    size_tile_in
+		    * ceil_multi(_resnet_nout, sgemm_m_multi)
+		    * ceil_multi(size_batch * ntile, sgemm_n_multi)
+		    * sizeof(float), row.get());
+  _cl_dev.finish();
+  for (uint u0 = 0; u0 < size_tile_in; ++u0)
+    for (uint u1 = 0; u1 < _resnet_nout; ++u1)
+      for (uint u2 = 0; u2 < size_batch * ntile; ++u2)
+	std::cout << u0 << " "
+		  << row[u0
+			 * ceil_multi(_resnet_nout, sgemm_m_multi)
+			 * ceil_multi(size_batch * ntile, sgemm_n_multi)
+			 + u1 * ceil_multi(size_batch * ntile, sgemm_n_multi)
+			 + u2]
+		  << std::endl;
+		  std::terminate(); */
+  
+  push_compute_matA_BNReLU(_cl_dev, _cl_compute_matA_BNReLU,
+			   _resnet_nout, size_batch, _cl_matM,
 			   _cl_reswghts[0].mean, _cl_reswghts[0].sd_inv,
 			   _cl_bypass);
 
   uint ulayer = 1U;
   for (; ulayer < _cl_reswghts.size(); ulayer += 2U) {
-    push_compute_matV(_resnet_nout, size_batch, _cl_dev, _cl_compute_matV,
-		      _cl_bypass, _cl_matV);
-    push_compute_matM(_resnet_nout, size_batch, _cl_dev,
-			  _cl_compute_matM,
-			  _cl_reswghts[ulayer].matU, _cl_matV, _cl_matM);
-    push_compute_matA_BNReLU(_resnet_nout, size_batch, _cl_dev,
-			     _cl_compute_matA_BNReLU, _cl_matM,
-			     _cl_reswghts[ulayer].mean,
-			     _cl_reswghts[ulayer].sd_inv,
-			     _cl_output);
+    push_compute_matV(_cl_dev, _cl_compute_matV, _resnet_nout, size_batch,
+ 		      _cl_bypass, _cl_matV);
 
-    push_compute_matV(_resnet_nout, size_batch, _cl_dev, _cl_compute_matV,
-		      _cl_output, _cl_matV);
-    push_compute_matM(_resnet_nout, size_batch, _cl_dev,
-			  _cl_compute_matM,
-			  _cl_reswghts[ulayer + 1U].matU, _cl_matV, _cl_matM);
-    push_compute_matA_BNReLU_join(_resnet_nout, size_batch, _cl_dev,
-				  _cl_compute_matA_BNReLU_join, _cl_matM,
-				  _cl_reswghts[ulayer + 1U].mean,
-				  _cl_reswghts[ulayer + 1U].sd_inv,
-				  _cl_bypass); }
+    /*
+  row_t row(new float[size_tile_in
+		      * ceil_multi(_resnet_nout, sgemm_k_multi)
+		      * ceil_multi(size_batch * ntile, sgemm_n_multi)]);
+  _cl_dev.push_read(_cl_matV,
+		    size_tile_in
+		    * ceil_multi(_resnet_nout, sgemm_k_multi)
+		    * ceil_multi(size_batch * ntile, sgemm_n_multi)
+		    * sizeof(float), row.get());
+  _cl_dev.finish();
+  for (uint u0 = 0; u0 < size_tile_in; ++u0)
+    for (uint u1 = 0; u1 < _resnet_nout; ++u1)
+      for (uint u2 = 0; u2 < size_batch * ntile; ++u2)
+	std::cout << u0 << " "
+		  << row[u0
+			 * ceil_multi(_resnet_nout, sgemm_k_multi)
+			 * ceil_multi(size_batch * ntile, sgemm_n_multi)
+			 + u1 * ceil_multi(size_batch * ntile, sgemm_n_multi)
+			 + u2]
+		  << std::endl;
+		  std::terminate(); */
+
+    push_sgemm_batch(_cl_dev, _cl_sgemm_batch,
+		     _resnet_nout, size_batch * ntile, _resnet_nout,
+		     _cl_reswghts[ulayer].matU, _cl_matV, _cl_matM);
+    push_compute_matA_BNReLU(_cl_dev, _cl_compute_matA_BNReLU,
+			     _resnet_nout, size_batch, _cl_matM,
+			     _cl_reswghts[ulayer].mean,
+			     _cl_reswghts[ulayer].sd_inv, _cl_output);
+
+    push_compute_matV(_cl_dev, _cl_compute_matV, _resnet_nout, size_batch,
+ 		      _cl_output, _cl_matV);
+    push_sgemm_batch(_cl_dev, _cl_sgemm_batch,
+		     _resnet_nout, size_batch * ntile, _resnet_nout,
+		     _cl_reswghts[ulayer + 1U].matU, _cl_matV, _cl_matM);
+    push_compute_matA_BNReLU(_cl_dev, _cl_compute_matA_BNReLU_join,
+			     _resnet_nout, size_batch, _cl_matM,
+			     _cl_reswghts[ulayer + 1U].mean,
+			     _cl_reswghts[ulayer + 1U].sd_inv, _cl_bypass); }
 
   _cl_dev.push_read(_cl_bypass,
 		    _resnet_nout * size_batch * NNAux::size_plane
-		    * sizeof(float),
-		    fbody);
+		    * sizeof(float), fbody);
   _cl_dev.finish();
-
+  /*
+  for (uint u0 = 0; u0 < _resnet_nout; ++u0)
+    for (uint u1 = 0; u1 < size_batch * NNAux::size_plane; ++u1)
+	std::cout << u0 << " "
+		  << fbody[u0 * size_batch * NNAux::size_plane + u1]
+		  << std::endl;
+  std::terminate();
+  */
   // head part
   compute_conv1x1(_head1_nout, _resnet_nout, size_batch, _head1_weight.get(),
 		  fbody, f1);
@@ -1081,6 +1045,11 @@ void NNetOCL::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
 	      1.0f, f2, _value2_nout);
   for (uint u = 0; u < size_batch * _value2_nout; ++u)
     f2[u] = max(0.0f, f2[u]);
+  /*
+  for (uint u = 0; u < size_batch * _value2_nout; ++u)
+    std::cout << f2[u] << std::endl;
+  std::terminate();
+  */
 
   // in:  _value3_weight[_value3_nin]
   // in:  _value3_bias[1]

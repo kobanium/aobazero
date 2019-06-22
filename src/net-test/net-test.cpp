@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 #include <cmath>
+#include <climits>
 using std::copy_n;
 using std::cout;
 using std::cerr;
@@ -46,7 +47,7 @@ using uchar  = unsigned char;
 using namespace ErrAux;
 using namespace SAux;
 
-constexpr uint size_batch = 8U;
+constexpr uint size_batch = 5U;
 constexpr double epsilon = 1e-4;
 
 static double elapsed  = 0.0;
@@ -77,11 +78,13 @@ static int get_options(int argc, const char * const *argv) noexcept {
     int opt = Opt::get(argc, argv, "u:");
     if (opt < 0) break;
 
+    long l;
     switch (opt) {
     case 'u': 
-      opt_device_id = strtol(Opt::arg, &endptr, 10);
+      l = strtol(Opt::arg, &endptr, 10);
       if (endptr == Opt::arg || *endptr != '\0'
-	  || opt_device_id == LONG_MAX || opt_device_id < -1) flag_err = true;
+          || l == LONG_MAX || l < -1) flag_err = true;
+      opt_device_id = static_cast<int>(l);
       break;
     default: flag_err = true; break; } }
 
