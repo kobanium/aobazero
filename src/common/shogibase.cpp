@@ -91,6 +91,8 @@ Sq::Sq(int ch1, int ch2, Mode mode) noexcept {
   _u = static_cast<uchar>(rank * 9 + file); }
 
 constexpr unsigned char Pc::num_array[hand_size];
+constexpr Action::Type Action::normal;
+constexpr Action::Type Action::promotion;
 
 FixLStr<7U> Action::to_str(SAux::Mode mode) const noexcept {
   assert(ok());
