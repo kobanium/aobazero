@@ -198,7 +198,7 @@ static void addup_result(const Node & node, const Color & turn_player0,
     struct std::tm *tb = std::localtime(&tt);
     const int BUFSIZE = 256;
     char str[BUFSIZE];
-    snprintf(str,BUFSIZE,"%4d-%02d-%02d %02d:%02d:%02d %d-%d-%d %d (%d-%d-%d) (s=%d-%d,%5.3f) ,m=%3d,wr=%5.3f(%5.3f)(%4d)\n",
+    snprintf(str,BUFSIZE,"%4d-%02d-%02d %02d:%02d:%02d %d-%d-%d %d (%d-%d-%d)(s=%d-%d,%5.3f) ,m=%3d,wr=%5.3f(%5.3f)(%4d)\n",
       tb->tm_year+1900, tb->tm_mon+1, tb->tm_mday, tb->tm_hour,tb->tm_min,tb->tm_sec,
       nwin, ndraw, nlose, ntot, dcl_w,rep,dcl_l, s_win,s_lose,s_rate, node.get_len_path(), wr, ci, (int)elo );
     cerr << str;
@@ -259,6 +259,11 @@ static void play_shogi(USIEngine & player_black, USIEngine & player_white,
 		       Node & node, int nplay) noexcept {
   assert(player_black.ok() && player_white.ok() && node.ok());
   OSI::Selector selector;
+
+  USIEngine *players[2] = { & player_black, & player_white };
+  child_out(player_black, "usinewgame");
+  child_out(player_white, "usinewgame");
+
   string startpos("position startpos moves");
   if ( flag_b && !flag_f ) {
     startpos = "position " + book[nplay/2];
@@ -283,8 +288,7 @@ static void play_shogi(USIEngine & player_black, USIEngine & player_white,
     }
 //  cerr << startpos << endl;
   }
-  USIEngine *players[2] = { & player_black, & player_white };
-  
+
   child_out(player_black, startpos.c_str());
   child_out(player_white, startpos.c_str());
   child_out(player_black, "go");
@@ -324,6 +328,10 @@ static void play_update(USIEngine *players[], Node & node, int index,
   assert(node.ok() && (index == 0 || index == 1) && line);
   
   char *token = strtok(line, " ");
+  if ( token==NULL ) {	// Kristallweizen 1000 node/move sometimes returns empty line.
+    // die(ERR_INT("token=NULL! line=%s\nstartpos=%s",line,startpos.c_str()));
+    return;
+  }
   if (strcmp(token, "bestmove")) return;
   token = strtok(nullptr, " ,\t");
 
@@ -436,7 +444,7 @@ static void close_flush(USIEngine &c) noexcept {
 
 static void file_out(const char *fmt, ...) {
   FILE *fp = fopen(file_out_name.c_str(),"a");
-  if ( fp==NULL ) { cout << "fopen Err.\n"; return; }
+  if ( fp==NULL ) { cout << "fopen Err. " << file_out_name << "\n"; return; }
   char buf[65536];
   va_list list;
   va_start(list, fmt);
@@ -486,8 +494,14 @@ static int get_options(int argc, const char * const *argv) noexcept {
     struct std::tm *tb = std::localtime(&tt);
     const int BUFSIZE = 256;
     char str[BUFSIZE];
-    snprintf(str,BUFSIZE,"%4d%02d%02d_%02d%02d%02d.txt",tb->tm_year+1900, tb->tm_mon+1, tb->tm_mday, tb->tm_hour,tb->tm_min,tb->tm_sec);
+    snprintf(str,BUFSIZE,"%4d%02d%02d_%02d%02d%02d",tb->tm_year+1900, tb->tm_mon+1, tb->tm_mday, tb->tm_hour,tb->tm_min,tb->tm_sec);
     file_out_name = str;
+    auto c0s = cmd0.find("w0000");
+    auto c0e = cmd0.rfind(".txt");
+    if ( c0s > 0 && c0e > 0 && c0s+13 == c0e ) file_out_name += "_w" + cmd0.substr(c0s+9,4);
+    auto c1s = cmd1.find("NodesLimit value ");
+    if ( c1s != std::string::npos ) file_out_name += "_" + cmd1.substr(c1s+17);
+    file_out_name += ".txt";
     file_out("Player0: %s\n",cmd0.c_str());
     file_out("Player1: %s\n",cmd1.c_str());
     cout << "'" << file_out_name << "\n";
