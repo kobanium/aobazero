@@ -53,9 +53,9 @@ constexpr uint ntile           = ntile_h * ntile_w;
 constexpr uint size_plane_in   = size_tile_in * ntile;
 constexpr uint pad             = 1U;
 
-constexpr uint sgemm_nl        = 16U;
+constexpr uint sgemm_nl        = 8U;
 constexpr uint sgemm_npm       = 8U;
-constexpr uint sgemm_npn       = 1U;
+constexpr uint sgemm_npn       = 2U;
 constexpr uint sgemm_npk       = 1U;
 constexpr uint sgemm_m_multi   = sgemm_nl * sgemm_npm;
 constexpr uint sgemm_n_multi   = sgemm_nl * sgemm_npn;
@@ -401,7 +401,7 @@ __kernel void compute_matA_BNReLU_join(uint nb, uint offc, uint ldc,
 
 const string code_compute_matM = R"(
 __kernel
-void sgemm_batch(uint nn, uint nk,
+void sgemm_batch(uint nm, uint nn, uint nk,
                  __global const float *gA, uint offa,
                  __global const float *gB, uint offb,
                  __global float *gC, uint offc) {
@@ -411,11 +411,11 @@ void sgemm_batch(uint nn, uint nk,
   uint ulm = get_local_id(1);
   uint uln = get_local_id(0);
   uint ngk = nk / (SGEMM_NL * SGEMM_NPK);
-  gA += ub*offa + ugm*SGEMM_NL*SGEMM_NPM*nk;
+  gA += ub*offa + ugm*SGEMM_NL*SGEMM_NPM;
   gB += ub*offb + ugn*SGEMM_NL*SGEMM_NPN;
   gC += ub*offc + ugm*SGEMM_NL*SGEMM_NPM*nn + ugn*SGEMM_NL*SGEMM_NPN;
 
-  __local float lA[SGEMM_NL*SGEMM_NPM][SGEMM_NL*SGEMM_NPK];
+  __local float lA[SGEMM_NL*SGEMM_NPK][SGEMM_NL*SGEMM_NPM];
   __local float lB[SGEMM_NL*SGEMM_NPK][SGEMM_NL*SGEMM_NPN];
   float pC[SGEMM_NPM][SGEMM_NPN];
   float pB[SGEMM_NPN];
@@ -424,58 +424,39 @@ void sgemm_batch(uint nn, uint nk,
   for (uint upm = 0; upm < SGEMM_NPM; ++upm)
     for (uint upn = 0; upn < SGEMM_NPN; ++upn) pC[upm][upn] = 0.0f;
 
+  uint ulA1 = (ulm*SGEMM_NL + uln) % (SGEMM_NL*SGEMM_NPM);
+  uint ulA2 = ((ulm*SGEMM_NL + uln) / (SGEMM_NL*SGEMM_NPM))
+              * SGEMM_NPM*SGEMM_NPK;
+
+  uint ulB1 = (ulm*SGEMM_NL + uln) % (SGEMM_NL*SGEMM_NPN);
+  uint ulB2 = ((ulm*SGEMM_NL + uln) / (SGEMM_NL*SGEMM_NPN))
+              * SGEMM_NPN*SGEMM_NPK;
+
   for (uint ugk = 0; ugk < ngk; ++ugk) {
 
-    for (uint upm = 0; upm < SGEMM_NPM; ++upm)
-      for (uint upk = 0; upk < SGEMM_NPK; ++upk)
-        lA[ulm*SGEMM_NPM + upm][uln*SGEMM_NPK + upk]
-          = gA[(ulm*SGEMM_NPM + upm)*nk + uln*SGEMM_NPK + upk];
+    for (uint u = 0; u < SGEMM_NPM*SGEMM_NPK; ++u)
+      lA[ulA2 + u][ulA1] = gA[(ulA2 + u)*nm + ulA1];
 
-    for (uint upk = 0; upk < SGEMM_NPK; ++upk)
-      for (uint upn = 0; upn < SGEMM_NPN; ++upn)
-        lB[ulm*SGEMM_NPK + upk][uln*SGEMM_NPN + upn]
-          = gB[(ulm*SGEMM_NPK + upk)*nn + uln*SGEMM_NPN + upn];
+    for (uint u = 0; u < SGEMM_NPN*SGEMM_NPK; ++u)
+      lB[ulB2 + u][ulB1] = gB[(ulB2 + u)*nn + ulB1];
 
     barrier(CLK_LOCAL_MEM_FENCE);
     for (uint ulpk = 0; ulpk < SGEMM_NL*SGEMM_NPK; ++ulpk) {
-      for (uint upn = 0; upn < SGEMM_NPN; ++ upn)
+      for (uint upn = 0; upn < SGEMM_NPN; ++upn)
         pB[upn] = lB[ulpk][uln*SGEMM_NPN + upn];
 
-      for (uint upm = 0; upm < SGEMM_NPM; ++ upm) {
-        pA = lA[ulm*SGEMM_NPM + upm][ulpk];
-        for (uint upn = 0; upn < SGEMM_NPN; ++ upn)
+      for (uint upm = 0; upm < SGEMM_NPM; ++upm) {
+        pA = lA[ulpk][ulm*SGEMM_NPM + upm];
+        for (uint upn = 0; upn < SGEMM_NPN; ++upn)
           pC[upm][upn] += pA * pB[upn]; } }
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    gA += SGEMM_NL*SGEMM_NPK;
+    gA += SGEMM_NL*SGEMM_NPK*nm;
     gB += SGEMM_NL*SGEMM_NPK*nn; }
   
   for (uint upm = 0; upm < SGEMM_NPM; ++upm)
     for (uint upn = 0; upn < SGEMM_NPN; ++upn)
       gC[(ulm*SGEMM_NPM + upm)*nn + uln*SGEMM_NPN + upn] = pC[upm][upn]; }
-
-#if 0
-__kernel void
-sgemm_batch(uint nm, uint nn, uint nk,
-            __global const float *gA, uint offa, uint lda,
-            __global const float *gB, uint offb, uint ldb,
-            __global float *gC, uint offc, uint ldc) {
-  uint areac = nm * nn;
-  uint gid   = get_global_id(0);
-  uint ub    = gid / areac;
-  uint uc    = gid % areac;
-  uint um    = uc / nn;
-  uint un    = uc % nn;
-  gA        += ub * offa + um * lda;
-  gB        += ub * offb + un;
-  gC        += ub * offc + um * ldc + un;
-  float sum  = 0.0f;
-  for (uint uk = 0; uk < nk; ++uk) {
-    sum  += *gA * *gB;
-    gA   += 1;
-    gB   += ldb; }
-  *gC = sum; }
-#endif
 )";
 
 static uint ceil_multi(uint u, uint mul) noexcept {
@@ -541,6 +522,7 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
 
   load(wght);
   for (auto &f : _fslot) f.reset(new float [_maxsize_batch * _maxsize_out]);
+
   uint sizeV = (size_tile_in
 		* ceil_multi(_conv3x3_nin_max, sgemm_k_multi)
 		* ceil_multi(_maxsize_batch * ntile, sgemm_n_multi));
@@ -567,29 +549,29 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
   string code  = (code0 + code_common + code_compute_matM
 		  + code_compute_matV + code_compute_matA);
   
-  _cl_dev.build_program(code.c_str());
-  _cl_sgemm_batch = _cl_dev.gen_kernel("sgemm_batch");
+  //_cl_dev.build_program(code.c_str());
+  OCL::Program pg = _cl_dev.gen_program(code.c_str());
+  _cl_sgemm_batch = pg.gen_kernel("sgemm_batch");
   assert(_cl_sgemm_batch.ok());
   std::cout << "  - Kernel: sgemm_batch\n";
   std::cout << _cl_sgemm_batch.gen_info();
   
-  _cl_compute_matV_input = _cl_dev.gen_kernel("compute_matV_input");
+  _cl_compute_matV_input = pg.gen_kernel("compute_matV_input");
   assert(_cl_compute_matV_input.ok());
   std::cout << "  - Kernel: compute_matV_input\n";
   std::cout << _cl_compute_matV_input.gen_info();
   
-  _cl_compute_matV = _cl_dev.gen_kernel("compute_matV");
+  _cl_compute_matV = pg.gen_kernel("compute_matV");
   assert(_cl_compute_matV.ok());
   std::cout << "  - Kernel: compute_matV\n";
   std::cout << _cl_compute_matV.gen_info();
   
-  _cl_compute_matA_BNReLU = _cl_dev.gen_kernel("compute_matA_BNReLU");
+  _cl_compute_matA_BNReLU = pg.gen_kernel("compute_matA_BNReLU");
   assert(_cl_compute_matA_BNReLU.ok());
   std::cout << "  - Kernel: _cl_compute_matA_BNReLU\n";
   std::cout << _cl_compute_matA_BNReLU.gen_info();
   
-  _cl_compute_matA_BNReLU_join
-    = _cl_dev.gen_kernel("compute_matA_BNReLU_join");
+  _cl_compute_matA_BNReLU_join = pg.gen_kernel("compute_matA_BNReLU_join");
   assert(_cl_compute_matA_BNReLU_join.ok());
   std::cout << "  - Kernel: _cl_compute_matA_BNReLU_join\n";
   std::cout << _cl_compute_matA_BNReLU_join.gen_info();
@@ -605,8 +587,8 @@ static row_t gen_matU(uint nout, uint nin, const float *weight, uint &size)
 				 -1.0f / 6.0f, +1.0f / 6.0f, -1.0f / 6.0f,
 				 +1.0f / 6.0f, +1.0f / 3.0f, +2.0f / 3.0f,
 				 +0.0f,        +0.0f,        +1.0f };
-  uint ld  = ceil_multi(nin, sgemm_k_multi);
-  uint off = ceil_multi(nout, sgemm_m_multi) * ld;
+  uint ld  = ceil_multi(nout, sgemm_m_multi);
+  uint off = ceil_multi(nin, sgemm_k_multi) * ld;
   size     = size_tile_in * off;
   row_t matU(new float [size]);
   fill_n(matU.get(), size, 0.0f);
@@ -620,8 +602,8 @@ static row_t gen_matU(uint nout, uint nin, const float *weight, uint &size)
 	    for (uint u2 = 0; u2 < len_kernel; ++u2)
 	      fsum += matG[uh][u1] * matG[uw][u2] * mg[u1 * len_kernel + u2];
 	  matU[(uh * len_tile_in + uw) * off
-	       + ch_out * ld
-	       + ch_in] = fsum; } }
+	       + ch_in * ld
+	       + ch_out] = fsum; } }
   return matU; }
 
 static row_t gen_mean(uint nch, const float *bias, const float *mean)
@@ -839,14 +821,15 @@ push_sgemm_batch(const OCL::Device &dev, const OCL::Kernel &ker,
   uint offa = nm * nk;
   uint offb = nk * nn;
   uint offc = nm * nn;
-  ker.set_arg(0, sizeof(nn), &nn);
-  ker.set_arg(1, sizeof(nk), &nk);
-  ker.set_arg(2, mA);
-  ker.set_arg(3, sizeof(offa), &offa);
-  ker.set_arg(4, mB);
-  ker.set_arg(5, sizeof(offb), &offb);
-  ker.set_arg(6, mC);
-  ker.set_arg(7, sizeof(offc), &offc);
+  ker.set_arg(0, sizeof(nm), &nm);
+  ker.set_arg(1, sizeof(nn), &nn);
+  ker.set_arg(2, sizeof(nk), &nk);
+  ker.set_arg(3, mA);
+  ker.set_arg(4, sizeof(offa), &offa);
+  ker.set_arg(5, mB);
+  ker.set_arg(6, sizeof(offb), &offb);
+  ker.set_arg(7, mC);
+  ker.set_arg(8, sizeof(offc), &offc);
   size_t size_g[3] = { nn / sgemm_npn, nm / sgemm_npm, size_tile_in };
   size_t size_l[3] = { sgemm_nl, sgemm_nl, 1U };
   dev.enqueue_kernel(ker, 3U, size_g, size_l);

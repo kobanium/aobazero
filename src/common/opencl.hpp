@@ -11,23 +11,22 @@ namespace OCL {
   using uint = unsigned int;
   class Platform;
   class Platform_impl;
+  class Program_impl;
   class Device_impl;
   class Memory_impl;
   class Kernel_impl;
   class Event_impl;
   
-  class Events {
-    uint _num;
-    std::unique_ptr<Event_impl []> _impl;
+  class Event {
+    std::unique_ptr<Event_impl> _impl;
   public:
-    explicit Events() noexcept;
-    ~Events() noexcept;
-    explicit Events(uint u) noexcept;
-    Events(Events &&event) noexcept;
-    Events &operator=(Events &&event) noexcept;
-    Event_impl &get(uint u) noexcept;
-    const Event_impl &get(uint u) const noexcept;
-    void wait(uint u) const noexcept;
+    explicit Event() noexcept;
+    ~Event() noexcept;
+    Event(Event &&e) noexcept;
+    Event &operator=(Event &&event) noexcept;
+    Event_impl &get() noexcept;
+    const Event_impl &get() const noexcept;
+    void wait() const noexcept;
   };
 
   class Memory {
@@ -61,7 +60,20 @@ namespace OCL {
     size_t gen_pref_wgs_multiple() const noexcept;
     uint64_t gen_private_mem_size() const noexcept;
   };
-  
+
+  class Program {
+    std::unique_ptr<Program_impl> _impl;
+  public:
+    explicit Program() noexcept;
+    ~Program() noexcept;
+    Program(Program_impl &&p_impl) noexcept;
+    Program(Program &&p) noexcept;
+    Program &operator=(Program &&p) noexcept;
+    const Program_impl &get() const noexcept;
+    bool ok() const noexcept;
+    Kernel gen_kernel(const char *name) const noexcept;
+  };
+
   class Device {
     std::unique_ptr<Device_impl> _impl;
   public:
@@ -70,7 +82,7 @@ namespace OCL {
     Device(Device_impl &&d_impl) noexcept;
     Device(Device &&d) noexcept;
     Device &operator=(Device &&d) noexcept;
-    void build_program(const char *code) noexcept;
+    Program gen_program(const char *code);
     Memory gen_mem_r(size_t size) const noexcept;
     Memory gen_mem_w(size_t size) const noexcept;
     Memory gen_mem_rw(size_t size) const noexcept;

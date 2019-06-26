@@ -8,8 +8,9 @@
 #include <vector>
 #include <cassert>
 #include <cstdint>
-#define CL_TARGET_OPENCL_VERSION 110
+#define CL_TARGET_OPENCL_VERSION 120
 #define CL_USE_DEPRECATED_OPENCL_1_1_APIS
+#define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #ifdef __APPLE__
 #  include <OpenCL/opencl.h>
 #else
@@ -24,7 +25,7 @@ using std::vector;
 using namespace OCL;
 using namespace ErrAux;
 
-constexpr char options[] = "-Werror -cl-std=CL1.1";
+constexpr char options[] = "-Werror -cl-std=CL1.2";
 
 // cl_event
 class OCL::Event_impl {
@@ -46,22 +47,14 @@ public:
   const cl_event *get_p() const noexcept { return &_event; }
 };
   
-OCL::Events::Events() noexcept : _num(0) {}
-OCL::Events::~Events() noexcept {}
-OCL::Events::Events(uint num) noexcept : _num(num),
-					 _impl(new Event_impl [num]) {}
-OCL::Events::Events(Events &&events) noexcept : _num(events._num) {
-  _impl.swap(events._impl); }
-Events &OCL::Events::operator=(Events &&events) noexcept {
-  _num = events._num;
-  _impl.swap(events._impl);
-  return *this; }
-Event_impl &OCL::Events::get(uint u) noexcept {
-  assert(u < _num); return _impl[u]; }
-const Event_impl &OCL::Events::get(uint u) const noexcept {
-  assert(u < _num); return _impl[u]; }
-void OCL::Events::wait(uint u) const noexcept {
-  assert(u < _num); return _impl[u].wait(); }
+OCL::Event::Event() noexcept : _impl(new Event_impl) {}
+OCL::Event::~Event() noexcept {}
+OCL::Event::Event(Event &&e) noexcept { _impl.swap(e._impl); }
+Event &OCL::Event::operator=(Event &&e) noexcept {
+  _impl.swap(e._impl); return *this; }
+Event_impl &OCL::Event::get() noexcept { return *_impl; }
+const Event_impl &OCL::Event::get() const noexcept { return *_impl; }
+void OCL::Event::wait() const noexcept { return _impl->wait(); }
 
 // cl_mem
 class OCL::Memory_impl {
@@ -159,7 +152,59 @@ size_t OCL::Kernel::gen_pref_wgs_multiple() const noexcept {
 cl_ulong OCL::Kernel::gen_private_mem_size() const noexcept {
   return _impl->gen_info<cl_ulong>(CL_KERNEL_PRIVATE_MEM_SIZE); }
 
-#include <iostream>
+// cl_kernel
+class OCL::Program_impl {
+  cl_program _pg;
+  cl_device_id _dev;
+public:
+  explicit Program_impl(const char *code, cl_device_id dev, cl_context context)
+    noexcept : _dev(dev) {
+    assert(code && dev && context);
+    cl_int ret;
+    _pg = clCreateProgramWithSource(context, 1, &code, nullptr, &ret);
+    if (ret != CL_SUCCESS)
+      die(ERR_INT("clCreateProgramWithSource() failed. Error Code: %d", ret));
+
+    ret = clBuildProgram(_pg, 0, nullptr, options, nullptr, nullptr);
+    if (ret == CL_SUCCESS) return;
+  
+    size_t size;
+    ret = clGetProgramBuildInfo(_pg, _dev, CL_PROGRAM_BUILD_LOG, 0, nullptr,
+				&size);
+    if (ret != CL_SUCCESS)
+      die(ERR_INT("cl_GetProgramBuildInfo() failed. Error Code: %d", ret));
+
+    unique_ptr<char []> log(new char [size]);
+    ret = clGetProgramBuildInfo(_pg, _dev, CL_PROGRAM_BUILD_LOG, size,
+				log.get(), nullptr);
+    if (ret != CL_SUCCESS)
+      die(ERR_INT("cl_GetProgramBuildInfo() failed. Error Code: %d", ret));
+    clReleaseProgram(_pg);
+    throw ERR_INT("OpenCL Build Error\n%s", log.get()); }
+
+  Program_impl(Program_impl &&p_impl) noexcept
+  : _pg(p_impl._pg), _dev(p_impl._dev) {
+    assert(p_impl.ok());
+    p_impl._pg  = nullptr;
+    p_impl._dev = nullptr; }
+  ~Program_impl() noexcept { if (_pg) clReleaseProgram(_pg); }
+  bool ok() const noexcept { return (_pg && _dev); }
+  Kernel_impl gen_kernel(const char *name) const noexcept {
+    assert(name); return Kernel_impl(_pg, _dev, name); }
+};
+
+OCL::Program::Program() noexcept {}
+OCL::Program::~Program() noexcept {}
+OCL::Program::Program(Program_impl &&p_impl) noexcept
+: _impl(new Program_impl(move(p_impl))) {}
+OCL::Program::Program(Program &&p) noexcept : _impl(move(p._impl)) {}
+Program &OCL::Program::operator=(Program &&p) noexcept {
+  assert(p.ok()); _impl = move(p._impl); return *this; }
+const Program_impl &OCL::Program::get() const noexcept { return *_impl; }
+bool OCL::Program::ok() const noexcept { return _impl && _impl->ok(); }
+Kernel OCL::Program::gen_kernel(const char *name) const noexcept {
+  assert(name); return Kernel(_impl->gen_kernel(name)); }
+
 class OCL::Device_impl {
   cl_device_id _id;
   cl_context _context;
@@ -193,35 +238,13 @@ public:
     d_impl._queue   = nullptr;
     d_impl._program = nullptr; }
   
-  void build_program(const char *code) noexcept {
-    assert(code);
-    cl_int ret;
-    if (_program) clReleaseProgram(_program);
-    _program = clCreateProgramWithSource(_context, 1, &code, nullptr, &ret);
-    if (ret != CL_SUCCESS)
-      die(ERR_INT("clCreateProgramWithSource() failed. Error Code: %d", ret));
-    
-    ret = clBuildProgram(_program, 0, nullptr, options, nullptr, nullptr);
-    if (ret == CL_SUCCESS) return;
-  
-    size_t size;
-    ret = clGetProgramBuildInfo(_program, _id, CL_PROGRAM_BUILD_LOG, 0,
-				nullptr, &size);
-    if (ret != CL_SUCCESS)
-      die(ERR_INT("cl_GetProgramBuildInfo() failed. Error Code: %d", ret));
-
-    unique_ptr<char []> log(new char [size]);
-    ret = clGetProgramBuildInfo(_program, _id, CL_PROGRAM_BUILD_LOG, size,
-				log.get(), nullptr);
-    if (ret != CL_SUCCESS)
-      die(ERR_INT("cl_GetProgramBuildInfo() failed. Error Code: %d", ret));
-    die(ERR_INT("OpenCL Build Error\n%s", log.get())); }
-
+  Program gen_program(const char *code) {
+    assert(code); return Program_impl(code, _id, _context); }
+  Kernel gen_kernel(const char *name) const noexcept {
+    assert(name); return Kernel_impl(_program, _id, name); }
   bool ok() const noexcept { return (_id && _context && _queue); }
   Memory_impl gen_memory(cl_mem_flags flags, size_t size) const noexcept {
     return Memory_impl(_context, flags, size); }
-  Kernel gen_kernel(const char *name) const noexcept {
-    assert(name); return Kernel_impl(_program, _id, name); }
   void finish() const noexcept {
     cl_int ret = clFinish(_queue);
     if (ret != CL_SUCCESS)
@@ -338,7 +361,7 @@ public:
 OCL::Platform::Platform() noexcept {}
 OCL::Platform::~Platform() noexcept {}
 OCL::Platform::Platform(Platform_impl &&p_impl) noexcept
-  : _impl(new Platform_impl(move(p_impl))) {}
+: _impl(new Platform_impl(move(p_impl))) {}
 OCL::Platform::Platform(Platform &&p) noexcept : _impl(move(p._impl)) {}
 vector<Device> OCL::Platform::gen_devices_all() const noexcept {
   return _impl->gen_devices_all(); }
@@ -381,8 +404,8 @@ Device &OCL::Device::operator=(Device &&d) noexcept {
   assert(d.ok());
   _impl = move(d._impl);
   return *this; }
-void OCL::Device::build_program(const char *code) noexcept {
-  return _impl->build_program(code); }
+Program OCL::Device::gen_program(const char *code) {
+  return Program(_impl->gen_program(code)); }
 Kernel OCL::Device::gen_kernel(const char *name) const noexcept {
   return Kernel(_impl->gen_kernel(name)); }
 void OCL::Device::finish() const noexcept { return _impl->finish(); }
@@ -394,9 +417,8 @@ void OCL::Device::push_read(const Memory &m, size_t size, float *p)
   const noexcept { assert(m.ok()); _impl->push_read(m.get(), size, p); }
 void OCL::Device::push_kernel(const Kernel &k, size_t size_global)
   const noexcept { assert(k.ok()); _impl->push_kernel(k.get(), size_global); }
-void OCL::Device::enqueue_kernel(const Kernel &k, uint dim,
-				 size_t *size_g, size_t *size_l)
-  const noexcept {
+void OCL::Device::enqueue_kernel(const Kernel &k, uint dim, size_t *size_g,
+				 size_t *size_l) const noexcept {
   assert(k.ok()); _impl->enqueue_kernel(k.get(), dim, size_g, size_l); }
 Memory OCL::Device::gen_mem_r(size_t size) const noexcept {
   return Memory(_impl->gen_memory(CL_MEM_READ_ONLY, size)); }
