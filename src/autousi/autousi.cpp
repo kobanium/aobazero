@@ -48,6 +48,7 @@ constexpr uint max_sleep = 3U; // in sec
 atomic<int> flag_signal(0);
 static uint print_status, print_csa;
 static vector<int> devices;
+static time_point<system_clock> time_start;
 
 static bool is_posi(uint u) { return 0 < u; }
 
@@ -108,6 +109,7 @@ static void init() noexcept {
   OSI::handle_signal(on_signal);
   Pipe::get().start(cstr_cname, cstr_dlog, devices, cstr_csa, max_csa,
 		    verbose_eng);
+  time_start = system_clock::now();
   cout << "self-play start" << endl; }
 
 static void output() noexcept {
@@ -179,7 +181,14 @@ static void output() noexcept {
   printf("- Recv Status: Weights' ID %" PRIi64 ", ", wght_id);
 
   if (is_downloading) puts("NOW DOWNLOADING NEW WEIGHTS\n");
-  else                printf("Last Check %s\n\n", buf_time); }
+  else                printf("Last Check %s\n", buf_time);
+  auto t = system_clock::to_time_t(time_now) - system_clock::to_time_t(time_start);
+  if ( t==0 ) t = 1;
+  double hour = (double)t/3600.0;
+  double day  = (double)t/(3600.0*24);
+  printf("- %.1f sent/hour, %.1f sent/day, Running for %.1f hours(%.1f days).\n\n",
+   nsend / hour, nsend / day, hour, day);
+}
 
 int main() {
   OSI::prevent_multirun(FName("/tmp/autousi.jBQoNA7kEd.lock"));
