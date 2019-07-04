@@ -36,7 +36,7 @@ int fAddNoise = 0;				// always add dirichlet noise on root node.
 int fUSIMoveCount;	// USIで上位ｎ手の訪問回数も返す
 int fPrtNetworkRawPath = 0;
 int fVerbose = 1;
-int fClearHashAlways = 0;
+int fClearHashAlways = 1;
 int fUsiInfo = 0;
 
 int UCT_LOOP_FIX = 100;
