@@ -8,11 +8,6 @@ The text written in English is [here](README_en.md).
 GPUがあれば、より高速に棋譜を生成できます。
 CPUだと10倍から100倍遅くなりますが、将棋をプレイして楽しむことは可能です。
 
-# 重要なニュース
-
-release 1.2 では非常に重要な不具合修正がbin/aobazになされました。アップデートをお願い致します。
-
-
 # AobaZero
 
 AobaZeroは、AlphaZeroの将棋の実験の追試を行うことを最終目的とした将棋AIプロジェクトです。
@@ -32,17 +27,17 @@ Silverら（2017a, 2018）は囲碁やチェスでの実験結果も報告して
 
 CPUだけのマシンは
 ```
-aobazero-1.0-w64-cpu-only.zip
+aobazero-1.3-w64-cpu-only.zip
 ```
 GPUがついたマシンは
 ```
-aobazero-1.0-w64-opencl.zip
+aobazero-1.3-w64-opencl.zip
 ```
 をダウンロード、展開して、中のclick_me.batを実行してください。
 
 Linuxの方は
 ```
-aobazero-1.0.tar.gz
+aobazero-1.3.tar.gz
 ```
 を展開してmakeしてから
 ```
@@ -51,13 +46,13 @@ aobazero-1.0.tar.gz
 を実行してください。詳しくは同梱のreadme.txtをご覧ください。
 
 # 将棋所で遊んでみたい
-CPU版をダウンロードして、click_me.batを実行します。しばらくすると最新のネットワークの重みファイルをダウンロードして「PI」が表示されて棋譜の生成を開始します。すかさずCtrl + Cで停止させます。(signal 1 caught)が表示されて、しばらく待つと止まります。  
+CPU版をダウンロードして、click_me.batを実行します。しばらくすると最新のネットワークの重みファイルをダウンロードして「self-play start」が表示されて棋譜の生成を開始します。すかさずCtrl + Cで停止させます。(signal 1 caught)が表示されて、しばらく待つと止まります。  
 weight_save/の下にw000000000468.txt という230MBほどのファイルが作られます。
 (468、の数値は異なります)
 
-aobazero-1.0-w64-cpu-only.zipに同梱されているaobaz.batを編集します。最後の1行が以下のようになっています。
+aobazero-1.3-w64-cpu-only.zipに同梱されているaobaz.batを編集します。最後の1行が以下のようになっています。
 ```
-bin/aobaz -q -p 30 -w weight_save\w000000000467.txt
+bin/aobaz -q -i -p 30 -w weight_save\w000000000467.txt
 ```
 この467の部分を実際にダウンロードしてきたファイル名に合わせて書き直し、保存します。  
 将棋所にaobaz.batをエンジンとして登録します。  
