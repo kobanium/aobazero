@@ -29,13 +29,14 @@ Ubuntu での手順を記します。
 
 CentOS での手順を記します。
 
-- liblzma をインストール
+- liblzma などをインストール
 
-> sudo yum install xz-devel
+> sudo yum install xz-devel zlib-devel
 
 - GCC 5.3.1 をインストール
 
-> sudo yum -y install centos-release-scl devtoolset-4
+> sudo yum -y install centos-release-scl
+> sudo yum -y install devtoolset-4
 > scl enable devtoolset-4 bash
 
 GCC 5.3.1 が利用可能な環境で bash が起動します。
@@ -46,7 +47,7 @@ GCC 5.3.1 が利用可能な環境で bash が起動します。
 > gzip -dc boost_1_58_0.tar.gz | tar xvf -
 > cd boost_1_58_0
 > ./bootstrap.sh
-> ./b2 install -j8 --prefix=/[a path with write permission]/inst-dts4
+> ./b2 install -j[number of threads] --prefix=/[a path with write permission]/inst-dts4
 
 - 環境変数の設定
 

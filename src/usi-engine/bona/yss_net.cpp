@@ -341,8 +341,8 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 		int to   = (int)I2To(move);
 		int drop = (int)From2Drop(from);
 		int is_promote = (int)I2IsPromote(move);
-		int cap  = (int)UToCap(move);
-		int piece_m	= (int)I2PieceMove(move);
+//		int cap  = (int)UToCap(move);
+//		int piece_m	= (int)I2PieceMove(move);
 
 		int bz = get_yss_z_from_bona_z(from);
 		int az = get_yss_z_from_bona_z(to);
@@ -361,7 +361,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 		// node[i].second ... id
 		float bias = node[id].first;
 		if ( id != node[id].second ) { PRT("id=%d,%d err\n",id,node[id].second); debug(); }
-		if ( ply==1 ) PRT("%3d:%s(%d)(%08x)id=%5d, bias=%8f,from=%2d,to=%2d,cap=%2d,drop=%3d,pr=%d,peice=%d\n",i,str_CSA_move(move),sideToMove,yss_m,id,bias, from,to,cap,drop,is_promote,piece_m);
+//		if ( ply==1 ) PRT("%3d:%s(%d)(%08x)id=%5d, bias=%8f,from=%2d,to=%2d,cap=%2d,drop=%3d,pr=%d,peice=%d\n",i,str_CSA_move(move),sideToMove,yss_m,id,bias, from,to,cap,drop,is_promote,piece_m);
 
 		if ( is_nan_inf(bias) ) bias = 0;
 		pc->bias = bias;
@@ -393,10 +393,11 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 	}
 
 	float mul = 1.0f;
+//	PRT("all_sum=%f,legal=%f\n",all_sum,legal_sum);
 	if ( all_sum > legal_sum && legal_sum > 0 ) mul = 1.0f / legal_sum;
 	for ( i = 0; i < phg->child_num; i++ ) {
 		CHILD *pc = &phg->child[i];
-		if ( 1 && ply==1 && i < 30 ) {
+		if ( 0 && ply==1 && i < 30 ) {
 			PRT("%3d:%s(%08x), bias=%8f->(%8f)\n",i,str_CSA_move(pc->move), get_yss_packmove_from_bona_move(pc->move), pc->bias, pc->bias*mul);
 		}
 		pc->bias *= mul;

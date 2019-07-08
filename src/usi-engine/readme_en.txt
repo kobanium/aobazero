@@ -30,14 +30,18 @@ aobaz command line option
   -w arg           File with network weights.
   -q               Disable all diagnostic output.
   -u arg           ID of the OpenCL device(s) to use (disables autodetection).
+  -i               Send information while thinking. Like,
+                   "info depth 1 score cp -40 nodes 1 nps 333 pv 2g2f"
+
 
 Self-play options:
   -n                Enable policy network randomization.
   -m arg (=0)       Play more randomly the first x moves.
+  -mtemp arg (=1)   Visit count sampling temperature.
 
 
 e.g.
-  ./aobaz -p 800 -q -n -m 30 -w weight_save/w000000000465.txt
+  ./aobaz -p 800 -q -i -n -m 30 -w weight_save/w000000000465.txt
 
   aobaz plays same move without "-n" and "-m" option.
 

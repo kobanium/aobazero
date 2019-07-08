@@ -2,12 +2,14 @@
 // This source code is in the public domain.
 #include "shogibase.hpp"
 #include <algorithm>
+#include <functional>
 #include <cassert>
 #include <cctype>
 #include <cinttypes>
 #include <climits>
 #include <cstring>
 #include <cstdint>
+using std::function;
 using std::fill_n;
 using std::min;
 using namespace SAux;
@@ -50,6 +52,7 @@ Pc::Pc(int ch1, int ch2, SAux::Mode mode) noexcept {
 constexpr BMap Sq::tbl_sq_obstacle[81][81];
 constexpr BMap Sq::tbl_sq_u2bmap[ok_size][ray_size];
 constexpr unsigned char Sq::tbl_sq_rel[2][81];
+constexpr unsigned char Sq::tbl_sq_adv[2][81];
 constexpr unsigned char Sq::tbl_sq_ray[81][81];
 const char * const Sq::tbl_sq_name[mode_size][ok_size] = {
   { "91", "81", "71", "61", "51", "41", "31", "21", "11",
@@ -88,6 +91,8 @@ Sq::Sq(int ch1, int ch2, Mode mode) noexcept {
   _u = static_cast<uchar>(rank * 9 + file); }
 
 constexpr unsigned char Pc::num_array[hand_size];
+constexpr Action::Type Action::normal;
+constexpr Action::Type Action::promotion;
 
 FixLStr<7U> Action::to_str(SAux::Mode mode) const noexcept {
   assert(ok());
@@ -134,7 +139,8 @@ bool Action::ok() const noexcept {
     
   return true; }
 
-constexpr uint64_t ZKey::tbl_zkey_hand[Color::ok_size][Pc::hand_size][Pc::npawn];
+constexpr uint64_t
+ZKey::tbl_zkey_hand[Color::ok_size][Pc::hand_size][Pc::npawn];
 constexpr uint64_t ZKey::tbl_zkey_sq[Color::ok_size][Pc::ok_size][Sq::ok_size];
 
 ZKey Board::make_zkey(const Color &turn) const noexcept {
@@ -186,14 +192,14 @@ bool Board::ok(const Color &turn) const noexcept {
   if (turn.ok() && _zkey != make_zkey(turn)) return false;
   for (uint uc = 0; uc < Color::ok_size; ++uc)
     for (uint upc = 0; upc < Pc::unpromo_size; ++upc)
-      if (!_bm_mobil[uc][upc].ok()) return false;
+      if (!_bm_sub_mobil[uc][upc].ok()) return false;
   for (uint uc = 0; uc < Color::ok_size; ++uc)
     if (!_bm_color[uc].ok()) return false;
   for (uint ray = 0; ray < SAux::ray_size; ++ray)
     if (!_bm_all[ray].ok()) return false;
 
-  if (!_bm_color[black.to_u()].is_0(_bm_color[white.to_u()])) return false;
-  if ((_bm_color[black.to_u()] | _bm_color[white.to_u()])
+  if (!_bm_color[ublack].is_disjoint(_bm_color[uwhite])) return false;
+  if ((_bm_color[ublack] | _bm_color[uwhite])
       != _bm_all[ray_rank]) return false;
   
   // piece count on the board
@@ -201,41 +207,54 @@ bool Board::ok(const Color &turn) const noexcept {
     Color c  = _board[usq].c;
     Pc    pc = _board[usq].pc;
     Sq    sq = Sq(usq);
+    uint uc  = c.to_u();
     if (c.ok() && !pc.ok()) return false;
     if (!c.ok() && pc.ok()) return false;
     if (!c.ok()) {
       for (uint r = 0; r < ray_size; ++r)
-	if (!_bm_all[r].is_0(sq.to_bmap(r))) return false;
-      for (uint uc = 0; uc < 2U; ++uc)
+	if (!_bm_all[r].is_disjoint(sq.to_bmap(r))) return false;
+      for (uint uc2 = 0; uc2 < 2U; ++uc2)
 	for (uint u = 0; u < Pc::unpromo_size; ++u)
-	  if (!_bm_mobil[uc][u].is_0(sq.to_bmap())) return false;
+	  if (!_bm_sub_mobil[uc2][u].is_disjoint(sq.to_bmap())) return false;
       continue; }
     if (!can_exist(c, sq, pc)) return false;
 
     if (pc.is_unpromo()) {
       assert(pc.to_u() < Pc::unpromo_size);
-      if (_bm_mobil[c.to_u()][pc.to_u()].is_0(sq.to_bmap())) return false;
+      if (_bm_sub_mobil[uc][pc.to_u()].is_disjoint(sq.to_bmap()))
+	return false;
       if (pc == pawn) {
-	if (_pawn_file[c.to_u()][sq.to_file()] == 0) return false;
-	if (pawn_file[c.to_u()][sq.to_file()] == 1U) return false;
-	pawn_file[c.to_u()][sq.to_file()] = 1U; }
-      else if (pc == king && _sq_kings[c.to_u()] != sq) return false; }
+	if (_bm_pawn_atk[uc].is_disjoint(sq.to_atk_pawn(c)))
+	  return false;
+	if (_pawn_file[uc][sq.to_file()] == 0) return false;
+	if (pawn_file[uc][sq.to_file()] == 1U) return false;
+	pawn_file[uc][sq.to_file()] = 1U; }
+      else if (pc == king && _sq_kings[uc] != sq) return false; }
     else if (pc == horse) {
-      if (_bm_mobil[c.to_u()][bishop.to_u()].is_0(sq.to_bmap())) return false;
-      if (_bm_mobil[c.to_u()][king.to_u()].is_0(sq.to_bmap())) return false; }
+      if (_bm_horse[uc].is_disjoint(sq.to_bmap())) return false;
+      if (_bm_sub_mobil[uc][ubishop].is_disjoint(sq.to_bmap())) return false;
+      if (_bm_sub_mobil[uc][uking].is_disjoint(sq.to_bmap()))	return false; }
     else if (pc == dragon) {
-      if (_bm_mobil[c.to_u()][rook.to_u()].is_0(sq.to_bmap())) return false;
-      if (_bm_mobil[c.to_u()][king.to_u()].is_0(sq.to_bmap())) return false; }
+      if (_bm_dragon[uc].is_disjoint(sq.to_bmap())) return false;
+      if (_bm_sub_mobil[uc][urook].is_disjoint(sq.to_bmap())) return false;
+      if (_bm_sub_mobil[uc][uking].is_disjoint(sq.to_bmap())) return false; }
     else {
-      if (_bm_mobil[c.to_u()][gold.to_u()].is_0(sq.to_bmap())) return false; }
+      if (_bm_sub_mobil[uc][ugold].is_disjoint(sq.to_bmap())) return false; }
     
     for (uint r = 0; r < ray_size; ++r)
-      if (_bm_all[r].is_0(sq.to_bmap(r))) return false;
-    count[c.to_u()][pc.to_u()] += 1U; }
+      if (_bm_all[r].is_disjoint(sq.to_bmap(r))) return false;
+    count[uc][pc.to_u()] += 1U; }
 
   // test piece count
+  if (_bm_pawn_atk[ublack].size() != count[ublack][upawn]) return false;
+  if (_bm_pawn_atk[uwhite].size() != count[uwhite][upawn]) return false;
+  if (_bm_horse[ublack].size()    != count[ublack][uhorse]) return false;
+  if (_bm_horse[uwhite].size()    != count[uwhite][uhorse]) return false;
+  if (_bm_dragon[ublack].size()   != count[ublack][udragon]) return false;
+  if (_bm_dragon[uwhite].size()   != count[uwhite][udragon]) return false;
+
   for (uint uc = 0; uc < Color::ok_size; ++uc) {
-    if (1U < count[uc][king.to_u()]) return false;
+    if (1U < count[uc][uking]) return false;
     uint num = 0;
     for (uint upc = 0; upc < Pc::hand_size; ++upc) {
       count[uc][upc] += _hand[uc][upc];
@@ -243,10 +262,10 @@ bool Board::ok(const Color &turn) const noexcept {
     if (num != _hand_color[uc]) return false; }
   
   for (uint upc = 0; upc < Pc::ok_size; ++upc)
-    count[black.to_u()][upc] += count[white.to_u()][upc];
+    count[ublack][upc] += count[uwhite][upc];
   
   for (const Pc &pc : array_pc_canpromo)
-    count[black.to_u()][pc.to_u()] += count[black.to_u()][pc.to_proPc().to_u()];
+    count[ublack][pc.to_u()] += count[ublack][pc.to_proPc().to_u()];
   
   for (uint upc = 0; upc < Pc::hand_size; ++upc)
     if (count[black.to_u()][upc] != Pc::num_array[upc]) return false;
@@ -264,8 +283,8 @@ bool Board::is_nyugyoku(const Color &turn) const noexcept {
   if (nall < 11U) return false;
   
   constexpr uint bonus[Color::ok_size] = { 0, 1 };
-  uint32_t bits_big = _bm_mobil[turn.to_u()][bishop.to_u()].get_rel(turn, 0);
-  bits_big |= _bm_mobil[turn.to_u()][rook.to_u()].get_rel(turn, 0);
+  uint32_t bits_big = _bm_sub_mobil[turn.to_u()][ubishop].get_rel(turn, 0);
+  bits_big |= _bm_sub_mobil[turn.to_u()][urook].get_rel(turn, 0);
   bits_big &= bits_all;
   
   uint nbig = count_popu(bits_big);
@@ -303,7 +322,7 @@ bool Board::action_ok_easy(const Color &turn, const Action &a) const noexcept {
       if (!can_exist(turn, to, pc)) return false; }
     else if (! can_promote(turn, from, to)) return false;
     if (pc.is_slider()
-	&& ! from.to_obstacle(to).is_0(_bm_all[ray_rank]))
+	&& ! from.to_obstacle(to).is_disjoint(_bm_all[ray_rank]))
       return false; }
   return true; }
 
@@ -312,54 +331,52 @@ bool Board::action_ok_full(const Color &turn, const Action &a) noexcept {
   if (a.is_resign()) return true;
   if (a.is_windecl()) return is_nyugyoku(turn);
 
-  bool is_ok = true;
+
   assert(a.is_move());
   update(turn, a, false);
-  if (is_incheck(turn) || is_mate_by_drop_pawn(turn, a, false)) is_ok = false;
+  bool b_incheck = is_incheck(turn);
   undo(turn, a, false);
-  return is_ok; }
+  if (b_incheck) return false;
+  if (is_mate_by_drop_pawn(turn, a)) return false;
+  return true; }
 
-bool Board::is_mate_by_drop_pawn(const Color &turn, const Action &a,
-				 bool before) noexcept {
-  assert(turn.ok() && a.ok());
-  if (!a.is_drop() || a.get_pc() != pawn) return false;
+bool Board::is_mate_by_drop_pawn(const Color &turn, const Action &action)
+  noexcept {
+  assert(turn.ok() && action.ok());
+  if (!action.is_drop() || action.get_pc() != pawn) return false;
 
   Color tx = turn.to_opp();
   assert(turn.ok() && tx.ok());
-  Sq sq_king = _sq_kings[tx.to_u()];
-  if (!sq_king.ok()) return false;
+  Sq sqk = _sq_kings[tx.to_u()];
+  if (!sqk.ok()) return false;
 
-  Sq to = a.get_to();
+  Sq to = action.get_to();
   assert(to.ok());
-  if (sq_king.rel(tx).to_u() != to.rel(tx).to_u() + 9U) return false;
+  if (sqk.rel(tx).to_u() != to.rel(tx).to_u() + 9U) return false;
   
   BMap bm;
-  bm  = _bm_mobil[tx.to_u()][knight.to_u()] & to.to_atk_knight(turn);
-  bm |= _bm_mobil[tx.to_u()][silver.to_u()] & to.to_atk_silver(turn);
-  bm |= _bm_mobil[tx.to_u()][gold.to_u()]   & to.to_atk_gold(turn);
-  bm |= _bm_mobil[tx.to_u()][bishop.to_u()] & to_atk_bishop(to);
-  bm |= _bm_mobil[tx.to_u()][rook.to_u()]   & to_atk_rook(to);
-  bm |= ( _bm_mobil[tx.to_u()][king.to_u()].andnot(sq_king.to_bmap())
+  bm  = _bm_sub_mobil[tx.to_u()][uknight] & to.to_atk_knight(turn);
+  bm |= _bm_sub_mobil[tx.to_u()][usilver] & to.to_atk_silver(turn);
+  bm |= _bm_sub_mobil[tx.to_u()][ugold]   & to.to_atk_gold(turn);
+  bm |= _bm_sub_mobil[tx.to_u()][ubishop] & to_atk_bishop(Color(), to);
+  bm |= _bm_sub_mobil[tx.to_u()][urook]   & to_atk_rook(Color(), to);
+  bm |= ( _bm_sub_mobil[tx.to_u()][uking].andnot(sqk.to_bmap())
 	  & to.to_atk_king() );
-  if (!bm.is_0()) {
-    Sq from(bm.pop_front());
+  if (!bm.empty()) {
+    Sq from(bm.pop_f());
     assert(from.ok());
     do {
       assert(_board[from.to_u()].c == tx);
       if (!is_pinned(tx, from, to)) return false;
-      from = Sq(bm.pop_front());
+      from = Sq(bm.pop_f());
     } while (from.ok()); }
 
   bool is_mate = true;
-  if (before)
-    for (uint u = 0; u < ray_size; ++u) _bm_all[u] ^= to.to_bmap(u);
-
-  bm = sq_king.to_atk_king().andnot(_bm_color[tx.to_u()]);
-  for (Sq sq(bm.pop_front()); sq.ok(); sq = Sq(bm.pop_front())) {
-    if (! is_attacked(tx, sq)) { is_mate = false;  break; } }
-
-  if (before)
-    for (uint u = 0; u < ray_size; ++u) _bm_all[u] ^= to.to_bmap(u);
+  toggle_ray_penetrate(to);
+  bm = sqk.to_atk_king().andnot(_bm_color[tx.to_u()]);
+  for (Sq sq(bm.pop_f()); sq.ok(); sq = Sq(bm.pop_f()))
+    if (! is_attacked(tx, sq)) { is_mate = false;  break; }
+  toggle_ray_penetrate(to);
   return is_mate; }
 
 const BMap & Board::to_atk(const Sq &sq, uint ray) const noexcept {
@@ -371,41 +388,44 @@ const BMap & Board::to_atk(const Sq &sq, uint ray) const noexcept {
 BMap Board::to_attacker(const Color &c, const Sq &sq) const noexcept {
   assert(c.ok() && sq.ok());
   uint ucx      = c.to_opp().to_u();
-  BMap atk_rook = to_atk_rook(sq);
+  BMap atk_rook = to_atk_rook(Color(), sq);
   BMap atk_king = sq.to_atk_king();
-  BMap bm;
-  bm |= _bm_mobil[ucx][pawn.to_u()]   & sq.to_atk_lance_j(c) & atk_king;
-  bm |= _bm_mobil[ucx][lance.to_u()]  & sq.to_atk_lance_j(c) & atk_rook;
-  bm |= _bm_mobil[ucx][knight.to_u()] & sq.to_atk_knight(c);
-  bm |= _bm_mobil[ucx][silver.to_u()] & sq.to_atk_silver(c);
-  bm |= _bm_mobil[ucx][gold.to_u()]   & sq.to_atk_gold(c);
-  bm |= _bm_mobil[ucx][king.to_u()]   & atk_king;    
-  bm |= _bm_mobil[ucx][bishop.to_u()] & to_atk_bishop(sq);
-  bm |= _bm_mobil[ucx][rook.to_u()]   & atk_rook;
+  BMap bm = (_bm_sub_mobil[ucx][upawn] & sq.to_atk_pawn(c));
+  bm |= _bm_sub_mobil[ucx][ulance]  & sq.to_atk_lance_j(c) & atk_rook;
+  bm |= _bm_sub_mobil[ucx][uknight] & sq.to_atk_knight(c);
+  bm |= _bm_sub_mobil[ucx][usilver] & sq.to_atk_silver(c);
+  bm |= _bm_sub_mobil[ucx][ugold]   & sq.to_atk_gold(c);
+  bm |= _bm_sub_mobil[ucx][uking]   & atk_king;    
+  bm |= _bm_sub_mobil[ucx][ubishop] & to_atk_bishop(Color(), sq);
+  bm |= _bm_sub_mobil[ucx][urook]   & atk_rook;
   return bm; }
 
 bool Board::is_pinned(const Color &ck, const Sq &from, const Sq &to)
   const noexcept {
-  assert(ck.ok() && from.ok());
+  assert(ck.ok() && from.ok() && to.ok());
   if (!_sq_kings[ck.to_u()].ok()) return false;
 
   uint ray = _sq_kings[ck.to_u()].to_ray(from);
-  if (ray == ray_size) return false;
+  if (! ray_ok(ray)) return false;
   if (ray == _sq_kings[ck.to_u()].to_ray(to)) return false;
   
   const BMap & bm_ray  = to_atk(from, ray);
   const BMap & bm_king = _sq_kings[ck.to_u()].to_bmap();
-  if (bm_ray.is_0(bm_king)) return false;
+  if (bm_ray.is_disjoint(bm_king)) return false;
   
-  BMap bm_mobil;
+  BMap bm_sub_mobil;
   Color cx = ck.to_opp();
-  if (ray == ray_rank) bm_mobil = _bm_mobil[cx.to_u()][rook.to_u()];
+  if (ray == ray_rank) bm_sub_mobil = _bm_sub_mobil[cx.to_u()][urook];
   else if (ray == ray_file) {
-    bm_mobil  = _bm_mobil[cx.to_u()][lance.to_u()] & from.to_atk_lance_j(ck);
-    bm_mobil |= _bm_mobil[cx.to_u()][rook.to_u()]; }
-  else bm_mobil = _bm_mobil[cx.to_u()][bishop.to_u()];
+    bm_sub_mobil  = _bm_sub_mobil[cx.to_u()][ulance] & from.to_atk_lance_j(ck);
+    bm_sub_mobil |= _bm_sub_mobil[cx.to_u()][urook]; }
+  else bm_sub_mobil = _bm_sub_mobil[cx.to_u()][ubishop];
   
-  return ! bm_ray.is_0(bm_mobil); }
+  return ! bm_ray.is_disjoint(bm_sub_mobil); }
+
+void Board::toggle_ray_penetrate(const Sq &sq) noexcept {
+  assert(sq.ok());
+  for (uint u = 0; u < ray_size; ++u) _bm_all[u] ^= sq.to_bmap(u); }
 
 void Board::place_sq(const Color &c, const Pc &pc, const Sq &sq, bool do_aux)
   noexcept {
@@ -415,16 +435,19 @@ void Board::place_sq(const Color &c, const Pc &pc, const Sq &sq, bool do_aux)
     if (pc == pawn) {
       assert(can_exist(c, sq, pawn));
       assert(_pawn_file[c.to_u()][sq.to_file()] == 0);
+      _bm_pawn_atk[c.to_u()] ^= sq.to_atk_pawn(c);
       _pawn_file[c.to_u()][sq.to_file()] = 1U; }
     else if (pc == king) _sq_kings[c.to_u()] = sq;
-    _bm_mobil[c.to_u()][pc.to_u()] ^= sq.to_bmap(); }
+    _bm_sub_mobil[c.to_u()][pc.to_u()] ^= sq.to_bmap(); }
   else if (pc == horse) {
-    _bm_mobil[c.to_u()][king.to_u()] ^= sq.to_bmap();
-    _bm_mobil[c.to_u()][bishop.to_u()] ^= sq.to_bmap(); }
+    _bm_horse[c.to_u()] ^= sq.to_bmap();
+    _bm_sub_mobil[c.to_u()][king.to_u()] ^= sq.to_bmap();
+    _bm_sub_mobil[c.to_u()][bishop.to_u()] ^= sq.to_bmap(); }
   else if (pc == dragon) {
-    _bm_mobil[c.to_u()][king.to_u()] ^= sq.to_bmap();
-    _bm_mobil[c.to_u()][rook.to_u()] ^= sq.to_bmap(); }
-  else { _bm_mobil[c.to_u()][gold.to_u()] ^= sq.to_bmap(); }
+    _bm_dragon[c.to_u()] ^= sq.to_bmap();
+    _bm_sub_mobil[c.to_u()][king.to_u()] ^= sq.to_bmap();
+    _bm_sub_mobil[c.to_u()][rook.to_u()] ^= sq.to_bmap(); }
+  else { _bm_sub_mobil[c.to_u()][gold.to_u()] ^= sq.to_bmap(); }
   
   _bm_color[c.to_u()] ^= sq.to_bmap(0);
   for (uint r = 0; r < ray_size; ++r) _bm_all[r] ^= sq.to_bmap(r);
@@ -440,15 +463,18 @@ void Board::remove_sq(const Sq &sq, bool do_aux) noexcept {
     assert(pc.to_u() < Pc::unpromo_size);
     if (pc == pawn) {
       assert(_pawn_file[c.to_u()][sq.to_file()] == 1U);
+      _bm_pawn_atk[c.to_u()] ^= sq.to_atk_pawn(c);
       _pawn_file[c.to_u()][sq.to_file()] = 0; }
-    _bm_mobil[c.to_u()][pc.to_u()] ^= sq.to_bmap(); }
+    _bm_sub_mobil[c.to_u()][pc.to_u()] ^= sq.to_bmap(); }
   else if (pc == horse) {
-    _bm_mobil[c.to_u()][king.to_u()] ^= sq.to_bmap();
-    _bm_mobil[c.to_u()][bishop.to_u()] ^= sq.to_bmap(); }
+    _bm_horse[c.to_u()] ^= sq.to_bmap();
+    _bm_sub_mobil[c.to_u()][king.to_u()] ^= sq.to_bmap();
+    _bm_sub_mobil[c.to_u()][bishop.to_u()] ^= sq.to_bmap(); }
   else if (pc == dragon) {
-    _bm_mobil[c.to_u()][king.to_u()] ^= sq.to_bmap();
-    _bm_mobil[c.to_u()][rook.to_u()] ^= sq.to_bmap(); }
-  else { _bm_mobil[c.to_u()][gold.to_u()] ^= sq.to_bmap(); }
+    _bm_dragon[c.to_u()] ^= sq.to_bmap();
+    _bm_sub_mobil[c.to_u()][king.to_u()] ^= sq.to_bmap();
+    _bm_sub_mobil[c.to_u()][rook.to_u()] ^= sq.to_bmap(); }
+  else { _bm_sub_mobil[c.to_u()][gold.to_u()] ^= sq.to_bmap(); }
   
   _bm_color[c.to_u()] ^= sq.to_bmap(0);
   for (uint r = 0; r < ray_size; ++r) _bm_all[r] ^= sq.to_bmap(r);
@@ -514,9 +540,12 @@ void Board::undo(const Color &turn, const Action &a, bool do_aux) noexcept {
       remove_hand(turn, cap.to_unproPc(), do_aux); } } }
 
 void Board::clear() noexcept {
-  _sq_kings[0] = _sq_kings[1] = Sq();
-  _zkey  = ZKey(0);
-  fill_n(&_bm_mobil[0][0], sizeof(_bm_mobil) / sizeof(BMap), BMap());
+  _sq_kings[ublack] = _sq_kings[uwhite] = Sq();
+  _zkey = ZKey(0);
+  fill_n(&_bm_sub_mobil[0][0], sizeof(_bm_sub_mobil) / sizeof(BMap), BMap());
+  fill_n(_bm_pawn_atk, sizeof(_bm_pawn_atk) / sizeof(BMap), BMap());
+  fill_n(_bm_horse, sizeof(_bm_horse) / sizeof(BMap), BMap());
+  fill_n(_bm_dragon, sizeof(_bm_dragon) / sizeof(BMap), BMap());
   fill_n(_bm_all, sizeof(_bm_all) / sizeof(BMap), BMap());
   fill_n(_bm_color, sizeof(_bm_color) / sizeof(BMap), BMap());
   fill_n(_board, Sq::ok_size, Value());
@@ -642,3 +671,161 @@ Action Node::action_interpret(const char *cstr, SAux::Mode mode) noexcept {
 
   if (!_board.action_ok_full(_turn, action)) return Action();
   return action; }
+
+template <uint UPCMobil>
+void MoveSet::add(const Color &turn, const Sq &from, const Sq &to,
+		  const Pc &pc, const Pc &cap) noexcept {
+  if (can_promote(turn, Pc(UPCMobil), from, to)) {
+    assert(_uend + 1U < SAux::maxsize_moves);
+    _moves[_uend++] = Action(from, to, pc, cap, Action::promotion); }
+
+  if (can_exist(turn, to, Pc(UPCMobil))) {
+    assert(_uend + 1U < SAux::maxsize_moves);
+    _moves[_uend++] = Action(from, to, pc, cap, Action::normal); } }
+
+
+void MoveSet::gen_pawn(const Board &board, const BMap &bm_target,
+		       const Color &turn) noexcept {
+  assert(bm_target.ok() && turn.ok());
+  const Color tx = turn.to_opp();
+  BMap bm = board.get_bm_pawn_atk(turn) & bm_target;
+  for (Sq to(bm.pop_f()); to.ok(); to = Sq(bm.pop_f())) {
+    Sq from(to.adv(tx));
+    Pc cap(board.get_pc(to));
+    if (board.is_pinned(turn, from, to)) continue;
+    add<upawn>(turn, from, to, pawn, cap); } }
+
+void MoveSet::gen_king(Node &node, const Color &turn) noexcept {
+  assert(turn.ok());
+  const Board & board     = node.get_board();
+  const BMap & bm_friends = board.get_bm_color(turn);
+  const Sq sqk            = board.get_sq_king(turn);
+  node.get_board().toggle_ray_penetrate(sqk);
+  BMap bm = sqk.to_atk_king().andnot(bm_friends);
+  for (Sq to(bm.pop_f()); to.ok(); to = Sq(bm.pop_f())) {
+    if (board.is_attacked(turn, to)) continue;
+    Pc cap(board.get_pc(to));
+    assert(_uend + 1U < SAux::maxsize_moves);
+    add<uking>(turn, sqk, to, king, cap); }
+  node.get_board().toggle_ray_penetrate(sqk); }
+
+template <uint UPCMobil>
+void MoveSet::gen_nsg(const Board &board, const Color &turn,
+		      const BMap &bm_target,
+		      function<BMap(const Sq &, const Color &)> fatk)
+  noexcept {
+  assert(turn.ok());
+  const Color tx = turn.to_opp();
+  BMap bm_from = board.get_bm_sub_mobil(turn, Pc(UPCMobil));
+  for (Sq from(bm_from.pop_f()); from.ok(); from = Sq(bm_from.pop_f())) {
+    Pc pc      = board.get_pc(from);
+    BMap bm_to = fatk(from, turn) & bm_target;
+    assert(pc.ok());
+    for (Sq to(bm_to.pop_f()); to.ok(); to = Sq(bm_to.pop_f())) {
+      Pc cap(board.get_pc(to));
+      if (board.is_pinned(turn, from, to)) continue;
+      add<UPCMobil>(turn, from, to, pc, cap); } } }
+
+template <uint UPCMobil>
+void MoveSet::gen_slider(const Board &board, const Color &turn, BMap bm_from,
+			 const BMap &bm_target,
+			 function<BMap(const Board &, const Color &,
+				       const Sq &)> fatk)
+  noexcept {
+  assert(turn.ok() && bm_from.ok() && bm_target.ok());
+  const Color tx = turn.to_opp();
+  for (Sq from(bm_from.pop_f()); from.ok(); from = Sq(bm_from.pop_f())) {
+    Pc pc      = board.get_pc(from);
+    BMap bm_to = fatk(board, turn, from) & bm_target;
+    assert(pc.ok());
+    for (Sq to(bm_to.pop_f()); to.ok(); to = Sq(bm_to.pop_f())) {
+      Pc cap(board.get_pc(to));
+      if (board.is_pinned(turn, from, to)) continue;
+      add<UPCMobil>(turn, from, to, pc, cap); } } }
+
+
+void MoveSet::gen_drop(Board &board, const Color &turn, BMap bm_target)
+  noexcept {
+  assert(turn.ok());
+  Pc drops[Pc::hand_size];
+  uint ndrop = 0;
+
+  for (uint upc = 0; upc < Pc::hand_size; ++upc)
+    if (board.get_num_hand(turn, Pc(upc))) drops[ndrop++] = Pc(upc);
+  if (ndrop == 0) return;
+
+  for (Sq to(bm_target.pop_f()); to.ok(); to = Sq(bm_target.pop_f()))
+    for (uint u = 0; u < ndrop; ++u) {
+      if (drops[u] == pawn) {
+	if (!can_exist(turn, to, pawn)) continue;
+	if (board.have_pawn(turn, to.to_file())) continue;
+	if (board.is_mate_by_drop_pawn(turn, Action(to, pawn))) continue; }
+      else if (drops[u] == lance) {
+	if (!can_exist(turn, to, lance)) continue; }
+      else if (drops[u] == knight) {
+	if (!can_exist(turn, to, knight)) continue; }
+      
+      assert(_uend + 1U < SAux::maxsize_moves);
+      _moves[_uend++] = Action(to, drops[u]); } }
+
+      
+void MoveSet::gen_all_evation(Node &node) noexcept {
+  const Color &turn = node.get_turn();
+  Board &board      = node.get_board();
+  const Sq &sqk     = board.get_sq_king(turn);
+  gen_king(node, turn);
+
+  BMap bm_attacker = board.to_attacker(turn, sqk);
+  uint nchecker    = bm_attacker.size();
+  if (nchecker == 2) return;
+
+  assert(nchecker == 1);
+  Sq sq_checker(bm_attacker.pop_f());
+  const BMap &bm_obstacle = sqk.to_obstacle(sq_checker);
+  const BMap bm_target    = (bm_obstacle | sq_checker.to_bmap());
+  gen_pawn(board, bm_target, turn);
+  gen_nsg<uknight>(board, turn, bm_target, &Sq::to_atk_knight);
+  gen_nsg<usilver>(board, turn, bm_target, &Sq::to_atk_silver);
+  gen_nsg<ugold>  (board, turn, bm_target, &Sq::to_atk_gold);
+  gen_slider<ulance>(board, turn, board.get_bm_sub_mobil(turn, lance),
+		     bm_target, &Board::to_atk_lance);
+  gen_slider<ubishop>(board, turn, board.get_bm_bishop(turn), bm_target,
+		      &Board::to_atk_bishop);
+  gen_slider<uhorse>(board, turn, board.get_bm_horse(turn), bm_target,
+		      &Board::to_atk_horse);
+  gen_slider<urook>(board, turn, board.get_bm_rook(turn), bm_target,
+		    &Board::to_atk_rook);
+  gen_slider<udragon>(board, turn, board.get_bm_dragon(turn), bm_target,
+		      &Board::to_atk_dragon);
+  gen_drop(board, turn, bm_obstacle); }
+
+void MoveSet::gen_all_no_evation(Node &node) noexcept {
+  const Color turn        = node.get_turn();
+  const Color xturn       = turn.to_opp();
+  Board &board            = node.get_board();
+  const BMap  &bm_friends = board.get_bm_color(turn);
+  const BMap  bm_target   = ~bm_friends;
+
+  gen_king(node, turn);
+  gen_pawn(board, bm_target, turn);
+  gen_nsg<uknight>(board, turn, bm_target, &Sq::to_atk_knight);
+  gen_nsg<usilver>(board, turn, bm_target, &Sq::to_atk_silver);
+  gen_nsg<ugold>  (board, turn, bm_target, &Sq::to_atk_gold);
+  gen_slider<ulance>(board, turn, board.get_bm_sub_mobil(turn, lance),
+		     bm_target, &Board::to_atk_lance);
+  gen_slider<ubishop>(board, turn, board.get_bm_bishop(turn), bm_target,
+		      &Board::to_atk_bishop);
+  gen_slider<uhorse>(board, turn, board.get_bm_horse(turn), bm_target,
+		      &Board::to_atk_horse);
+  gen_slider<urook>(board, turn, board.get_bm_rook(turn), bm_target,
+		    &Board::to_atk_rook);
+  gen_slider<udragon>(board, turn, board.get_bm_dragon(turn), bm_target,
+		      &Board::to_atk_dragon);
+  gen_drop(board, turn, ~board.get_bm_all()); }
+
+
+void MoveSet::gen_all(Node &node) noexcept {
+  assert(node.ok() && node.get_type().is_interior());
+  _uend = 0;
+  if (node.is_incheck()) gen_all_evation(node);
+  else                   gen_all_no_evation(node); }

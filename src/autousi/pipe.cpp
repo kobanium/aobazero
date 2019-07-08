@@ -13,12 +13,13 @@
 #include <chrono>
 #include <fstream>
 #include <memory>
-#include <string>
+#include <utility>
 #include <cassert>
 #include <cinttypes>
 #include <climits>
 #include <csignal>
 #include <cstdarg>
+#include <cstdio>
 using std::cout;
 using std::endl;
 using std::flush;
@@ -31,20 +32,16 @@ using std::unique_ptr;
 using std::vector;
 using std::chrono::duration_cast;
 using std::chrono::time_point;
-using std::chrono::time_point_cast;
 using std::chrono::system_clock;
 using std::chrono::milliseconds;
 using ErrAux::die;
 using namespace IOAux;
 using uint = unsigned int;
 
-constexpr float speed_update_rate1 = 0.05f;
-constexpr float speed_update_rate2 = 0.005f;
+constexpr double speed_update_rate1 = 0.05;
+constexpr double speed_update_rate2 = 0.005;
 constexpr uint speed_th_1to2       = 100U;
 constexpr uint max_nchild          = 32;
-
-void write_record(const char *prec, size_t len,
-		  const char *dname, uint max_csa) noexcept;
 constexpr char fmt_log[]     = "engine%03u.log";
 constexpr char fmt_csa[]     = "rec%012" PRIi64 ".csa";
 constexpr char fmt_csa_scn[] = "rec%16[^.].csa";
@@ -61,10 +58,11 @@ class USIEngine : public OSI::Pipe {
   shared_ptr<const WghtFile> _wght;
   uint _id;
   int _device;
-  
+  bool _is_verbose;
+
 public:
   time_point<system_clock> time_last;
-  float speed_average, speed_rate;
+  double speed_average, speed_rate;
   uint speed_nmove, nmove;
   NodeRec node;
   FName flog;
@@ -72,12 +70,28 @@ public:
 
   void set_id(uint id) noexcept { _id = id; }
   void set_device(int device) noexcept { _device = device; }
+  void set_verbose(bool is_verbose) { _is_verbose = is_verbose; }
   void update_wght() noexcept { _wght = Client::get().get_wght(); }
   
   int get_id() const noexcept { return _id; }
   int get_device() const noexcept { return _device; }
+  bool is_verbose() const noexcept { return _is_verbose; }
   const shared_ptr<const WghtFile> & get_wght() const noexcept {
     return _wght; } };
+
+static void write_record(const char *prec, size_t len,
+			 const char *dname, uint max_csa) noexcept {
+  if (max_csa == 0) return;
+  assert(prec && dname);
+  FNameID fname = grab_max_file(dname, fmt_csa_scn);
+  int64_t id = fname.get_id() + 1;
+  if (static_cast<int64_t>(max_csa) < id) return;
+  fname.clear_fname();
+  fname.add_fname(dname);
+  fname.add_fmt_fname(fmt_csa, id);
+  ofstream ofs(fname.get_fname(), ios::binary | ios::trunc);
+  ofs.write(prec, len);
+  if (!ofs) die(ERR_INT("cannot write %s", fname.get_fname())); }
 
 static void close_flush(USIEngine &c) noexcept {
   c.close_write();
@@ -103,7 +117,7 @@ static int read_id(USIEngine &c, int &version, string &settings) noexcept {
     char *line = c.getline_in_block();
     if (!line) {
       close_flush(c);
-      die(ERR_INT("faild to execute the usi engine")); }
+      die(ERR_INT("faild to execute the usi engine (%d)", c.get_id())); }
 
     c.ofs << line << endl;
     if (!c.ofs) die(ERR_INT("cannot write to log"));
@@ -153,7 +167,7 @@ static void engine_out(USIEngine &c, const char *fmt, ...) noexcept {
     if (errno == EPIPE) die(ERR_INT("engine no. %d terminates", c.get_id()));
     die(ERR_CLL("write")); } }
 
-static void engine_start(USIEngine &c, const FName &cname, uint print_csa)
+static void engine_start(USIEngine &c, const FName &cname)
   noexcept {
   c.nmove = 0;
   c.node.clear();
@@ -161,26 +175,28 @@ static void engine_start(USIEngine &c, const FName &cname, uint print_csa)
 
   unique_ptr<char []> path(new char [cname.get_len_fname() + 1U]);
   unique_ptr<char []> a0  (new char [cname.get_len_fname() + 1U]);
-  unique_ptr<char []> a8  (new char [c.get_wght()->get_len_fname() + 1U]);
+  unique_ptr<char []> a7  (new char [c.get_wght()->get_len_fname() + 1U]);
   char a1[] = "-p";  char a2[] = "800";
-  char a3[] = "-q";
-  char a4[] = "-n";
-  char a5[] = "-m";  char a6[] = "30";
-  char a7[] = "-w";
+  char a3[] = "-n";
+  char a4[] = "-m";  char a5[] = "30";
+  char a6[] = "-w";
   memcpy(path.get(), cname.get_fname(), cname.get_len_fname() + 1U);
   memcpy(a0.get(), cname.get_fname(), cname.get_len_fname() + 1U);
-  memcpy(a8.get(), c.get_wght()->get_fname(),
+  memcpy(a7.get(), c.get_wght()->get_fname(),
 	 c.get_wght()->get_len_fname() + 1U);
-  if (c.get_device() < 0) {
-    char *argv[] = { a0.get(), a1, a2, a3, a4, a5, a6, a7, a8.get(),
-		     nullptr };
-    c.open(path.get(), argv); }
-  else {
-    char a9[] = "-u";  char a10[16];
-    sprintf(a10, "%i", c.get_device());
-    char *argv[] = { a0.get(), a9, a10, a1, a2, a3, a4, a5, a6, a7,
-		     a8.get(), nullptr };
-    c.open(path.get(), argv); }
+  char *argv[] = { a0.get(), a1, a2, a3, a4, a5, a6, a7.get(),
+		   nullptr, nullptr, nullptr, nullptr,
+		   nullptr, nullptr, nullptr, nullptr };
+  int argc = 8;
+  char opt_q[] = "-q";
+  char opt_u[] = "-u";
+  char opt_u_value[256];
+  sprintf(opt_u_value, "%i", c.get_device());
+  if (!c.is_verbose()) argv[argc++] = opt_q;
+  if (0 <= c.get_device()) {
+    argv[argc++] = opt_u;
+    argv[argc++] = opt_u_value; }
+  c.open(path.get(), argv);
   
   c.ofs.open(c.flog.get_fname(), ios::trunc);
   if (!c.ofs) die(ERR_INT("cannot write to log"));
@@ -201,26 +217,25 @@ static void engine_start(USIEngine &c, const FName &cname, uint print_csa)
   snprintf(buf, sizeof(buf), "%16" PRIx64, c.get_wght()->get_crc64());
   engine_out(c, "isready");
   engine_out(c, "%s", c.node.startpos.c_str());
-  engine_out(c, "go visit");
   c.time_last    = system_clock::now();
+  engine_out(c, "go visit");
   c.node.record  = string("'w ") + to_string(c.get_wght()->get_id());
   c.node.record += string(" (crc64:") + string(buf);
   c.node.record += string("), autousi ") + to_string(Ver::major);
   c.node.record += string(".") + to_string(Ver::minor);
   c.node.record += string(", usi-engine ") + to_string(eng_ver);
   c.node.record += string("\n'") + eng_settings;
-  c.node.record	+= string("\nPI\n+\n");
-  if (c.get_id() == 0 && print_csa) cout << "PI +" << endl; }
+  c.node.record	+= string("\nPI\n+\n"); }
 
 Pipe & Pipe::get() noexcept {
   static Pipe instance;
   return instance; }
 
-Pipe::Pipe() noexcept {}
+Pipe::Pipe() noexcept : _ngen_records(0) {}
 Pipe::~Pipe() noexcept {}
 void Pipe::start(const char *cname, const char *dlog,
 		 const vector<int> &devices,  const char *cstr_csa,
-		 uint max_csa, uint print_csa, uint print_speed) noexcept {
+		 uint max_csa, uint verbose_eng) noexcept {
   assert(cname && cstr_csa && dlog);
   if (devices.empty() || max_nchild < devices.size())
     die(ERR_INT("bad devices"));
@@ -228,20 +243,20 @@ void Pipe::start(const char *cname, const char *dlog,
   _dname_csa.reset_fname(cstr_csa);
   _nchild      = static_cast<uint>(devices.size());
   _max_csa     = max_csa;
-  _print_speed = print_speed;
-  _print_csa   = print_csa;
+  _verbose_eng = verbose_eng;
   _children.reset(new USIEngine [devices.size()]);
   for (uint u = 0; u < _nchild; ++u) {
     USIEngine & c = _children[u];
-    c.speed_average = 1000.0f;
+    c.speed_average = 1000.0;
     c.speed_nmove   = 0;
     c.speed_rate    = speed_update_rate1;
     c.flog          = FName(dlog);
     c.flog.add_fmt_fname(fmt_log, u);
     c.set_id(u);
-    c.set_device(devices[u]); } }
+    c.set_device(devices[u]);
+    c.set_verbose(verbose_eng); } }
 
-static bool play_update(char *line, USIEngine &c, uint print_csa) noexcept {
+bool Pipe::play_update(char *line, class USIEngine &c) noexcept {
   NodeRec &node = c.node;
   int id = c.get_id();
   assert(line && 0 <= id);
@@ -267,21 +282,22 @@ static bool play_update(char *line, USIEngine &c, uint print_csa) noexcept {
 
   if (actionPlay.is_move()) {
     time_point<system_clock> time_now = system_clock::now();
-    auto _f = duration_cast<milliseconds>(time_now - c.time_last).count();
-    float f = static_cast<float>(_f);
+    auto rep  = duration_cast<milliseconds>(time_now - c.time_last).count();
+    double fms = static_cast<double>(rep);
     if (speed_th_1to2 < ++c.speed_nmove) c.speed_rate = speed_update_rate2;
-    c.speed_average += c.speed_rate * (f - c.speed_average);
+    c.speed_average += c.speed_rate * (fms - c.speed_average);
     c.time_last = time_now;
 
     node.startpos += " ";
     node.startpos += str_move_usi;
     node.record   += node.get_turn().to_str();
-    if (id == 0 && 0 < print_csa) {
-      cout << node.get_turn().to_str() << actionPlay.to_str(SAux::csa)
-	   << " (" << f << "ms)";
-      if ((c.nmove % print_csa) == print_csa - 1U) cout << "\n";
-      else                                         cout << " ";
-      cout.flush(); }
+    if (id == 0) {
+      char buf[256];
+      sprintf(buf, " (%5.0fms)", fms);
+      string smove = node.get_turn().to_str();
+      smove += actionPlay.to_str(SAux::csa);
+      smove += buf;
+      _moves_id0.push(std::move(smove)); }
     c.nmove     += 1U;
     node.record += actionPlay.to_str(SAux::csa);
     
@@ -333,17 +349,17 @@ static bool play_update(char *line, USIEngine &c, uint print_csa) noexcept {
     close_flush(c);
     die(ERR_INT("bad counts (engine no. %d)", id)); }
   node.take_action(actionPlay);
-  if (node.is_nyugyoku()) node.take_action(SAux::windecl);
+  if (node.get_type().is_interior() && node.is_nyugyoku())
+    node.take_action(SAux::windecl);
   assert(node.ok());
   return true; }
 
 void Pipe::wait() noexcept {
-  bool out_speed = false;
   bool has_conn = Client::get().has_conn();
   _selector.reset();
   for (uint u = 0; u < _nchild; ++u) {
     USIEngine &c = _children[u];
-    if (c.is_closed() && has_conn) engine_start(c, _cname, _print_csa);
+    if (c.is_closed() && has_conn) engine_start(c, _cname);
     _selector.add(c); }
 
   _selector.wait(0, 500U);
@@ -363,7 +379,7 @@ void Pipe::wait() noexcept {
 	if (!c.ofs) die(ERR_INT("cannot write to log (engine no. %d)",
 				c.get_id()));
 	
-	if (play_update(line, c, _print_csa)) {
+	if (play_update(line, c)) {
 	  if (c.node.get_type().is_term()) engine_out(c, "quit");
 	  else {
 	    engine_out(c, "%s", c.node.startpos.c_str());
@@ -380,20 +396,15 @@ void Pipe::wait() noexcept {
       c.node.record += c.node.get_type().to_str();
       c.node.record += "\n";
       if (c.get_id() == 0) {
-	out_speed = true;
-	if (_print_csa) cout << "%" << c.node.get_type().to_str() << endl; }
+	  string s = "%";
+	  s += c.node.get_type().to_str();
+	  _moves_id0.push(s); }
 	
       Client::get().add_rec(c.node.record.c_str(), c.node.record.size());
+      _ngen_records += 1U;
       write_record(c.node.record.c_str(), c.node.record.size(),
 		   _dname_csa.get_fname(), _max_csa);
-      close_flush(c); } }
-
-  if (out_speed && _print_speed) {
-    cout << "Average Speed:" << endl;
-    for (uint u = 0; u < _nchild; ++u) {
-      USIEngine &c = _children[u];
-      cout << "- Device " << c.get_device() << " "
-	   << static_cast<uint>(c.speed_average) << "ms/move" << endl; } } }
+      close_flush(c); } } }
 
 void Pipe::end() noexcept {
   for (uint u = 0; u < _nchild; ++u) {
@@ -401,16 +412,24 @@ void Pipe::end() noexcept {
     if (c.is_closed()) continue;
     close_flush(c); } }
 
-void write_record(const char *prec, size_t len,
-		  const char *dname, uint max_csa) noexcept {
-  if (max_csa == 0) return;
-  assert(prec && dname);
-  FNameID fname = grab_max_file(dname, fmt_csa_scn);
-  int64_t id = fname.get_id() + 1;
-  if (static_cast<int64_t>(max_csa) < id) return;
-  fname.clear_fname();
-  fname.add_fname(dname);
-  fname.add_fmt_fname(fmt_csa, id);
-  ofstream ofs(fname.get_fname(), ios::binary | ios::trunc);
-  ofs.write(prec, len);
-  if (!ofs) die(ERR_INT("cannot write %s", fname.get_fname())); }
+bool Pipe::get_moves_id0(string &move) noexcept {
+  if (_moves_id0.empty()) return false;
+  move.swap(_moves_id0.front());
+  _moves_id0.pop();
+  return true; }
+
+bool Pipe::is_closed(uint u) const noexcept {
+  assert(u < _nchild);
+  return _children[u].is_closed(); }
+
+uint Pipe::get_pid(uint u) const noexcept {
+  assert(u < _nchild);
+  return _children[u].get_pid(); }
+
+uint Pipe::get_nmove(uint u) const noexcept {
+  assert(u < _nchild);
+  return _children[u].nmove; }
+
+double Pipe::get_speed_average(uint u) const noexcept {
+  assert(u < _nchild);
+  return _children[u].speed_average; }

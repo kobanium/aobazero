@@ -46,8 +46,8 @@ using namespace Log;
 using namespace IOAux;
 
 constexpr uint deny_log_interval   = 3U; // in sec
-constexpr char fname_deny_list[]   = "deny_list.cfg";
-constexpr char fname_ignore_list[] = "ignore_list.cfg";
+constexpr char fname_deny_list[]   = "deny-list.cfg";
+constexpr char fname_ignore_list[] = "ignore-list.cfg";
 
 enum Cmd { RecvRec = 0, SendInfo = 1, SendWght = 2 };
 enum class StatSend { DoNothing, SendInfo, SendWght, SendHeader };

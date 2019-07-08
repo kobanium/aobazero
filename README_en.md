@@ -26,17 +26,17 @@ and Chess [LCZero](https://lczero.org). Both projects have achieved super human 
 
 For machine without GPU
 ```
-aobazero-1.0-w64-cpu-only.zip
+aobazero-1.3-w64-cpu-only.zip
 ```
 For machine with GPU
 ```
-aobazero-1.0-w64-opencl.zip
+aobazero-1.3-w64-opencl.zip
 ```
 Download it, unzip, and run click_me.bat.
 
 For Linux,
 ```
-aobazero-1.0.tar.gz
+aobazero-1.3.tar.gz
 ```
 Unzip it, make, then run
 ```
@@ -46,15 +46,15 @@ Please see readme.txt for details.
 
 # I'd like to play with ShogiDokoro.
 Download CPU version and run click_me.bat.
-After a while, it downloads the latest network weight file, and "PI" is displayed, and self-play starts. Input "Ctrl + C" immediately. (signal 1 caught) is displayed and it will stop after a while.
+After a while, it downloads the latest network weight file, and "self-play start" is displayed, and self-play starts. Input "Ctrl + C" immediately. (signal 1 caught) is displayed and it will stop after a while.
 
 weight_save/w0000000000468.txt will be created. Its size is about 230MB.
 (the numbers "468" will be different.)
 
-Edit aobaz.bat that is in aobazero-1.0-w64-cpu-only.zip.
+Edit aobaz.bat that is in aobazero-1.3-w64-cpu-only.zip.
 The last line is like this,
 ```
-bin/aobaz -q -p 30 -w weight_save\w000000000467.txt
+bin/aobaz -q -i -p 30 -w weight_save\w000000000467.txt
 ```
 Rewrite this "467" according to the file name actually downloaded, and save.
 Register aobaz.bat as a engine in ShogiDokoro.
