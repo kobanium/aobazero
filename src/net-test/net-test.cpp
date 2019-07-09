@@ -47,7 +47,7 @@ using uchar  = unsigned char;
 using namespace ErrAux;
 using namespace SAux;
 
-constexpr uint size_batch = 14U;
+constexpr uint size_batch = 7U;
 constexpr double epsilon = 1e-4;
 
 static double elapsed  = 0.0;

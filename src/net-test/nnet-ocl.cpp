@@ -509,7 +509,7 @@ static double measure_send_global(const OCL::Queue &queue, size_t size) {
   assert(dev.ok() && 0 < size);
   double elapsed = 0.0;
   unique_ptr<uchar> data(new uchar [size]);
-  fill_n(data.get(), size, 0x55U);
+  fill_n(data.get(), size, '\x55');
   OCL::Memory mem_a = queue.gen_mem_r(size);
   for (uint usample = 0; usample < tune_sample_size; ++usample) {
     sleep_for(microseconds(1000U));
@@ -525,7 +525,7 @@ static double measure_send_pinned(const OCL::Queue &queue, size_t size) {
   assert(dev.ok() && 0 < size);
   double elapsed = 0.0;
   unique_ptr<uchar> data(new uchar [size]);
-  fill_n(data.get(), size, 0x55U);
+  fill_n(data.get(), size, '\x55');
   OCL::Memory mem_a = queue.gen_mem_r(size);
   OCL::Memory mem_b = queue.gen_mem_map_r(size);
   void *ptr = queue.push_map_w(mem_b, size);
@@ -547,7 +547,7 @@ static double measure_send_zcopy(const OCL::Queue &queue, size_t size) {
   assert(dev.ok() && 0 < size);
   double elapsed = 0.0;
   unique_ptr<uchar> data(new uchar [size]);
-  fill_n(data.get(), size, 0x55U);
+  fill_n(data.get(), size, '\x55');
   OCL::Memory mem_a = queue.gen_mem_map_r(size);
   for (uint usample = 0; usample < tune_sample_size; ++usample) {
     sleep_for(microseconds(1000U));
@@ -670,7 +670,7 @@ static double measure_sgemm_batch(const OCL::Queue &queue,
   return elapsed / static_cast<double>(tune_sample_size); }
 
 void ManageSgemmBatch::start(const OCL::Device &dev, const OCL::Queue &queue,
-			     bool transa, bool transb, uint nbatch, uint nm0,
+			     bool, bool, uint nbatch, uint nm0,
 			     uint nn0, uint nk0) noexcept {
   assert(dev.ok() && queue.ok() && 0 < nbatch && 0 < nm0 && 0 < nn0
 	 && 0 < nk0);
@@ -694,12 +694,12 @@ void ManageSgemmBatch::start(const OCL::Device &dev, const OCL::Queue &queue,
     Param param = params.front();
     params.pop_front();
     
-    double elapsed;
+    double elapsed = DBL_MAX;
     bool flag_error = false;
     try {
       elapsed = measure_sgemm_batch(qtmp, param.nl, param.npm, param.npn,
 				    param.npk, nbatch, nm0, nn0, nk0); }
-    catch (std::exception &e) { flag_error = true; }
+    catch (...) { flag_error = true; }
     
     if (! flag_error) {
       if (elapsed < _time) { _time = elapsed; _param = param; }

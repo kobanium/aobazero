@@ -18,7 +18,6 @@ class ManageSend {
   OCL::Memory _mem_a, _mem_b;
   const char *_method;
   void *_ptr;
-  size_t size;
 
 public:
   ManageSend() noexcept : _method(nullptr), _ptr(nullptr) {}
@@ -31,6 +30,7 @@ public:
 };
 
 class ManageSgemmBatch {
+  using uint = unsigned int;
   struct Param {
     uint nl, npm, npn, npk;
     bool operator<=(const Param &p) {
