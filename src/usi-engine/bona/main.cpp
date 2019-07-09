@@ -51,6 +51,7 @@ main()
   }
   init_seqence_hash();
   init_yss_zero();
+//{ void test_dist_loop(); test_dist_loop(); exit(1); }
 #endif
 
   if ( ini( ptree ) < 0 )

@@ -173,7 +173,7 @@ unsigned long rand_m521()
 	return mx521[rnd521_count];
 }
 #else
-//std::random_device seed_gen;
+
 std::mt19937 get_mt_rand;
 
 void init_rnd521(unsigned long u_seed)
@@ -723,9 +723,9 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 			if ( s > r ) break;
 		}
 #else
-		static std::mt19937_64 mt64;
+//		static std::mt19937_64 mt64;
 		static std::uniform_real_distribution<> dist(0, 1);
-		double indicator = dist(mt64);
+		double indicator = dist(get_mt_rand);
 
 		double inv_temperature = 1.0 / cfg_random_temp;
 		double wheel[MAX_LEGAL_MOVES];
@@ -1127,7 +1127,6 @@ std::string keep_cmd_line;
 
 int getCmdLineParam(int argc, char *argv[])
 {
-//{ void test_dist_loop(); test_dist_loop(); exit(1); }
 	int i;
 	for (i=1; i<argc; i++) {
 		char sa[2][TMP_BUF_LEN];
@@ -1332,15 +1331,16 @@ void usi_newgame()
 
 void test_dist()
 {
+	static std::mt19937_64 mt64;
+//	std::random_device rd;
+//	mt64.seed(rd());
 	const int N = 10;
 	int count[N];
 	for (int i=0; i<N; i++) count[i] = 0;
 	for (int loop=0; loop < 1000; loop++) {
-		static std::mt19937_64 mt64;
-		std::random_device rd;
-		mt64.seed(rd());
 		static std::uniform_real_distribution<> dist(0, 1);
-		double indicator = dist(mt64);
+//		double indicator = dist(mt64);
+		double indicator = dist(get_mt_rand);
 
 		double inv_temperature = 1.0 / 1.0;
 		double wheel[N];
