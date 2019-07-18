@@ -80,6 +80,7 @@ OCL::Memory::Memory(Memory_impl &&m_impl)
 OCL::Memory::Memory(Memory &&m) : _impl(move(m._impl)) {}
 Memory &OCL::Memory::operator=(Memory &&m) {
   assert(m.ok()); _impl = move(m._impl); return *this; }
+void OCL::Memory::clear() { _impl.reset(nullptr); }
 bool OCL::Memory::ok() const { return _impl && _impl->ok(); }
 const Memory_impl &OCL::Memory::get() const { return *_impl; }
 
@@ -225,11 +226,11 @@ public:
     cl_int ret = clFinish(_queue);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clFinish() failure. Error Code: %d", ret); }
-  void *push_map(const Memory_impl &m_impl, const cl_map_flags &flags,
-		 size_t size) const {
+  void *map(const Memory_impl &m_impl, const cl_map_flags &flags,
+	    size_t size) const {
     assert(m_impl.ok());
     cl_int ret;
-    void *p = clEnqueueMapBuffer(_queue, m_impl.get(), CL_FALSE, flags,
+    void *p = clEnqueueMapBuffer(_queue, m_impl.get(), CL_TRUE, flags,
 				 0, size, 0, nullptr, nullptr, &ret);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clEnqueueMapBuffer() failure. Error Code: %d", ret);
@@ -254,7 +255,7 @@ public:
 				     p, 0, nullptr, nullptr);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clEnqueueReadBuffer() failed. Error Code: %d", ret); }
-
+  /*
   void push_kernel(const Kernel_impl &k_impl, size_t size_global) const {
     assert(k_impl.ok() && 0 < size_global);
     cl_int ret;
@@ -272,7 +273,29 @@ public:
 	if (size_global == 0) return;
 	off_g += size_g; }
       size_local /= 2U; } }
-  
+  */
+  void push_kernel(const Kernel_impl &k_impl, size_t size_global) const {
+    assert(k_impl.ok() && 0 < size_global);
+    cl_int ret;
+    size_t size_local
+      = k_impl.gen_info<size_t>(CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE);
+    size_t size_g = (size_global / size_local) * size_local;
+
+    if (size_g) {
+      size_global -= size_g;
+      ret = clEnqueueNDRangeKernel(_queue, k_impl.get(), 1U, nullptr, &size_g,
+				   &size_local, 0, nullptr, nullptr);
+      if (ret != CL_SUCCESS)
+	throw ERR_INT("clEnqueNDRangeKernel() failed. Error Code: %d", ret); }
+    
+    if (size_global == 0) return;
+
+    ret = clEnqueueNDRangeKernel(_queue, k_impl.get(), 1U, &size_g,
+				 &size_global, &size_global, 0, nullptr,
+				 nullptr);
+    if (ret != CL_SUCCESS)
+      throw ERR_INT("clEnqueNDRangeKernel() failed. Error Code: %d", ret); }
+
   void push_ndrange_kernel(const Kernel_impl &k_impl, uint dim,
 			   const size_t *size_g, const size_t *size_l) const {
     assert(k_impl.ok() && 0 < dim && dim < 4 && size_g && size_l);
@@ -293,21 +316,27 @@ bool OCL::Queue::ok() const { return _impl && _impl->ok(); }
 
 Program OCL::Queue::gen_program(const char *code) const {
   return Program(_impl->gen_program(code)); }
-Memory OCL::Queue::gen_mem_map_r(size_t size) const {
-  return Memory(_impl->gen_memory(CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR,
+Memory OCL::Queue::gen_mem_map_hw_dr(size_t size) const {
+  return Memory(_impl->gen_memory((CL_MEM_HOST_WRITE_ONLY | CL_MEM_READ_ONLY
+				   | CL_MEM_ALLOC_HOST_PTR), size)); }
+Memory OCL::Queue::gen_mem_map_hr_dw(size_t size) const {
+  return Memory(_impl->gen_memory((CL_MEM_HOST_READ_ONLY | CL_MEM_WRITE_ONLY
+				   | CL_MEM_ALLOC_HOST_PTR), size)); }
+Memory OCL::Queue::gen_mem_hw_dr(size_t size) const {
+  return Memory(_impl->gen_memory(CL_MEM_HOST_WRITE_ONLY | CL_MEM_READ_ONLY,
 				  size)); }
-Memory OCL::Queue::gen_mem_r(size_t size) const {
-  return Memory(_impl->gen_memory(CL_MEM_READ_ONLY, size)); }
-Memory OCL::Queue::gen_mem_w(size_t size) const {
-  return Memory(_impl->gen_memory(CL_MEM_WRITE_ONLY, size)); }
-Memory OCL::Queue::gen_mem_rw(size_t size) const {
-  return Memory(_impl->gen_memory(CL_MEM_READ_WRITE, size)); }
-
+Memory OCL::Queue::gen_mem_hr_dw(size_t size) const {
+  return Memory(_impl->gen_memory(CL_MEM_HOST_READ_ONLY | CL_MEM_WRITE_ONLY,
+				  size)); }
+Memory OCL::Queue::gen_mem_drw(size_t size) const {
+  return Memory(_impl->gen_memory(CL_MEM_HOST_NO_ACCESS | CL_MEM_READ_WRITE,
+				  size)); }
 void OCL::Queue::finish() const { _impl->finish(); }
-void *OCL::Queue::push_map_r(const Memory &m, size_t size) const {
-  assert(m.ok()); return _impl->push_map(m.get(), CL_MAP_READ, size); }
-void *OCL::Queue::push_map_w(const Memory &m, size_t size) const {
-  assert(m.ok()); return _impl->push_map(m.get(), CL_MAP_WRITE, size); }
+void *OCL::Queue::map_w(const Memory &m, size_t size) const {
+  assert(m.ok()); return _impl->map(m.get(), CL_MAP_WRITE_INVALIDATE_REGION,
+				    size); }
+void *OCL::Queue::map_r(const Memory &m, size_t size) const {
+  assert(m.ok()); return _impl->map(m.get(), CL_MAP_READ, size); }
 void OCL::Queue::push_unmap(const Memory &m, void *ptr) const {
   assert(m.ok() && ptr); _impl->push_unmap(m.get(), ptr); }
 void OCL::Queue::push_write(const Memory &m, size_t size, const void *p)

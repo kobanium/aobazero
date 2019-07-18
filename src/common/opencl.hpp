@@ -39,6 +39,7 @@ namespace OCL {
     Memory(Memory &&m);
     Memory &operator=(Memory &&m);
     Memory_impl &get();
+    void clear();
     const Memory_impl &get() const;
     bool ok() const;
   };
@@ -87,12 +88,13 @@ namespace OCL {
     bool ok() const;
     void finish() const;
     Program gen_program(const char *code) const;
-    Memory gen_mem_map_r(size_t size) const;
-    Memory gen_mem_r(size_t size) const;
-    Memory gen_mem_w(size_t size) const;
-    Memory gen_mem_rw(size_t size) const;
-    void *push_map_r(const Memory &m, size_t size) const;
-    void *push_map_w(const Memory &m, size_t size) const;
+    Memory gen_mem_map_hw_dr(size_t size) const;
+    Memory gen_mem_map_hr_dw(size_t size) const;
+    Memory gen_mem_hw_dr(size_t size) const;
+    Memory gen_mem_hr_dw(size_t size) const;
+    Memory gen_mem_drw(size_t size) const;
+    void *map_w(const Memory &m, size_t size) const;
+    void *map_r(const Memory &m, size_t size) const;
     void push_unmap(const Memory &m, void *ptr) const;
     void push_write(const Memory &m, size_t size, const void *p) const;
     void push_read(const Memory &m, size_t size, void *p) const;

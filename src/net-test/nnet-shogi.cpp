@@ -108,3 +108,15 @@ void NodeNN<Len>::encode_input(float *p) const noexcept {
   store_plane(p, 361U, (1.0f / 512.0f) * static_cast<float>(len_path)); }
 
 template class NodeNN<Param::maxlen_play>;
+
+/*
+  channel 
+  0  - 13 black position
+  14 - 27 white position
+  28 - 34 black hand (fill)
+  35 - 41 white hand (fill)
+  42 - 44 rep        (fill)
+
+  360     0: black, 1: white (fill)
+  361     length             (fill)
+ */
