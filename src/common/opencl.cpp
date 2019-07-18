@@ -144,6 +144,7 @@ cl_ulong OCL::Kernel::gen_private_mem_size() const {
   return _impl->gen_info<cl_ulong>(CL_KERNEL_PRIVATE_MEM_SIZE); }
 
 // cl_kernel
+#include <iostream>
 class OCL::Program_impl {
   cl_program _pg;
 public:
@@ -157,7 +158,7 @@ public:
 
     ret = clBuildProgram(_pg, 0, nullptr, options, nullptr, nullptr);
     if (ret == CL_SUCCESS) return;
-  
+
     size_t size;
     ret = clGetProgramBuildInfo(_pg, dev, CL_PROGRAM_BUILD_LOG, 0, nullptr,
 				&size);
@@ -202,19 +203,20 @@ public:
 				       _queue(nullptr) {
     assert(id);
     cl_int ret;
-    _context = clCreateContext(nullptr, 1, &id, nullptr, nullptr, &ret);
+    _context = clCreateContext(nullptr, 1, &_id, nullptr, nullptr, &ret);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clCreateContext() failed. Error Code: %d", ret);
 
-    _queue = clCreateCommandQueue(_context, id, 0, &ret);
+    _queue = clCreateCommandQueue(_context, _id, 0, &ret);
     if (ret != CL_SUCCESS) {
       if (_context) clReleaseContext(_context);
       throw ERR_INT("clCreateContext() failed. Error Code: %d", ret); } }
   ~Queue_impl() {
     if (_queue) clReleaseCommandQueue(_queue);
     if (_context) clReleaseContext(_context); }
-  Queue_impl(Queue_impl &&q_impl) : _queue(q_impl._queue),
+  Queue_impl(Queue_impl &&q_impl) : _id(q_impl._id), _queue(q_impl._queue),
 				    _context(q_impl._context) {
+    q_impl._id      = nullptr;
     q_impl._queue   = nullptr;
     q_impl._context = nullptr; }
   Program_impl gen_program(const char *code) const {

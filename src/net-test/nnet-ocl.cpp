@@ -183,10 +183,10 @@ __kernel void compute_matV(__global const float *fin, __global float *matV) {
   int x0 = uw * LEN_TILE_OUT - PAD;
   float md[LEN_TILE_IN][LEN_TILE_IN];
   for (int y = 0; y < LEN_TILE_IN; ++y)
-    for (int x = 0; x < LEN_TILE_IN; ++x)
+    for (int x = 0; x < LEN_TILE_IN; ++x) {
       if (0 <= y0 + y && y0 + y < HEIGHT && 0 <= x0 + x && x0 + x < WIDTH)
         md[y][x] = fin[chb * SIZE_PLANE + (y0 + y) * WIDTH + x0 + x];
-      else md[y][x] = 0.0f;
+      else md[y][x] = 0.0f; }
 
   uint uca = NK * NN * LEN_TILE_IN;
   uint ucb = NK * NN;
@@ -1735,7 +1735,6 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
 				 + NNAux::nch_input * NNAux::size_plane)]);
   _ptr_result.reset(new float [maxsize_batch * (NNAux::nmove + 1U)]);
 
-  for (auto &f : _fslot) f.reset(new float [maxsize_batch * _maxsize_out]);
   _cl_matV   = _queue.gen_mem_drw(sizeof(float) * sizeV);
   _cl_matM   = _queue.gen_mem_drw(sizeof(float) * sizeM);
   _cl_bypass = _queue.gen_mem_drw(sizeof(float)
@@ -1899,9 +1898,6 @@ void NNetOCL::load(const vector<pair<uint, row_t>> &wght) noexcept {
 		    wght[index + 12U].second.get());
   _queue.finish();
 
-  _value3_weight.reset(new float [_value3_nout * _value3_nin]);
-  copy_n(wght[index + 12U].second.get(), _value3_nout * _value3_nin,
-	 _value3_weight.get());
   _value3_bias.reset(new float [_value3_nout]);
   copy_n(wght[index + 13U].second.get(), _value3_nout, _value3_bias.get()); }
 
@@ -1935,8 +1931,6 @@ void NNetOCL::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
     _mng_compute_matA_join.push(_queue, _cl_reswghts[ulayer + 1U].mean,
 				_cl_reswghts[ulayer + 1U].sd_inv); }
 
-  float *f1 = _fslot[0].get();
-  float *f2 = _fslot[1].get();
   // head part
   // in:  f1[_policy1_nout + _value1_nout][size_batch][size_plane]
   // out: f2[size_batch][_value1_nout][size_plane]

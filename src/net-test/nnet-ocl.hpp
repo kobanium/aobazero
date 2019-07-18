@@ -197,11 +197,10 @@ class NNetOCL {
   OCL::Memory _cl_value2_wght, _cl_value3_wght;
   std::vector<CLResWght> _cl_reswghts;
 
-  row_t _fslot[2];
   uint _maxsize_batch, _maxsize_out, _resnet_nout, _nres_block;
   uint _head1_nout, _policy1_nout, _value1_nout, _policy2_nin;
   uint _value2_nin, _value2_nout, _value3_nin, _value3_nout;
-  row_t _value3_bias, _value3_weight;
+  row_t _value3_bias;
   void load(const std::vector<std::pair<uint, row_t>> &wght) noexcept;
 
 public:
