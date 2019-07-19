@@ -44,6 +44,7 @@ using std::swap;
 using std::unique_ptr;
 using std::vector;
 using row_t  = unique_ptr<float []>;
+using uint   = unsigned int;
 using ushort = unsigned short;
 using uchar  = unsigned char;
 using namespace ErrAux;
@@ -639,7 +640,7 @@ const string gen_code_sgemm(uint nm, uint nn, uint nk, uint nl, uint nlfm,
     str += "__kernel __attribute__((reqd_work_group_size(1,"
       + to_string(nlfm) + ",1)))";
     str += code_sgemm_n1; }
-    else {
+  else {
     str += "#define NM         " + to_string(nm)   + "U\n";
     str += "#define NN         " + to_string(nn)   + "U\n";
     str += "#define NK         " + to_string(nk)   + "U\n";
@@ -712,7 +713,8 @@ static double measure_send_global(const OCL::Queue &queue, size_t size) {
     queue.push_write(mem, size, data.get());
     queue.finish();
     steady_clock::time_point end = steady_clock::now();
-    count += duration_cast<microseconds>(end - start).count(); }
+    count += static_cast<uint>(duration_cast<microseconds>(end
+							   - start).count()); }
   return (static_cast<double>(count)
 	  / static_cast<double>(tune_sample_size)); }
 
@@ -730,7 +732,8 @@ static double measure_send_pinned(const OCL::Queue &queue, size_t size) {
     queue.push_write(mem_a, size, ptr);
     queue.finish();
     steady_clock::time_point end = steady_clock::now();
-    count += duration_cast<microseconds>(end - start).count(); }
+    count += static_cast<uint>(duration_cast<microseconds>(end
+							   - start).count()); }
   queue.push_unmap(mem_b, ptr);
   queue.finish();
   return (static_cast<double>(count)
@@ -754,7 +757,8 @@ static double measure_send_zcopy(const OCL::Queue &queue, size_t size) {
     queue.push_unmap(mem, ptr);
     queue.finish();
     steady_clock::time_point end = steady_clock::now();
-    count += duration_cast<microseconds>(end - start).count(); }
+    count += static_cast<uint>(duration_cast<microseconds>(end
+							   - start).count()); }
   return (static_cast<double>(count)
 	  / static_cast<double>(tune_sample_size)); }
 
@@ -853,7 +857,8 @@ static double measure_recv_global(const OCL::Queue &queue, size_t size) {
     queue.push_read(mem, size, data.get());
     queue.finish();
     steady_clock::time_point end = steady_clock::now();
-    count += duration_cast<microseconds>(end - start).count(); }
+    count += static_cast<uint>(duration_cast<microseconds>(end
+							   - start).count()); }
   return (static_cast<double>(count)
 	  / static_cast<double>(tune_sample_size)); }
 
@@ -871,7 +876,8 @@ static double measure_recv_pinned(const OCL::Queue &queue, size_t size) {
     queue.push_read(mem, size, ptr);
     queue.finish();
     steady_clock::time_point end = steady_clock::now();
-    count += duration_cast<microseconds>(end - start).count(); }
+    count += static_cast<uint>(duration_cast<microseconds>(end
+							   - start).count()); }
   queue.push_unmap(mem_pin, ptr);
   queue.finish();
   return (static_cast<double>(count)
@@ -894,7 +900,8 @@ static double measure_recv_zcopy(const OCL::Queue &queue, size_t size) {
     queue.push_unmap(mem, ptr);
     queue.finish();
     steady_clock::time_point end = steady_clock::now();
-    count += duration_cast<microseconds>(end - start).count(); }
+    count += static_cast<uint>(duration_cast<microseconds>(end
+							   - start).count()); }
   return (static_cast<double>(count)
 	  / static_cast<double>(tune_sample_size)); }
 /*
@@ -1003,10 +1010,9 @@ static double measure_compute_matM(const OCL::Queue &queue, uint nl,
     queue.push_ndrange_kernel(ker, 3U, size_g, size_l);
   queue.finish();
   steady_clock::time_point end = steady_clock::now();
-  uint count = duration_cast<microseconds>(end - start).count();
-
-  return (static_cast<double>(count)
-	  / static_cast<double>(tune_sample_size)); }
+  double elapsed = static_cast<double>
+    (duration_cast<microseconds>(end - start).count());
+  return (elapsed / static_cast<double>(sample_size)); }
 
 void ManageComputeMatM::start(const OCL::Device &dev, const OCL::Queue &queue,
 			      uint nbatch, uint nm0, uint nn0, uint nk0)
@@ -1014,10 +1020,11 @@ void ManageComputeMatM::start(const OCL::Device &dev, const OCL::Queue &queue,
   assert(dev.ok() && queue.ok() && 0 < nbatch && 0 < nm0 && 0 < nn0
 	 && 0 < nk0);
   deque<Param> params, params_candi;
-  uint wgmin, nlstart, nlfmmax;
+  uint wgmin, wgmax, nlstart, nlfmmax;
   uint mmax  = ceil_power2(nm0);
   uint nmax  = ceil_power2(nn0);
   uint kmax  = ceil_power2(nk0);
+  wgmax   = static_cast<uint>(dev.gen_max_work_group_size());
   wgmin   = max(mmax*nmax/2U, 1U);
   wgmin   = min(wgmin, 16U);
   nlstart = min(mmax, nmax);
@@ -1030,7 +1037,7 @@ void ManageComputeMatM::start(const OCL::Device &dev, const OCL::Queue &queue,
     if (mmax < nl || nmax < nl || kmax < nl) continue;
     for (uint nlfm = 1U; nlfm <= nlfmmax; nlfm *= 2U) {
       if (4096 < nl*nl*nlfm || mmax < nl*nlfm || kmax < nl*nlfm
-	  || nl*nl*nlfm < wgmin) continue;
+	  || nl*nl*nlfm < wgmin || wgmax < nl*nl*nlfm) continue;
       for (uint npm = 1U; npm <= min(32U, nl); npm *= 2U) {
 	if (mmax < nl * nlfm * npm) continue;
 	for (uint npn = 1U; npn <= min(32U, nl); npn *= 2U) {
@@ -1059,24 +1066,29 @@ void ManageComputeMatM::start(const OCL::Device &dev, const OCL::Queue &queue,
     else {
       params_candi.push_back({elapsed,
 	    param.nl, param.nlfm, param.npm, param.npn, param.npk});
-      if (elapsed < _time) _time = elapsed; } }
+      if (elapsed < _time) { _time = elapsed; _param = param; } } }
+  if (_time == DBL_MAX) die(ERR_INT("ManageComputeMatM() failed."));
 
+  double time_max = min(_time * 2.0, _time + 5000.0);
   for (auto it = params_candi.begin(); it != params_candi.end(); ) {
-    if (_time * 2.0 <= it->time) it = params_candi.erase(it);
+    if (time_max <= it->time) it = params_candi.erase(it);
     else ++it; }
 
-  qtmp = dev.gen_queue();
-  _time = DBL_MAX;
-  while (! params_candi.empty()) {
-    Param param = params_candi.front();
-    params_candi.pop_front();
-    double elapsed = measure_compute_matM(qtmp, param.nl, param.nlfm,
-					  param.npm, param.npn, param.npk,
-					  nbatch, nm0, nn0, nk0,
-					  tune_sample_size);
-    if (_time <= elapsed) continue;
-    _time  = elapsed;
-    _param = param; }
+  uint sample_size = static_cast<uint>(100000.0 / _time);
+  sample_size = min(sample_size, tune_sample_size);
+  if (1U < sample_size) {
+    qtmp = dev.gen_queue();
+    _time = DBL_MAX;
+    while (! params_candi.empty()) {
+      Param param = params_candi.front();
+      params_candi.pop_front();
+      double elapsed = measure_compute_matM(qtmp, param.nl, param.nlfm,
+					    param.npm, param.npn, param.npk,
+					    nbatch, nm0, nn0, nk0,
+					    sample_size);
+      if (_time <= elapsed) continue;
+      _time  = elapsed;
+      _param = param; } }
   if (_time == DBL_MAX) die(ERR_INT("ManageComputeMatM() failed."));
 
   uint nm = ceil_multi(nm0, _param.nl * _param.nlfm * _param.npm);
@@ -1157,25 +1169,24 @@ static double measure_sgemm(const OCL::Queue &queue, uint nl, uint nlfm,
     queue.push_ndrange_kernel(ker, 3U, size_g, size_l);
   queue.finish();
   steady_clock::time_point end = steady_clock::now();
-  uint count = duration_cast<microseconds>(end - start).count();
-
-  return (static_cast<double>(count)
-	  / static_cast<double>(tune_sample_size)); }
+  double elapsed = static_cast<double>
+    (duration_cast<microseconds>(end - start).count());
+  return (elapsed / static_cast<double>(sample_size)); }
 
 void ManageSgemm::start(const OCL::Device &dev, const OCL::Queue &queue,
-			bool transa, bool transb, uint nm0, uint nn0, uint nk0,
+			bool, bool, uint nm0, uint nn0, uint nk0,
 			uint offa0, uint lda0, uint offb0, uint ldb0,
 			uint offc0, uint ldc0, bool do_bias_ReLU) noexcept {
-  assert(transa == true && transb == false);
   assert(0 < nm0 && 0 < nn0 && 0 < nk0);
   assert(0 < lda && 0 < ldb && 0 < ldc);
   deque<Param> params, params_candi;
-  uint wgmin, nlstart, nlfmmax;
+  uint wgmin, wgmax, nlstart, nlfmmax;
   uint mmax  = ceil_power2(nm0);
   uint nmax  = ceil_power2(nn0);
   uint kmax  = ceil_power2(nk0);
 
   _do_bias_ReLU = do_bias_ReLU;
+  wgmax   = static_cast<uint>(dev.gen_max_work_group_size());
   wgmin   = max(mmax*nmax/2U, 1U);
   wgmin   = min(wgmin, 16U);
   nlstart = min(mmax, nmax);
@@ -1189,7 +1200,7 @@ void ManageSgemm::start(const OCL::Device &dev, const OCL::Queue &queue,
     if (mmax < nl || nmax < nl || kmax < nl) continue;
     for (uint nlfm = 1U; nlfm <= nlfmmax; nlfm *= 2U) {
       if (4096 < nl*nl*nlfm || mmax < nl*nlfm || kmax < nl*nlfm
-	  || nl*nl*nlfm < wgmin) continue;
+	  || nl*nl*nlfm < wgmin || wgmax < nl*nl*nlfm) continue;
       for (uint npm = 1U; npm <= min(32U, nl); npm *= 2U) {
 	if (mmax < nl * nlfm * npm) continue;
 	for (uint npn = 1U; npn <= min(32U, nl); npn *= 2U) {
@@ -1216,23 +1227,28 @@ void ManageSgemm::start(const OCL::Device &dev, const OCL::Queue &queue,
     else {
       params_candi.push_back({elapsed,
 	    param.nl, param.nlfm, param.npm, param.npn, param.npk});
-      if (elapsed < _time) _time = elapsed; } }
+      if (elapsed < _time) { _time = elapsed; _param = param; } } }
+  if (_time == DBL_MAX) die(ERR_INT("ManageComputeMatM() failed."));
 
+  double time_max = min(_time * 2.0, _time + 5000.0);
   for (auto it = params_candi.begin(); it != params_candi.end(); ) {
-    if (_time * 2.0 <= it->time) it = params_candi.erase(it);
+    if (time_max <= it->time) it = params_candi.erase(it);
     else ++it; }
-
-  qtmp = dev.gen_queue();
-  _time = DBL_MAX;
-  while (! params_candi.empty()) {
-    Param param = params_candi.front();
-    params_candi.pop_front();
-    double elapsed = measure_sgemm(qtmp, param.nl, param.nlfm, param.npm,
-				   param.npn, param.npk, nm0, nn0, nk0,
-				   tune_sample_size);
-    if (_time <= elapsed) continue;
-    _time  = elapsed;
-    _param = param; }
+  
+  uint sample_size = static_cast<uint>(100000.0 / _time);
+  sample_size = min(sample_size, tune_sample_size);
+  if (1U < sample_size) {
+    qtmp = dev.gen_queue();
+    _time = DBL_MAX;
+    while (! params_candi.empty()) {
+      Param param = params_candi.front();
+      params_candi.pop_front();
+      double elapsed = measure_sgemm(qtmp, param.nl, param.nlfm, param.npm,
+				     param.npn, param.npk, nm0, nn0, nk0,
+				     sample_size);
+      if (_time <= elapsed) continue;
+      _time  = elapsed;
+      _param = param; } }
   if (_time == DBL_MAX) die(ERR_INT("ManageSgemm() failed."));
 
   _nm0 = nm0;
@@ -1264,7 +1280,6 @@ void ManageSgemm::start(const OCL::Device &dev, const OCL::Queue &queue,
   queue.push_kernel(ker_zero_clear, nm * nn);
   queue.finish();
 
-  uint uzero = 0;
   string str =
     "#define NM0   " + to_string(_nm0)  + "\n"
     "#define NN0   " + to_string(_nn0)  + "\n"

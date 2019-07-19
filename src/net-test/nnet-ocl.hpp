@@ -12,6 +12,7 @@
 class FName;
 class ManageSend {
   using uchar = unsigned char;
+  using uint  = unsigned int;
   static constexpr char global_memory[] = "Global Memory";
   static constexpr char pinned_memory[] = "Pinned Memory";
   static constexpr char zero_copy[]     = "Zero Copy";
@@ -37,6 +38,7 @@ public:
 
 class ManageRecv {
   using uchar = unsigned char;
+  using uint  = unsigned int;
   static constexpr char global_memory[] = "Global Memory";
   static constexpr char pinned_memory[] = "Pinned Memory";
   static constexpr char zero_copy[]     = "Zero Copy";
@@ -114,6 +116,7 @@ public:
 };
 
 class ManageComputeMatV {
+  using uint  = unsigned int;
   OCL::Kernel _ker;
   uint _nm;
 public:
@@ -125,6 +128,7 @@ public:
 };
 
 class ManageComputeMatA {
+  using uint  = unsigned int;
   OCL::Kernel _ker;
   uint _nm;
 public:
@@ -138,6 +142,7 @@ public:
 };
 
 class ManageTransformValue2 {
+  using uint  = unsigned int;
   OCL::Kernel _ker;
   uint _nm;
 public:
@@ -149,6 +154,7 @@ public:
 };
 
 class ManageComputeBNReLU {
+  using uint  = unsigned int;
   OCL::Kernel _ker;
   uint _nm;
 public:
@@ -160,6 +166,7 @@ public:
 };
 
 class ManageComputePolicy {
+  using uint  = unsigned int;
   OCL::Kernel _ker;
 public:
   void start(const OCL::Queue &queue, uint nch_in, uint maxsize_batch,
