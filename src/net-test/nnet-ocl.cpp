@@ -9,6 +9,7 @@
 #include <iostream>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 #include <cassert>
@@ -30,6 +31,7 @@ using std::this_thread::sleep_for;
 using std::copy_n;
 using std::fill_n;
 using std::forward;
+using std::make_tuple;
 using std::max;
 using std::min;
 using std::max_element;
@@ -37,7 +39,9 @@ using std::move;
 using std::pair;
 using std::sort;
 using std::string;
+using std::tie;
 using std::to_string;
+using std::tuple;
 using std::deque;
 using std::set;
 using std::swap;
@@ -49,6 +53,8 @@ using ushort = unsigned short;
 using uchar  = unsigned char;
 using namespace ErrAux;
 static_assert(sizeof(float) == sizeof(uint), "sizeof(float) == sizeof(uint)");
+static_assert(sizeof(float) == sizeof(ushort) * 2U,
+	      "sizeof(float) == sizeof(ushort) * 2U");
 
 static double elapsed_sum = 0.0;
 static uint nelapsed      = 0;
@@ -56,6 +62,7 @@ static uint nelapsed      = 0;
 constexpr char msg_bad_wght_dim[] = "bad weight dimension";
 constexpr uint tune_sample_size   = 128U;
 constexpr uint tune_sleep         = 1000U; // usec
+constexpr uint size_wrap_wmma     = 32U;
 constexpr uint len_kernel         = 3U;
 constexpr uint size_kernel        = len_kernel * len_kernel;
 constexpr uint len_tile_out       = 3U;
@@ -171,7 +178,13 @@ float x9(float x) { float y = x + x; y += y; return y + y + x; }
 )";
 
 const string code_compute_matV = R"(
-__kernel void compute_matV(__global const float *fin, __global float *matV) {
+#ifdef DO_HALF
+void store(float f, uint off, __global half *p) { vstore_half(f, off, p); }
+#else
+void store(float f, uint off, __global float *p) { p[off] = f; }
+#endif
+
+__kernel void compute_matV(__global const float *fin, __global void *matV) {
   uint gid   = get_global_id(0);
   uint chb   = gid / NTILE;
   uint utile = gid % NTILE;
@@ -192,105 +205,105 @@ __kernel void compute_matV(__global const float *fin, __global float *matV) {
   uint uca = NK * NN * LEN_TILE_IN;
   uint ucb = NK * NN;
   uint ucc = ch * NN + ub * NTILE + uh * NTILE_W + uw;
-  matV[ucc + uca*0U + ucb*0U]
-    = (+ x4(md[0][0]) - x2(md[0][1]) - x4(md[0][2]) + x2(md[0][3])
-       - x2(md[1][0]) + x1(md[1][1]) + x2(md[1][2]) - x1(md[1][3])
-       - x4(md[2][0]) + x2(md[2][1]) + x4(md[2][2]) - x2(md[2][3])
-       + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]));
-  matV[ucc + uca*1U + ucb*0U]
-    = (- x4(md[1][0]) + x2(md[1][1]) + x4(md[1][2]) - x2(md[1][3])
-       - x2(md[2][0]) + x1(md[2][1]) + x2(md[2][2]) - x1(md[2][3])
-       + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]));
-  matV[ucc + uca*2U + ucb*0U]
-    = (+ x4(md[1][0]) - x2(md[1][1]) - x4(md[1][2]) + x2(md[1][3])
-       - x6(md[2][0]) + x3(md[2][1]) + x6(md[2][2]) - x3(md[2][3])
-       + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]));
-  matV[ucc + uca*3U + ucb*0U]
-    = (- x2(md[1][0]) + x1(md[1][1]) + x2(md[1][2]) - x1(md[1][3])
-       + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]));
-  matV[ucc + uca*4U + ucb*0U]
-    = (+ x4(md[1][0]) - x2(md[1][1]) - x4(md[1][2]) + x2(md[1][3])
-       - x2(md[2][0]) + x1(md[2][1]) + x2(md[2][2]) - x1(md[2][3])
-       - x4(md[3][0]) + x2(md[3][1]) + x4(md[3][2]) - x2(md[3][3])
-       + x2(md[4][0]) - x1(md[4][1]) - x2(md[4][2]) + x1(md[4][3]));
-  matV[ucc + uca*0U + ucb*1U]
-    = (- x4(md[0][1]) - x2(md[0][2]) + x2(md[0][3])
-       + x2(md[1][1]) + x1(md[1][2]) - x1(md[1][3])
-       + x4(md[2][1]) + x2(md[2][2]) - x2(md[2][3])
-       - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]));
-  matV[ucc + uca*1U + ucb*1U]
-    = (+ x4(md[1][1]) + x2(md[1][2]) - x2(md[1][3])
-       + x2(md[2][1]) + x1(md[2][2]) - x1(md[2][3])
-       - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]));
-  matV[ucc + uca*2U + ucb*1U]
-    = (- x4(md[1][1]) - x2(md[1][2]) + x2(md[1][3])
-       + x6(md[2][1]) + x3(md[2][2]) - x3(md[2][3])
-       - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]));
-  matV[ucc + uca*3U + ucb*1U]
-    = (+ x2(md[1][1]) + x1(md[1][2]) - x1(md[1][3])
-       - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]));
-  matV[ucc + uca*4U + ucb*1U]
-    = (- x4(md[1][1]) - x2(md[1][2]) + x2(md[1][3])
-       + x2(md[2][1]) + x1(md[2][2]) - x1(md[2][3])
-       + x4(md[3][1]) + x2(md[3][2]) - x2(md[3][3])
-       - x2(md[4][1]) - x1(md[4][2]) + x1(md[4][3]));
-  matV[ucc + uca*0U + ucb*2U]
-    = (+ x4(md[0][1]) - x6(md[0][2]) + x2(md[0][3])
-       - x2(md[1][1]) + x3(md[1][2]) - x1(md[1][3])
-       - x4(md[2][1]) + x6(md[2][2]) - x2(md[2][3])
-       + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]));
-  matV[ucc + uca*1U + ucb*2U]
-    = (- x4(md[1][1]) + x6(md[1][2]) - x2(md[1][3])
-       - x2(md[2][1]) + x3(md[2][2]) - x1(md[2][3])
-       + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]));
-  matV[ucc + uca*2U + ucb*2U]
-    = (+ x4(md[1][1]) - x6(md[1][2]) + x2(md[1][3])
-       - x6(md[2][1]) + x9(md[2][2]) - x3(md[2][3])
-       + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]));
-  matV[ucc + uca*3U + ucb*2U]
-    = (- x2(md[1][1]) + x3(md[1][2]) - x1(md[1][3])
-       + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]));
-  matV[ucc + uca*4U + ucb*2U]
-    = (+ x4(md[1][1]) - x6(md[1][2]) + x2(md[1][3])
-       - x2(md[2][1]) + x3(md[2][2]) - x1(md[2][3])
-       - x4(md[3][1]) + x6(md[3][2]) - x2(md[3][3])
-       + x2(md[4][1]) - x3(md[4][2]) + x1(md[4][3]));
-  matV[ucc + uca*0U + ucb*3U]
-    = (- x2(md[0][1]) + x2(md[0][3]) + x1(md[1][1]) - x1(md[1][3])
-       + x2(md[2][1]) - x2(md[2][3]) - x1(md[3][1]) + x1(md[3][3]));
-  matV[ucc + uca*1U + ucb*3U]
-    = (+ x2(md[1][1]) - x2(md[1][3]) + x1(md[2][1]) - x1(md[2][3])
-       - x1(md[3][1]) + x1(md[3][3]));
-  matV[ucc + uca*2U + ucb*3U]
-    = (- x2(md[1][1]) + x2(md[1][3]) + x3(md[2][1]) - x3(md[2][3])
-       - x1(md[3][1]) + x1(md[3][3]));
-  matV[ucc + uca*3U + ucb*3U]
-    = (+ x1(md[1][1]) - x1(md[1][3]) - x1(md[3][1]) + x1(md[3][3]));
-  matV[ucc + uca*4U + ucb*3U]
-    = (- x2(md[1][1]) + x2(md[1][3]) + x1(md[2][1]) - x1(md[2][3])
-       + x2(md[3][1]) - x2(md[3][3]) - x1(md[4][1]) + x1(md[4][3]));
-  matV[ucc + uca*0U + ucb*4U]
-    = (+ x4(md[0][1]) - x2(md[0][2]) - x4(md[0][3]) + x2(md[0][4])
-       - x2(md[1][1]) + x1(md[1][2]) + x2(md[1][3]) - x1(md[1][4])
-       - x4(md[2][1]) + x2(md[2][2]) + x4(md[2][3]) - x2(md[2][4])
-       + x2(md[3][1]) - x1(md[3][2]) - x2(md[3][3]) + x1(md[3][4]));
-  matV[ucc + uca*1U + ucb*4U]
-    = (- x4(md[1][1]) + x2(md[1][2]) + x4(md[1][3]) - x2(md[1][4])
-       - x2(md[2][1]) + x1(md[2][2]) + x2(md[2][3]) - x1(md[2][4])
-       + x2(md[3][1]) - x1(md[3][2]) - x2(md[3][3]) + x1(md[3][4]));
-  matV[ucc + uca*2U + ucb*4U]
-    = (+ x4(md[1][1]) - x6(md[2][1]) + x2(md[3][1])
-       - x2(md[1][2]) + x3(md[2][2]) - x1(md[3][2])
-       - x4(md[1][3]) + x6(md[2][3]) - x2(md[3][3])
-       + x2(md[1][4]) - x3(md[2][4]) + x1(md[3][4]));
-  matV[ucc + uca*3U + ucb*4U]
-    = (- x2(md[1][1]) + x2(md[3][1]) + x1(md[1][2]) - x1(md[3][2])
-       + x2(md[1][3]) - x2(md[3][3]) - x1(md[1][4]) + x1(md[3][4]));
-  matV[ucc + uca*4U + ucb*4U]
-    = (+ x4(md[1][1]) - x2(md[1][2]) - x4(md[1][3]) + x2(md[1][4])
-       - x2(md[2][1]) + x1(md[2][2]) + x2(md[2][3]) - x1(md[2][4])
-       - x4(md[3][1]) + x2(md[3][2]) + x4(md[3][3]) - x2(md[3][4])
-       + x2(md[4][1]) - x1(md[4][2]) - x2(md[4][3]) + x1(md[4][4])); }
+  store(+ x4(md[0][0]) - x2(md[0][1]) - x4(md[0][2]) + x2(md[0][3])
+        - x2(md[1][0]) + x1(md[1][1]) + x2(md[1][2]) - x1(md[1][3])
+        - x4(md[2][0]) + x2(md[2][1]) + x4(md[2][2]) - x2(md[2][3])
+        + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]),
+        ucc + uca*0U + ucb*0U, matV);
+  store(- x4(md[1][0]) + x2(md[1][1]) + x4(md[1][2]) - x2(md[1][3])
+        - x2(md[2][0]) + x1(md[2][1]) + x2(md[2][2]) - x1(md[2][3])
+        + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]),
+        ucc + uca*1U + ucb*0U, matV);
+  store(+ x4(md[1][0]) - x2(md[1][1]) - x4(md[1][2]) + x2(md[1][3])
+        - x6(md[2][0]) + x3(md[2][1]) + x6(md[2][2]) - x3(md[2][3])
+        + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]),
+        ucc + uca*2U + ucb*0U, matV);
+  store(- x2(md[1][0]) + x1(md[1][1]) + x2(md[1][2]) - x1(md[1][3])
+        + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]),
+        ucc + uca*3U + ucb*0U, matV);
+  store(+ x4(md[1][0]) - x2(md[1][1]) - x4(md[1][2]) + x2(md[1][3])
+        - x2(md[2][0]) + x1(md[2][1]) + x2(md[2][2]) - x1(md[2][3])
+        - x4(md[3][0]) + x2(md[3][1]) + x4(md[3][2]) - x2(md[3][3])
+        + x2(md[4][0]) - x1(md[4][1]) - x2(md[4][2]) + x1(md[4][3]),
+        ucc + uca*4U + ucb*0U, matV);
+  store(- x4(md[0][1]) - x2(md[0][2]) + x2(md[0][3])
+        + x2(md[1][1]) + x1(md[1][2]) - x1(md[1][3])
+        + x4(md[2][1]) + x2(md[2][2]) - x2(md[2][3])
+        - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]),
+        ucc + uca*0U + ucb*1U, matV);
+  store(+ x4(md[1][1]) + x2(md[1][2]) - x2(md[1][3])
+        + x2(md[2][1]) + x1(md[2][2]) - x1(md[2][3])
+        - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]),
+        ucc + uca*1U + ucb*1U, matV);
+  store(- x4(md[1][1]) - x2(md[1][2]) + x2(md[1][3])
+        + x6(md[2][1]) + x3(md[2][2]) - x3(md[2][3])
+        - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]),
+        ucc + uca*2U + ucb*1U, matV);
+  store(+ x2(md[1][1]) + x1(md[1][2]) - x1(md[1][3])
+        - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]),
+        ucc + uca*3U + ucb*1U, matV);
+  store(- x4(md[1][1]) - x2(md[1][2]) + x2(md[1][3])
+        + x2(md[2][1]) + x1(md[2][2]) - x1(md[2][3])
+        + x4(md[3][1]) + x2(md[3][2]) - x2(md[3][3])
+        - x2(md[4][1]) - x1(md[4][2]) + x1(md[4][3]),
+        ucc + uca*4U + ucb*1U, matV);
+  store(+ x4(md[0][1]) - x6(md[0][2]) + x2(md[0][3])
+        - x2(md[1][1]) + x3(md[1][2]) - x1(md[1][3])
+        - x4(md[2][1]) + x6(md[2][2]) - x2(md[2][3])
+        + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]),
+        ucc + uca*0U + ucb*2U, matV);
+  store(- x4(md[1][1]) + x6(md[1][2]) - x2(md[1][3])
+        - x2(md[2][1]) + x3(md[2][2]) - x1(md[2][3])
+        + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]),
+        ucc + uca*1U + ucb*2U, matV);
+  store(+ x4(md[1][1]) - x6(md[1][2]) + x2(md[1][3])
+        - x6(md[2][1]) + x9(md[2][2]) - x3(md[2][3])
+        + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]),
+        ucc + uca*2U + ucb*2U, matV);
+  store(- x2(md[1][1]) + x3(md[1][2]) - x1(md[1][3])
+        + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]),
+        ucc + uca*3U + ucb*2U, matV);
+  store(+ x4(md[1][1]) - x6(md[1][2]) + x2(md[1][3])
+        - x2(md[2][1]) + x3(md[2][2]) - x1(md[2][3])
+        - x4(md[3][1]) + x6(md[3][2]) - x2(md[3][3])
+        + x2(md[4][1]) - x3(md[4][2]) + x1(md[4][3]),
+        ucc + uca*4U + ucb*2U, matV);
+  store(- x2(md[0][1]) + x2(md[0][3]) + x1(md[1][1]) - x1(md[1][3])
+        + x2(md[2][1]) - x2(md[2][3]) - x1(md[3][1]) + x1(md[3][3]),
+        ucc + uca*0U + ucb*3U, matV);
+  store(+ x2(md[1][1]) - x2(md[1][3]) + x1(md[2][1]) - x1(md[2][3])
+        - x1(md[3][1]) + x1(md[3][3]),
+        ucc + uca*1U + ucb*3U, matV);
+  store(- x2(md[1][1]) + x2(md[1][3]) + x3(md[2][1]) - x3(md[2][3])
+        - x1(md[3][1]) + x1(md[3][3]),
+        ucc + uca*2U + ucb*3U, matV);
+  store(+ x1(md[1][1]) - x1(md[1][3]) - x1(md[3][1]) + x1(md[3][3]),
+        ucc + uca*3U + ucb*3U, matV);
+  store(- x2(md[1][1]) + x2(md[1][3]) + x1(md[2][1]) - x1(md[2][3])
+        + x2(md[3][1]) - x2(md[3][3]) - x1(md[4][1]) + x1(md[4][3]),
+        ucc + uca*4U + ucb*3U, matV);
+  store(+ x4(md[0][1]) - x2(md[0][2]) - x4(md[0][3]) + x2(md[0][4])
+        - x2(md[1][1]) + x1(md[1][2]) + x2(md[1][3]) - x1(md[1][4])
+        - x4(md[2][1]) + x2(md[2][2]) + x4(md[2][3]) - x2(md[2][4])
+        + x2(md[3][1]) - x1(md[3][2]) - x2(md[3][3]) + x1(md[3][4]),
+        ucc + uca*0U + ucb*4U, matV);
+  store(- x4(md[1][1]) + x2(md[1][2]) + x4(md[1][3]) - x2(md[1][4])
+        - x2(md[2][1]) + x1(md[2][2]) + x2(md[2][3]) - x1(md[2][4])
+        + x2(md[3][1]) - x1(md[3][2]) - x2(md[3][3]) + x1(md[3][4]),
+        ucc + uca*1U + ucb*4U, matV);
+  store(+ x4(md[1][1]) - x6(md[2][1]) + x2(md[3][1])
+        - x2(md[1][2]) + x3(md[2][2]) - x1(md[3][2])
+        - x4(md[1][3]) + x6(md[2][3]) - x2(md[3][3])
+        + x2(md[1][4]) - x3(md[2][4]) + x1(md[3][4]),
+        ucc + uca*2U + ucb*4U, matV);
+  store(- x2(md[1][1]) + x2(md[3][1]) + x1(md[1][2]) - x1(md[3][2])
+        + x2(md[1][3]) - x2(md[3][3]) - x1(md[1][4]) + x1(md[3][4]),
+        ucc + uca*3U + ucb*4U, matV);
+  store(+ x4(md[1][1]) - x2(md[1][2]) - x4(md[1][3]) + x2(md[1][4])
+        - x2(md[2][1]) + x1(md[2][2]) + x2(md[2][3]) - x1(md[2][4])
+        - x4(md[3][1]) + x2(md[3][2]) + x4(md[3][3]) - x2(md[3][4])
+        + x2(md[4][1]) - x1(md[4][2]) - x2(md[4][3]) + x1(md[4][4]),
+        ucc + uca*4U + ucb*4U, matV); }
 )";
 
 const string code_compute_matA = R"(
@@ -445,6 +458,171 @@ __kernel void compute_matA_BNReLU_join(__global const float *matM,
                      + mm[4][1] + mm[4][2] + x4(mm[4][3]) + mm[4][4]); }
 )";
 
+const string code_compute_matM_wmma = R"(
+void compute_matM(__global const uint *gA, __global const uint *gB,
+                  __global float *gC) {
+  uint ub  = get_global_id(2);
+  uint ugm = get_group_id(1);
+  uint ugn = get_group_id(0);
+  uint ulm = get_local_id(1);
+  uint ul  = get_local_id(1) * SGEMM_NL * WRAP_SIZE + get_local_id(0);
+  uint uln = get_local_id(0) / WRAP_SIZE;
+  uint ngk = NK / SGEMM_NLPTK;
+  gA += ub*OFFA_2 + ugm*SGEMM_NLPTM_2;
+  gB += ub*OFFB_2 + ugn*SGEMM_NLPTN_2;
+  gC += ub*OFFC + ugm*SGEMM_NLPTM*NN + ugn*SGEMM_NLPTN;
+
+  __local uint lA[SGEMM_NLPTK * SGEMM_NLPTM_2] __attribute__((aligned(32)));
+  __local uint lB[SGEMM_NLPTK * SGEMM_NLPTN_2] __attribute__((aligned(32)));
+
+  uint pD[SGEMM_NPM][SGEMM_NPN][8];
+  for (uint upm = 0; upm < SGEMM_NPM; ++upm)
+    for (uint upn = 0; upn < SGEMM_NPN; ++upn)
+      for (uint u = 0; u < 8U; ++u) pD[upm][upn][u] = 0;
+
+  uint ulA1 = (ul % SGEMM_NLPTM_2);
+  uint ulA2 = (ul / SGEMM_NLPTM_2);
+  uint ulA3 = (SGEMM_NL*WRAP_SIZE / SGEMM_NPTM_2);
+  uint ulB1 = (ul % SGEMM_NLPTN_2);
+  uint ulB2 = (ul / SGEMM_NLPTN_2);
+  uint ulB3 = (SGEMM_NL*WRAP_SIZE / SGEMM_NPTN_2);
+
+  uint ldlA = SGEMM_NLPTM;
+  uint ldlB = SGEMM_NLPTN;
+  for (uint ugk = 0; ugk < ngk; ++ugk) {
+    
+    for (uint u = 0; u < SGEMM_NLPTK; u += ulA3)
+      lA[(u + ulA2)*SGEMM_NLPTM_2 + ulA1] = gA[(u + ulA2)*NM_2 + ulA1];
+
+    for (uint u = 0; u < SGEMM_NLPTK; u += ulB3)
+      lB[(u + ulB2)*SGEMM_NLPTN_2 + ulB1] = gB[(u + ulB2)*NN_2 + ulB1];
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (uint ulpk = 0; ulpk < SGEMM_NL*SGEMM_NPK; ++ulpk)
+      for (uint upm = 0; upm < SGEMM_NPM; ++upm)
+        for (uint upn = 0; upn < SGEMM_NPN; ++upn) {
+          asm("{ .reg .b32 a<8>;\n"
+              "  .reg .b32 b<8>;\n"
+              "  wmma.load.a.sync.aligned.col" SGEMM_TDM ".shared.f16\n"
+              "    {a0, a1, a2, a3, a4, a5, a6, a7}, [%8], %9;\n"
+              "  wmma.load.b.sync.aligned.row" SGEMM_TDM ".shared.f16\n"
+              "    {b0, b1, b2, b3, b4, b5, b6, b7}, [%10], %11;\n"
+              "  wmma.mma.sync.aligned.col.row" SGEMM_TDM ".f32.f32\n"
+              "    {%0, %1, %2, %3, %4, %5, %6, %7},\n"
+              "    {a0, a1, a2, a3, a4, a5, a6, a7},\n"
+              "    {b0, b1, b2, b3, b4, b5, b6, b7},\n"
+              "    {%0, %1, %2, %3, %4, %5, %6, %7}; }"
+              : "+r"(pD[upm][upn][0]), "+r"(pD[upm][upn][1]),
+                "+r"(pD[upm][upn][2]), "+r"(pD[upm][upn][3]),
+                "+r"(pD[upm][upn][4]), "+r"(pD[upm][upn][5]),
+                "+r"(pD[upm][upn][6]), "+r"(pD[upm][upn][7])
+              : "l"(lA + ulpk*SGEMM_NTK*SGEMM_NLPTM_2
+                       + ulm*SGEMM_NPTM_2 + upm*SGEMM_NTM_2), "r"(ldlA),
+                "l"(lB + ulpk*SGEMM_NTK*SGEMM_NLPTN_2
+                       + uln*SGEMM_NPTN_2 + upn*SGEMM_NTN_2), "r"(ldlB)
+              : "memory");
+        }
+    barrier(CLK_LOCAL_MEM_FENCE);
+    gA += SGEMM_NLPTK*NM_2;
+    gB += SGEMM_NLPTK*NN_2; }
+
+  uint ldgC = NN;
+  for (uint upm = 0; upm < SGEMM_NPM; ++upm)
+    for (uint upn = 0; upn < SGEMM_NPN; ++upn)
+      asm("{  wmma.store.d.sync.aligned.row" SGEMM_TDM ".global.f32\n"
+          "     [%8], {%0, %1, %2, %3, %4, %5, %6, %7}, %9; }"
+          :: "r"(pD[upm][upn][0]), "r"(pD[upm][upn][1]),
+             "r"(pD[upm][upn][2]), "r"(pD[upm][upn][3]),
+             "r"(pD[upm][upn][4]), "r"(pD[upm][upn][5]),
+             "r"(pD[upm][upn][6]), "r"(pD[upm][upn][7]),
+             "l"(gC + (ulm*SGEMM_NPTM + upm*SGEMM_NTM)*NN
+                    + uln*SGEMM_NPTN + upn*SGEMM_NTN), "r"(ldgC)
+          : "memory");
+}
+)";
+
+const string code_compute_matM_half = R"(
+void compute_matM(__global const uint *gA, __global const uint *gB,
+                  __global float *gC) {
+  uint ub  = get_global_id(2);
+  uint ugm = get_group_id(1);
+  uint ugn = get_group_id(0);
+  uint ulm = get_local_id(1);
+  uint uln = get_local_id(0);
+  uint ul  = ulm*SGEMM_NL + uln;
+  uint ngk = NK / (SGEMM_NL * SGEMM_NLFM * SGEMM_NPK);
+  gA += (ub*OFFA + ugm*SGEMM_NL*SGEMM_NLFM*SGEMM_NPM) / 2U;
+  gB += (ub*OFFB + ugn*SGEMM_NL*SGEMM_NPN) / 2U;
+  gC += ub*OFFC + ugm*SGEMM_NL*SGEMM_NLFM*SGEMM_NPM*NN
+                + ugn*SGEMM_NL*SGEMM_NPN;
+
+  __local uint lA[SGEMM_NL*SGEMM_NLFM*SGEMM_NPK]
+                 [(SGEMM_NL*SGEMM_NLFM*SGEMM_NPM) / 2U];
+  __local uint lB[SGEMM_NL*SGEMM_NLFM*SGEMM_NPK]
+                 [(SGEMM_NL*SGEMM_NPN) / 2U];
+  float pC[SGEMM_NPM][SGEMM_NPN];
+
+  for (uint upm = 0; upm < SGEMM_NPM; ++upm)
+    for (uint upn = 0; upn < SGEMM_NPN; ++upn) pC[upm][upn] = 0.0f;
+
+  uint ulA1 = ul % ((SGEMM_NL*SGEMM_NLFM*SGEMM_NPM) / 2U);
+  uint ulA2 = ul / ((SGEMM_NL*SGEMM_NLFM*SGEMM_NPM) / 2U);
+  uint ulA3 = (2U*SGEMM_NL) / SGEMM_NPM;
+  uint ulB1 = ul % ((SGEMM_NL*SGEMM_NPN) / 2U);
+  uint ulB2 = ul / ((SGEMM_NL*SGEMM_NPN) / 2U);
+  uint ulB3 = (2U*SGEMM_NL*SGEMM_NLFM) / SGEMM_NPN;
+
+  for (uint ugk = 0; ugk < ngk; ++ugk) {
+    for (uint u = 0; u < SGEMM_NL*SGEMM_NLFM*SGEMM_NPK; u += ulA3)
+      lA[u + ulA2][ulA1] = gA[(u + ulA2)*(NM / 2U) + ulA1];
+    for (uint u = 0; u < SGEMM_NL*SGEMM_NLFM*SGEMM_NPK; u += ulB3)
+      lB[u + ulB2][ulB1] = gB[(u + ulB2)*(NN / 2U) + ulB1];
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (uint ulpk = 0; ulpk < SGEMM_NL*SGEMM_NLFM*SGEMM_NPK; ++ulpk) {
+      /*
+      float pB[SGEMM_NPN];
+      float pA;
+      for (uint upn = 0; upn < SGEMM_NPN; ++upn)
+        pB[upn] = vload_half(ulpk*SGEMM_NL*SGEMM_NPN + uln*SGEMM_NPN + upn,
+                             (__local const half *)lB);
+      for (uint upm = 0; upm < SGEMM_NPM; ++upm) {
+        pA = vload_half(ulpk*SGEMM_NL*SGEMM_NLFM*SGEMM_NPM
+                        + ulm*SGEMM_NPM + upm, (__local const half *)lA);
+        for (uint upn = 0; upn < SGEMM_NPN; ++upn)
+          pC[upm][upn] += pA * pB[upn];
+      */
+      uint pB[SGEMM_NPN];
+      uint pA_pair;
+      ushort pA;
+      for (uint upn = 0; upn < (SGEMM_NPN/2U); ++upn)
+        pB[upn] = lB[ulpk][uln*(SGEMM_NPN/2U) + upn];
+
+      for (uint upm = 0; upm < SGEMM_NPM; ++upm) {
+        pA = ((__local const ushort *)lA)[ulpk*SGEMM_NL*SGEMM_NLFM*SGEMM_NPM
+                                          + ulm*SGEMM_NPM + upm];
+        asm("mov.b32 %0, {%1, %1};\n" : "=r"(pA_pair) : "h"(pA));
+        for (uint upn = 0; upn < (SGEMM_NPN/2U); ++upn) {
+          float f1, f2;
+          asm("{ .reg .b32 r;\n"
+              "  .reg .b16 h1, h2;\n"
+              "  mul.f16x2 r, %2, %3;\n"
+              "  mov.b32 {h1, h2}, r;\n"
+              "  cvt.f32.f16 %0, h1;\n"
+              "  cvt.f32.f16 %1, h2; }\n"
+              : "=r"(f1), "=r"(f2) : "r"(pA_pair), "r"(pB[upn]));
+          pC[upm][2U*upn]      += f1;
+          pC[upm][2U*upn + 1U] += f2;
+    } } }
+    barrier(CLK_LOCAL_MEM_FENCE);
+    gA += (SGEMM_NL*SGEMM_NLFM*SGEMM_NPK*NM) / 2U;
+    gB += (SGEMM_NL*SGEMM_NLFM*SGEMM_NPK*NN) / 2U; }
+
+  for (uint upm = 0; upm < SGEMM_NPM; ++upm)
+    for (uint upn = 0; upn < SGEMM_NPN; ++upn)
+      gC[(ulm*SGEMM_NPM + upm)*NN + uln*SGEMM_NPN + upn] = pC[upm][upn]; }
+)";
+
 const string code_compute_matM = R"(
 void compute_matM(__global const float *gA, __global const float *gB,
                   __global float *gC) {
@@ -453,6 +631,7 @@ void compute_matM(__global const float *gA, __global const float *gB,
   uint ugn = get_group_id(0);
   uint ulm = get_local_id(1);
   uint uln = get_local_id(0);
+  uint ul  = ulm*SGEMM_NL + uln;
   uint ngk = NK / (SGEMM_NL * SGEMM_NLFM * SGEMM_NPK);
   gA += ub*OFFA + ugm*SGEMM_NL*SGEMM_NLFM*SGEMM_NPM;
   gB += ub*OFFB + ugn*SGEMM_NL*SGEMM_NPN;
@@ -470,21 +649,18 @@ void compute_matM(__global const float *gA, __global const float *gB,
   for (uint upm = 0; upm < SGEMM_NPM; ++upm)
     for (uint upn = 0; upn < SGEMM_NPN; ++upn) pC[upm][upn] = 0.0f;
 
-  uint ulA1 = (ulm*SGEMM_NL + uln) % (SGEMM_NL*SGEMM_NLFM*SGEMM_NPM);
-  uint ulA2 = ((ulm*SGEMM_NL + uln) / (SGEMM_NL*SGEMM_NLFM*SGEMM_NPM))
-              * SGEMM_NPM*SGEMM_NLFM*SGEMM_NPK;
-  uint ulB1 = (ulm*SGEMM_NL + uln) % (SGEMM_NL*SGEMM_NPN);
-  uint ulB2 = ((ulm*SGEMM_NL + uln) / (SGEMM_NL*SGEMM_NPN))
-              * SGEMM_NPN*SGEMM_NPK;
-//  uint ulB2 = (ulm*SGEMM_NL + uln) / (SGEMM_NL*SGEMM_NPN);
+  uint ulA1 = ul % (SGEMM_NL*SGEMM_NLFM*SGEMM_NPM);
+  uint ulA2 = ul / (SGEMM_NL*SGEMM_NLFM*SGEMM_NPM);
+  uint ulA3 = SGEMM_NL / SGEMM_NPM;
+  uint ulB1 = ul % (SGEMM_NL*SGEMM_NPN);
+  uint ulB2 = ul / (SGEMM_NL*SGEMM_NPN);
+  uint ulB3 = (SGEMM_NL*SGEMM_NLFM) / SGEMM_NPN;
 
   for (uint ugk = 0; ugk < ngk; ++ugk) {
-    for (uint u = 0; u < SGEMM_NPM*SGEMM_NLFM*SGEMM_NPK; ++u)
-      lA[ulA2 + u][ulA1] = gA[(ulA2 + u)*NM + ulA1];
-    for (uint u = 0; u < SGEMM_NPN*SGEMM_NPK; ++u)
-      lB[ulB2 + u][ulB1] = gB[(ulB2 + u)*NN + ulB1];
-//      lB[u*(SGEMM_NL*SGEMM_NLFM/SGEMM_NPN) + ulB2][ulB1]
-//        = gB[(u*(SGEMM_NL*SGEMM_NLFM/SGEMM_NPN) + ulB2)*NN + ulB1];
+    for (uint u = 0; u < SGEMM_NL*SGEMM_NLFM*SGEMM_NPK; u += ulA3)
+      lA[u + ulA2][ulA1] = gA[(u + ulA2)*NM + ulA1];
+    for (uint u = 0; u < SGEMM_NL*SGEMM_NLFM*SGEMM_NPK; u += ulB3)
+      lB[u + ulB2][ulB1] = gB[(u + ulB2)*NN + ulB1];
 
     barrier(CLK_LOCAL_MEM_FENCE);
     for (uint ulpk = 0; ulpk < SGEMM_NL*SGEMM_NLFM*SGEMM_NPK; ++ulpk) {
@@ -510,6 +686,7 @@ void sgemm(__global const float *gA, __global const float *gB,
   uint ugn = get_group_id(0);
   uint ulm = get_local_id(1);
   uint uln = get_local_id(0);
+  uint ul  = ulm*SGEMM_NL + uln;
   uint ngk = NK / (SGEMM_NL * SGEMM_NLFM * SGEMM_NPK);
   gA += ugm*SGEMM_NL*SGEMM_NLFM*SGEMM_NPM;
   gB += ugn*SGEMM_NL*SGEMM_NPN;
@@ -526,18 +703,18 @@ void sgemm(__global const float *gA, __global const float *gB,
   for (uint upm = 0; upm < SGEMM_NPM; ++upm)
     for (uint upn = 0; upn < SGEMM_NPN; ++upn) pC[upm][upn] = 0.0f;
 
-  uint ulA1 = (ulm*SGEMM_NL + uln) % (SGEMM_NL*SGEMM_NLFM*SGEMM_NPM);
-  uint ulA2 = ((ulm*SGEMM_NL + uln) / (SGEMM_NL*SGEMM_NLFM*SGEMM_NPM))
-              * SGEMM_NPM*SGEMM_NLFM*SGEMM_NPK;
-  uint ulB1 = (ulm*SGEMM_NL + uln) % (SGEMM_NL*SGEMM_NPN);
-  uint ulB2 = ((ulm*SGEMM_NL + uln) / (SGEMM_NL*SGEMM_NPN))
-              * SGEMM_NPN*SGEMM_NPK;
+  uint ulA1 = ul % (SGEMM_NL*SGEMM_NLFM*SGEMM_NPM);
+  uint ulA2 = ul / (SGEMM_NL*SGEMM_NLFM*SGEMM_NPM);
+  uint ulA3 = SGEMM_NL / SGEMM_NPM;
+  uint ulB1 = ul % (SGEMM_NL*SGEMM_NPN);
+  uint ulB2 = ul / (SGEMM_NL*SGEMM_NPN);
+  uint ulB3 = (SGEMM_NL*SGEMM_NLFM) / SGEMM_NPN;
 
   for (uint ugk = 0; ugk < ngk; ++ugk) {
-    for (uint u = 0; u < SGEMM_NPM*SGEMM_NLFM*SGEMM_NPK; ++u)
-      lA[ulA2 + u][ulA1] = gA[(ulA2 + u)*NM + ulA1];
-    for (uint u = 0; u < SGEMM_NPN*SGEMM_NPK; ++u)
-      lB[ulB2 + u][ulB1] = gB[(ulB2 + u)*NN + ulB1];
+    for (uint u = 0; u < SGEMM_NL*SGEMM_NLFM*SGEMM_NPK; u += ulA3)
+      lA[u + ulA2][ulA1] = gA[(u + ulA2)*NM + ulA1];
+    for (uint u = 0; u < SGEMM_NL*SGEMM_NLFM*SGEMM_NPK; u += ulB3)
+      lB[u + ulB2][ulB1] = gB[(u + ulB2)*NN + ulB1];
 
     barrier(CLK_LOCAL_MEM_FENCE);
     for (uint ulpk = 0; ulpk < SGEMM_NL*SGEMM_NLFM*SGEMM_NPK; ++ulpk) {
@@ -609,51 +786,6 @@ __kernel void matC_to_mat0_bias_ReLU(__global const float *p0,
     = fmax(0.0f, p0[urow0*NN + ucol0] + bias[urow0]); }
 )";
 
-const string gen_code_compute_matM(uint nm, uint nn, uint nk, uint offa,
-				   uint offb, uint offc, uint nl, uint nlfm,
-				   uint npm, uint npn, uint npk) noexcept {
-  string str;
-  str += "#define NM         " + to_string(nm)   + "U\n";
-  str += "#define NN         " + to_string(nn)   + "U\n";
-  str += "#define NK         " + to_string(nk)   + "U\n";
-  str += "#define OFFA       " + to_string(offa) + "U\n";
-  str += "#define OFFB       " + to_string(offb) + "U\n";
-  str += "#define OFFC       " + to_string(offc) + "U\n";
-  str += "#define SGEMM_NL   " + to_string(nl)   + "U\n";
-  str += "#define SGEMM_NLFM " + to_string(nlfm) + "U\n";
-  str += "#define SGEMM_NPM  " + to_string(npm)  + "U\n";
-  str += "#define SGEMM_NPN  " + to_string(npn)  + "U\n";
-  str += "#define SGEMM_NPK  " + to_string(npk)  + "U\n";
-  str += "__kernel __attribute__((reqd_work_group_size("
-    + to_string(nl) + ", " + to_string(nl*nlfm) + ", 1)))";
-  str += code_compute_matM;
-  return str; }
-
-const string gen_code_sgemm(uint nm, uint nn, uint nk, uint nl, uint nlfm,
-			    uint npm, uint npn, uint npk) noexcept {
-  string str;
-  if (npm == 1 && nn == 1U) {
-    str += "#define NM         " + to_string(nm)   + "U\n";
-    str += "#define NK         " + to_string(nk)   + "U\n";
-    str += "#define SGEMM_NLFM " + to_string(nlfm) + "U\n";
-    str += "#define SGEMM_NPK  " + to_string(npk)  + "U\n";
-    str += "__kernel __attribute__((reqd_work_group_size(1,"
-      + to_string(nlfm) + ",1)))";
-    str += code_sgemm_n1; }
-  else {
-    str += "#define NM         " + to_string(nm)   + "U\n";
-    str += "#define NN         " + to_string(nn)   + "U\n";
-    str += "#define NK         " + to_string(nk)   + "U\n";
-    str += "#define SGEMM_NL   " + to_string(nl)   + "U\n";
-    str += "#define SGEMM_NLFM " + to_string(nlfm) + "U\n";
-    str += "#define SGEMM_NPM  " + to_string(npm)  + "U\n";
-    str += "#define SGEMM_NPN  " + to_string(npn)  + "U\n";
-    str += "#define SGEMM_NPK  " + to_string(npk)  + "U\n";
-    str += "__kernel __attribute__((reqd_work_group_size("
-      + to_string(nl) + ", " + to_string(nl*nlfm) + ", 1)))";
-    str += code_sgemm; }
-  return str; }
-
 static uint ceil_multi(uint u, uint mul) noexcept {
   assert(1U <= mul && u <= UINT_MAX - mul + 1U);
   return ((u + mul - 1U) / mul) * mul; }
@@ -662,6 +794,167 @@ static uint ceil_power2(uint u) noexcept {
   uint u0;
   for (u0 = 1U; u0 < u; u0 *= 2U) assert(u0 <= UINT_MAX / 2U);
   return u0; }
+
+static tuple<string, uint, uint, uint, size_t, size_t, size_t, size_t>
+gen_code_compute_matM(uint nm0, uint nn0, uint nk0, const SgemmParam &param)
+  noexcept {
+  assert(0 < nm0 && 0 < nn0 && 0 < nk0 && param.ok());
+  if (param.do_wmma) {
+    uint ntk = 16U;
+    uint nm = ceil_multi(nm0, param.nl * param.npm * param.ntm);
+    uint nn = ceil_multi(nn0, param.nl * param.npn * param.ntn);
+    uint nk = ceil_multi(nk0, param.nl * param.npk * ntk);
+    string str, str_tdm;
+    if (param.ntm ==  8) str_tdm = R"(".m8n32k16")";
+    if (param.ntm == 16) str_tdm = R"(".m16n16k16")";
+    if (param.ntm == 32) str_tdm = R"(".m32n8k16")";
+    str += "#define NM        " + to_string(nm)             + "U\n";
+    str += "#define NN        " + to_string(nn)             + "U\n";
+    str += "#define NK        " + to_string(nk)             + "U\n";
+    str += "#define OFFA      " + to_string(nm*nk)          + "U\n";
+    str += "#define OFFB      " + to_string(nk*nn)          + "U\n";
+    str += "#define OFFC      " + to_string(nm*nn)          + "U\n";
+    str += "#define WRAP_SIZE " + to_string(size_wrap_wmma) + "U\n";
+    str += "#define SGEMM_NL  " + to_string(param.nl)       + "U\n";
+    str += "#define SGEMM_NPM " + to_string(param.npm)      + "U\n";
+    str += "#define SGEMM_NPN " + to_string(param.npn)      + "U\n";
+    str += "#define SGEMM_NPK " + to_string(param.npk)      + "U\n";
+    str += "#define SGEMM_NTM " + to_string(param.ntm)      + "U\n";
+    str += "#define SGEMM_NTN " + to_string(param.ntn)      + "U\n";
+    str += "#define SGEMM_NTK " + to_string(ntk)            + "U\n";
+    str += "#define SGEMM_NPTM    (SGEMM_NPM * SGEMM_NTM)\n";
+    str += "#define SGEMM_NPTN    (SGEMM_NPN * SGEMM_NTN)\n";
+    str += "#define SGEMM_NPTK    (SGEMM_NPK * SGEMM_NTK)\n";
+    str += "#define SGEMM_NLPTM   (SGEMM_NL * SGEMM_NPM * SGEMM_NTM)\n";
+    str += "#define SGEMM_NLPTN   (SGEMM_NL * SGEMM_NPN * SGEMM_NTN)\n";
+    str += "#define SGEMM_NLPTK   (SGEMM_NL * SGEMM_NPK * SGEMM_NTK)\n";
+    str += "#define NM_2          (NM   / 2U)\n";
+    str += "#define NN_2          (NN   / 2U)\n";
+    str += "#define OFFA_2        (OFFA / 2U)\n";
+    str += "#define OFFB_2        (OFFB / 2U)\n";
+    str += "#define SGEMM_NTM_2   (SGEMM_NTM   / 2U)\n";
+    str += "#define SGEMM_NTN_2   (SGEMM_NTN   / 2U)\n";
+    str += "#define SGEMM_NPTM_2  (SGEMM_NPTM  / 2U)\n";
+    str += "#define SGEMM_NPTN_2  (SGEMM_NPTN  / 2U)\n";
+    str += "#define SGEMM_NLPTM_2 (SGEMM_NLPTM / 2U)\n";
+    str += "#define SGEMM_NLPTN_2 (SGEMM_NLPTN / 2U)\n";
+    str += "#define SGEMM_TDM     " + str_tdm + "\n";
+    str += "__kernel __attribute__((reqd_work_group_size("
+      + to_string(param.nl * size_wrap_wmma) + ", "
+      + to_string(param.nl) + ", 1)))";
+    str += code_compute_matM_wmma;
+    return make_tuple(str, nm, nn, nk,
+		      (nn / (param.npn*param.ntn)) * size_wrap_wmma,
+		      nm / (param.npm*param.ntm),
+		      param.nl * size_wrap_wmma, param.nl); }
+  else if (param.do_half) {
+    uint nm = ceil_multi(nm0, param.nl * param.nlfm * param.npm);
+    uint nn = ceil_multi(nn0, param.nl * param.npn);
+    uint nk = ceil_multi(nk0, param.nl * param.nlfm * param.npk);
+    string str;
+    str += "#define NM         " + to_string(nm)         + "U\n";
+    str += "#define NN         " + to_string(nn)         + "U\n";
+    str += "#define NK         " + to_string(nk)         + "U\n";
+    str += "#define OFFA       " + to_string(nm*nk)      + "U\n";
+    str += "#define OFFB       " + to_string(nk*nn)      + "U\n";
+    str += "#define OFFC       " + to_string(nm*nn)      + "U\n";
+    str += "#define SGEMM_NL   " + to_string(param.nl)   + "U\n";
+    str += "#define SGEMM_NLFM " + to_string(param.nlfm) + "U\n";
+    str += "#define SGEMM_NPM  " + to_string(param.npm)  + "U\n";
+    str += "#define SGEMM_NPN  " + to_string(param.npn)  + "U\n";
+    str += "#define SGEMM_NPK  " + to_string(param.npk)  + "U\n";
+    str += "__kernel __attribute__((reqd_work_group_size("
+      + to_string(param.nl) + ", " + to_string(param.nl*param.nlfm) + ", 1)))";
+    str += code_compute_matM_half;
+    return make_tuple(str, nm, nn, nk,
+		      nn / param.npn, nm / param.npm,
+		      param.nl, param.nl * param.nlfm); }
+  else {
+    uint nm = ceil_multi(nm0, param.nl * param.nlfm * param.npm);
+    uint nn = ceil_multi(nn0, param.nl * param.npn);
+    uint nk = ceil_multi(nk0, param.nl * param.nlfm * param.npk);
+    string str;
+    str += "#define NM         " + to_string(nm)         + "U\n";
+    str += "#define NN         " + to_string(nn)         + "U\n";
+    str += "#define NK         " + to_string(nk)         + "U\n";
+    str += "#define OFFA       " + to_string(nm*nk)      + "U\n";
+    str += "#define OFFB       " + to_string(nk*nn)      + "U\n";
+    str += "#define OFFC       " + to_string(nm*nn)      + "U\n";
+    str += "#define SGEMM_NL   " + to_string(param.nl)   + "U\n";
+    str += "#define SGEMM_NLFM " + to_string(param.nlfm) + "U\n";
+    str += "#define SGEMM_NPM  " + to_string(param.npm)  + "U\n";
+    str += "#define SGEMM_NPN  " + to_string(param.npn)  + "U\n";
+    str += "#define SGEMM_NPK  " + to_string(param.npk)  + "U\n";
+    str += "__kernel __attribute__((reqd_work_group_size("
+      + to_string(param.nl) + ", " + to_string(param.nl*param.nlfm) + ", 1)))";
+    str += code_compute_matM;
+    return make_tuple(str, nm, nn, nk,
+		      nn / param.npn, nm / param.npm,
+		      param.nl, param.nl * param.nlfm); } }
+
+const string gen_code_sgemm(uint nm, uint nn, uint nk,
+			    const SgemmParam &param) noexcept {
+  string str;
+  if (param.npm == 1U && nn == 1U) {
+    str += "#define NM         " + to_string(nm)   + "U\n";
+    str += "#define NK         " + to_string(nk)   + "U\n";
+    str += "#define SGEMM_NLFM " + to_string(param.nlfm) + "U\n";
+    str += "#define SGEMM_NPK  " + to_string(param.npk)  + "U\n";
+    str += "__kernel __attribute__((reqd_work_group_size(1,"
+      + to_string(param.nlfm) + ",1)))";
+    str += code_sgemm_n1; }
+  else {
+    str += "#define NM         " + to_string(nm)         + "U\n";
+    str += "#define NN         " + to_string(nn)         + "U\n";
+    str += "#define NK         " + to_string(nk)         + "U\n";
+    str += "#define SGEMM_NL   " + to_string(param.nl)   + "U\n";
+    str += "#define SGEMM_NLFM " + to_string(param.nlfm) + "U\n";
+    str += "#define SGEMM_NPM  " + to_string(param.npm)  + "U\n";
+    str += "#define SGEMM_NPN  " + to_string(param.npn)  + "U\n";
+    str += "#define SGEMM_NPK  " + to_string(param.npk)  + "U\n";
+    str += "__kernel __attribute__((reqd_work_group_size("
+      + to_string(param.nl) + ", " + to_string(param.nl*param.nlfm) + ", 1)))";
+    str += code_sgemm; }
+  return str; }
+
+static bool test_wmma(const OCL::Device &dev) noexcept {
+  try {
+    OCL::Queue queue = dev.gen_queue();
+    OCL::Program pg  = queue.gen_program(R"(
+__kernel void test_wmma() {
+  uint laneid = get_global_id(0);
+  __local ushort lA[256] __attribute__((aligned(32)));
+  __local ushort lB[256] __attribute__((aligned(32)));
+  __local float lC[256]  __attribute__((aligned(32)));
+  uint pD[8];
+  for (uint u = 0; u < 8U; ++u) lA[laneid*8U + u] = 0;
+  for (uint u = 0; u < 8U; ++u) lB[laneid*8U + u] = 0;
+  for (uint u = 0; u < 8U; ++u) lC[laneid*8U + u] = 0.0f;
+  for (uint u = 0; u < 8U; ++u) pD[u] = 0;
+  uint stride = 16U;
+  asm(".reg .b32 a<8>;\n"
+      ".reg .b32 b<8>;\n"
+      "wmma.load.a.sync.aligned.col.m16n16k16.shared.f16\n"
+      "  {a0, a1, a2, a3, a4, a5, a6, a7}, [%8], %9;\n"
+      "wmma.load.b.sync.aligned.row.m16n16k16.shared.f16\n"
+      "  {b0, b1, b2, b3, b4, b5, b6, b7}, [%10], %11;\n"
+      "wmma.mma.sync.aligned.col.row.m16n16k16.f32.f32\n"
+      "  {%0, %1, %2, %3, %4, %5, %6, %7}, {a0, a1, a2, a3, a4, a5, a6, a7},\n"
+      "  {b0, b1, b2, b3, b4, b5, b6, b7}, {%0, %1, %2, %3, %4, %5, %6, %7};\n"
+      "wmma.store.d.sync.aligned.row.m16n16k16.shared.f32\n"
+      "  [%12], {%0, %1, %2, %3, %4, %5, %6, %7}, %13;"
+      : "+r"(pD[0]), "+r"(pD[1]), "+r"(pD[2]), "+r"(pD[3]),
+        "+r"(pD[4]), "+r"(pD[5]), "+r"(pD[6]), "+r"(pD[7])
+      : "l"(lA), "r"(stride), "l"(lB), "r"(stride), "l"(lC), "r"(stride)
+      : "memory"); }
+)");
+    OCL::Kernel ker = pg.gen_kernel("test_wmma");
+    const size_t size_g[3] = { 32U, 1U, 1U };
+    const size_t size_l[3] = { 32U, 1U, 1U };
+    queue.push_ndrange_kernel(ker, 3, size_g, size_l);
+    queue.finish(); }
+  catch (...) { return false; }
+  return true; }
 
 static void softmax(uint n, float *p) noexcept {
   assert(0 < n && p);
@@ -972,37 +1265,56 @@ string ManageRecv::gen_info() const noexcept {
   s += " (" + to_string(static_cast<uint>(_time)) + "us)";
   return s; }
 
-static double measure_compute_matM(const OCL::Queue &queue, uint nl,
-				   uint nlfm, uint npm, uint npn, uint npk,
+static OCL::Memory push_write(bool use_half, const OCL::Queue &queue,
+			      const float *ptr, size_t size) noexcept {
+  if (use_half) {
+    constexpr char str[] = R"(
+__kernel void foo(__global const float *f, __global half *h) {
+  uint gid = get_global_id(0);
+  vstore_half(f[gid], gid, h); }
+)";
+    OCL::Memory mem_tmp = queue.gen_mem_hw_dr(sizeof(float) * size);
+    OCL::Memory mem     = queue.gen_mem_drw(sizeof(ushort) * size);
+    OCL::Program pg     = queue.gen_program(str);
+    OCL::Kernel ker     = pg.gen_kernel("foo");
+    ker.set_arg(0, mem_tmp);
+    ker.set_arg(1, mem);
+    queue.push_write(mem_tmp, sizeof(float) * size, ptr);
+    queue.push_kernel(ker, size);
+    queue.finish();
+    return mem; }
+  OCL::Memory mem = queue.gen_mem_hw_dr(sizeof(float) * size);
+  queue.push_write(mem, sizeof(float) * size, ptr);
+  return mem; }
+
+static double measure_compute_matM(const OCL::Queue &queue,
+				   const SgemmParam &param,
 				   uint nbatch, uint nm0, uint nn0, uint nk0,
 				   uint sample_size) {
-  assert(queue.ok() && 0 < nl && 0 < nlfm && 0 < npm && 0 < npn && 0 < npk);
+  assert(queue.ok() && param.ok());
   assert(0 < nbatch && 0 < nm0 && 0 < nn0 && 0 < nk0 && 0 < sample_size);
-  uint nm = ceil_multi(nm0, nl * nlfm * npm);
-  uint nn = ceil_multi(nn0, nl * npn);
-  uint nk = ceil_multi(nk0, nl * nlfm * npk);
-  uint offa = nm * nk;
-  uint offb = nk * nn;
-  uint offc = nm * nn;
+  size_t size_g[3], size_l[3];
+  uint nm, nn, nk;
+  string str;
+  tie(str, nm, nn, nk, size_g[0], size_g[1], size_l[0],
+      size_l[1]) = gen_code_compute_matM(nm0, nn0, nk0, param);
+  size_g[2] = nbatch;
+  size_l[2] = 1U;
   unique_ptr<float []> host_a(new float [nbatch * nm * nk]);
   unique_ptr<float []> host_b(new float [nbatch * nk * nn]);
   unique_ptr<float []> host_c(new float [nbatch * nm * nn]);
-  string str        = gen_code_compute_matM(nm, nn, nk, offa, offb, offc, nl,
-					    nlfm, npm, npn, npk);
-  OCL::Program pg   = queue.gen_program(str.c_str());
-  OCL::Kernel ker   = pg.gen_kernel("compute_matM");
-  OCL::Memory mem_a = queue.gen_mem_hw_dr(nbatch * nm * nk * sizeof(float));
-  OCL::Memory mem_b = queue.gen_mem_hw_dr(nbatch * nk * nn * sizeof(float));
-  OCL::Memory mem_c = queue.gen_mem_drw(nbatch * nm * nn * sizeof(float));
   fill_n(host_a.get(), nbatch * nm * nk, 0.1f);
   fill_n(host_b.get(), nbatch * nk * nn, 0.01f);
-  queue.push_write(mem_a, nbatch * nm * nk * sizeof(float), host_a.get());
-  queue.push_write(mem_b, nbatch * nk * nn * sizeof(float), host_b.get());
+  OCL::Program pg   = queue.gen_program(str.c_str());
+  OCL::Kernel ker   = pg.gen_kernel("compute_matM");
+  OCL::Memory mem_a = push_write(param.do_half, queue, host_a.get(),
+				 nbatch * nm * nk);
+  OCL::Memory mem_b = push_write(param.do_half, queue, host_b.get(),
+				 nbatch * nk * nn);
+  OCL::Memory mem_c = queue.gen_mem_drw(nbatch * nm * nn * sizeof(float));
   ker.set_arg(0, mem_a);
   ker.set_arg(1, mem_b);
   ker.set_arg(2, mem_c);
-  const size_t size_g[3] = { nn / npn, nm / npm, nbatch };
-  const size_t size_l[3] = { nl, nl * nlfm, 1U };
   queue.push_ndrange_kernel(ker, 3U, size_g, size_l);
   queue.finish();
   steady_clock::time_point start = steady_clock::now();
@@ -1015,61 +1327,98 @@ static double measure_compute_matM(const OCL::Queue &queue, uint nl,
   return (elapsed / static_cast<double>(sample_size)); }
 
 void ManageComputeMatM::start(const OCL::Device &dev, const OCL::Queue &queue,
-			      uint nbatch, uint nm0, uint nn0, uint nk0)
-  noexcept {
+			      uint nbatch, uint nm0, uint nn0, uint nk0,
+			      bool use_half, bool use_wmma) noexcept {
   assert(dev.ok() && queue.ok() && 0 < nbatch && 0 < nm0 && 0 < nn0
 	 && 0 < nk0);
-  deque<Param> params, params_candi;
-  uint wgmin, wgmax, nlstart, nlfmmax;
+  deque<SgemmParam> params, params_candi;
+  uint wgmin, wgmax, nlstart, nlfmmax, factor;
   uint mmax  = ceil_power2(nm0);
   uint nmax  = ceil_power2(nn0);
   uint kmax  = ceil_power2(nk0);
-  wgmax   = static_cast<uint>(dev.gen_max_work_group_size());
+
+  factor  = use_half ? 2U : 1U;
+  mmax    = max(mmax, factor);
+  nmax    = max(nmax, factor);
+  wgmax   = min(static_cast<uint>(dev.gen_max_work_group_size()), 4096U);
   wgmin   = max(mmax*nmax/2U, 1U);
   wgmin   = min(wgmin, 16U);
   nlstart = min(mmax, nmax);
   nlstart = min(nlstart, 4U);
+  mmax    = max(mmax, 64U / nmax);
   if      (nmax <= 1U) nlfmmax = 128U;
   else if (nmax <= 2U) nlfmmax =  32U;
   else if (nmax <= 4U) nlfmmax =   8U;
   else                 nlfmmax =   2U;
   for (uint nl = nlstart; nl <= 64U; nl *= 2U) {
-    if (mmax < nl || nmax < nl || kmax < nl) continue;
     for (uint nlfm = 1U; nlfm <= nlfmmax; nlfm *= 2U) {
-      if (4096 < nl*nl*nlfm || mmax < nl*nlfm || kmax < nl*nlfm
-	  || nl*nl*nlfm < wgmin || wgmax < nl*nl*nlfm) continue;
-      for (uint npm = 1U; npm <= min(32U, nl); npm *= 2U) {
-	if (mmax < nl * nlfm * npm) continue;
-	for (uint npn = 1U; npn <= min(32U, nl); npn *= 2U) {
-	  if (nmax < nl * npn || 256U < npm*npn) continue;
+      if (nl*nl*nlfm < wgmin || wgmax < nl*nl*nlfm) continue;
+      for (uint npm = 1U; npm <= 32U; npm *= 2U) {
+	for (uint npn = factor; npn <= 32U; npn *= 2U) {
+	  if (256U < npm*npn) continue;
+	  if (factor*nl < npm) continue;
+	  if (factor*nl*nlfm < npn) continue;
 	  for (uint npk = 1U; npk <= min(4U, nl); npk *= 2U) {
+	    if (mmax < nl * nlfm * npm) continue;
+	    if (nmax < nl * npn) continue;
 	    if (kmax < nl * nlfm * npk) continue;
-	    params.push_back({0.0, nl, nlfm, npm, npn, npk}); } } } } }
+	    if (nl * nlfm * npm < factor) continue;
+	    if (nl * npn < factor) continue;
+	    if (nlfm * npm * npk < factor) continue;
+            if (npn * npk < factor) continue;
+	    params.emplace_back(use_half, nl, nlfm, npm, npn, npk); } } } } }
+#if 0
+  if (use_wmma) {
+    mmax = ceil_power2(nm0);
+    nmax = ceil_power2(nn0);
+    kmax = ceil_power2(nk0);
+    mmax = max(mmax, 8U);
+    nmax = max(nmax, 8U);
+    kmax = max(kmax, 16U);
+    if      (nmax == 8U)  mmax = max(mmax, 32U);
+    else if (nmax == 16U) mmax = max(mmax, 16U);
+    uint ntm, ntn, ntk = 16U;
+    for (uint nl = 1U; nl <= 16U; nl *= 2U)
+      for (uint npm = 1U; npm <= 4U; npm *= 2U)
+	for (uint npn = 1U; npn <= 4U; npn *= 2U)
+	  for (uint npk = 1U; npk <= 4U; npk *= 2U)
+	    for (auto t : { make_tuple(16U, 16U) }) {
+	      tie(ntm, ntn) = t;
+	      if (mmax < nl*npm*ntm) continue;
+	      if (nmax < nl*npn*ntn) continue;
+	      if (kmax < nl*npk*ntk) continue;
+	      if (2U*nl*size_wrap_wmma < npm*ntm) continue;
+	      if (2U*nl*size_wrap_wmma < npn*ntn) continue;
+	      params.emplace_back(use_half, true, nl, npm, npn, npk, ntm, ntn);
+	    } }
+#endif
 
   OCL::Queue qtmp = dev.gen_queue();
   _time = DBL_MAX;
   while (! params.empty()) {
-    Param param = params.front();
+    SgemmParam param = params.front();
     params.pop_front();
     double elapsed = DBL_MAX;
     bool flag_error = false;
     try {
-      elapsed = measure_compute_matM(qtmp, param.nl, param.nlfm, param.npm,
-				     param.npn, param.npk, nbatch, nm0, nn0,
-				     nk0, 1U); }
+      elapsed = measure_compute_matM(qtmp, param, nbatch, nm0, nn0, nk0, 1U); }
     catch (...) { elapsed = DBL_MAX; flag_error = true; }
-    
+    //catch (std::exception &e) {
+    //  std::cout << e.what() << std::endl;
+    //  std::terminate();
+    //  elapsed = DBL_MAX; flag_error = true; }
+
     if (flag_error) {
       for (auto it = params.begin(); it != params.end(); ) {
 	if (param <= *it) it = params.erase(it);
 	else ++it; } }
     else {
-      params_candi.push_back({elapsed,
-	    param.nl, param.nlfm, param.npm, param.npn, param.npk});
+      param.time = elapsed;
+      params_candi.push_back(param);
       if (elapsed < _time) { _time = elapsed; _param = param; } } }
   if (_time == DBL_MAX) die(ERR_INT("ManageComputeMatM() failed."));
 
-  double time_max = min(_time * 2.0, _time + 5000.0);
+  double time_max = min(_time * 2.0 + 20.0, _time + 5000.0);
   for (auto it = params_candi.begin(); it != params_candi.end(); ) {
     if (time_max <= it->time) it = params_candi.erase(it);
     else ++it; }
@@ -1080,48 +1429,42 @@ void ManageComputeMatM::start(const OCL::Device &dev, const OCL::Queue &queue,
     qtmp = dev.gen_queue();
     _time = DBL_MAX;
     while (! params_candi.empty()) {
-      Param param = params_candi.front();
+      SgemmParam param = params_candi.front();
       params_candi.pop_front();
-      double elapsed = measure_compute_matM(qtmp, param.nl, param.nlfm,
-					    param.npm, param.npn, param.npk,
-					    nbatch, nm0, nn0, nk0,
+      double elapsed = measure_compute_matM(qtmp, param, nbatch, nm0, nn0, nk0,
 					    sample_size);
       if (_time <= elapsed) continue;
       _time  = elapsed;
       _param = param; } }
   if (_time == DBL_MAX) die(ERR_INT("ManageComputeMatM() failed."));
 
-  uint nm = ceil_multi(nm0, _param.nl * _param.nlfm * _param.npm);
-  uint nn = ceil_multi(nn0, _param.nl * _param.npn);
-  uint nk = ceil_multi(nk0, _param.nl * _param.nlfm * _param.npk);
-  uint offa = nm * nk;
-  uint offb = nk * nn;
-  uint offc = nm * nn;
-  string str = gen_code_compute_matM(nm, nn, nk, offa, offb, offc, _param.nl,
-				     _param.nlfm, _param.npm, _param.npn,
-				     _param.npk);
+  string str;
+  tie(str, _nm, _nn, _nk, _size_g[0], _size_g[1], _size_l[0], _size_l[1])
+    = gen_code_compute_matM(nm0, nn0, nk0, _param);
   OCL::Program pg = queue.gen_program(str.c_str());
   _ker = pg.gen_kernel("compute_matM");
-  _nbatch = nbatch;
-  _nm = nm;
-  _nn = nn;
-  _nk = nk;
-  size_g[0] = nn / _param.npn;
-  size_g[1] = nm / _param.npm;
-  size_g[2] = nbatch;
-  size_l[0] = _param.nl;
-  size_l[1] = _param.nl * _param.nlfm;
-  size_l[2] = 1U; }
+  _nbatch    = nbatch;
+  _size_g[2] = nbatch;
+  _size_l[2] = 1U; }
 
 string ManageComputeMatM::gen_info() const noexcept {
   assert(0 < _nbatch);
   string s;
-  s += string("NL:")  + to_string(_param.nl)     + string(" ");
-  s += string("NLFM:")  + to_string(_param.nlfm) + string(" ");
-  s += string("NPM:") + to_string(_param.npm)    + string(" ");
-  s += string("NPN:") + to_string(_param.npn)    + string(" ");
-  s += string("NPK:") + to_string(_param.npk)    + string(" (");
-  s += to_string(static_cast<uint>(_time)) + string("us)");
+  if (_param.do_wmma) {
+    s += string("NL:")   + to_string(_param.nl)   + string(" ");
+    s += string("NPM:")  + to_string(_param.npm)  + string(" ");
+    s += string("NPN:")  + to_string(_param.npn)  + string(" ");
+    s += string("NPK:")  + to_string(_param.npk)  + string(" ");
+    s += string("NTM:")  + to_string(_param.ntm)  + string(" ");
+    s += string("NTN:")  + to_string(_param.ntn)  + string(" (");
+    s += to_string(static_cast<uint>(_time)) + string("us)"); }
+  else {
+    s += string("NL:")   + to_string(_param.nl)   + string(" ");
+    s += string("NLFM:") + to_string(_param.nlfm) + string(" ");
+    s += string("NPM:")  + to_string(_param.npm)  + string(" ");
+    s += string("NPN:")  + to_string(_param.npn)  + string(" ");
+    s += string("NPK:")  + to_string(_param.npk)  + string(" (");
+    s += to_string(static_cast<uint>(_time)) + string("us)"); }
   return s; }
 
 void ManageComputeMatM::register_b(const OCL::Memory &mem) const noexcept {
@@ -1134,20 +1477,19 @@ void ManageComputeMatM::push(const OCL::Queue &queue, const OCL::Memory &mem_a)
   const noexcept {
   assert(queue.ok() && mem_a.ok());
   _ker.set_arg(0, mem_a);
-  queue.push_ndrange_kernel(_ker, 3U, size_g, size_l); }
+  queue.push_ndrange_kernel(_ker, 3U, _size_g, _size_l); }
 
-static double measure_sgemm(const OCL::Queue &queue, uint nl, uint nlfm,
-			    uint npm, uint npn, uint npk, uint nm0, uint nn0,
-			    uint nk0, uint sample_size) {
-  assert(qtmp.ok() && 0 < nl && 0 < nlfm && 0 < npm && 0 < npn && 0 < npk);
+static double measure_sgemm(const OCL::Queue &queue, const SgemmParam param,
+			    uint nm0, uint nn0, uint nk0, uint sample_size) {
+  assert(qtmp.ok() && param.ok());
   assert(0 < nm0 && 0 < nn0 && 0 < nk0 && 0 < sample_size);
-  uint nm = ceil_multi(nm0, nl * nlfm * npm);
-  uint nn = ceil_multi(nn0, nl * npn);
-  uint nk = ceil_multi(nk0, nl * nlfm * npk);
+  uint nm = ceil_multi(nm0, param.nl * param.nlfm * param.npm);
+  uint nn = ceil_multi(nn0, param.nl * param.npn);
+  uint nk = ceil_multi(nk0, param.nl * param.nlfm * param.npk);
   unique_ptr<float []> host_a(new float [nm * nk]);
   unique_ptr<float []> host_b(new float [nk * nn]);
   unique_ptr<float []> host_c(new float [nm * nn]);
-  string str        = gen_code_sgemm(nm, nn, nk, nl, nlfm, npm, npn, npk);
+  string str        = gen_code_sgemm(nm, nn, nk, param);
   OCL::Program pg   = queue.gen_program(str.c_str());
   OCL::Kernel ker   = pg.gen_kernel("sgemm");
   OCL::Memory mem_a = queue.gen_mem_hw_dr(nm * nk * sizeof(float));
@@ -1160,8 +1502,8 @@ static double measure_sgemm(const OCL::Queue &queue, uint nl, uint nlfm,
   ker.set_arg(0, mem_a);
   ker.set_arg(1, mem_b);
   ker.set_arg(2, mem_c);
-  const size_t size_g[3] = { nn / npn, nm / npm, 1U };
-  const size_t size_l[3] = { nl, nl * nlfm, 1U };
+  const size_t size_g[3] = { nn / param.npn, nm / param.npm, 1U };
+  const size_t size_l[3] = { param.nl, param.nl * param.nlfm, 1U };
   queue.push_ndrange_kernel(ker, 3U, size_g, size_l);
   queue.finish();
   steady_clock::time_point start = steady_clock::now();
@@ -1179,14 +1521,14 @@ void ManageSgemm::start(const OCL::Device &dev, const OCL::Queue &queue,
 			uint offc0, uint ldc0, bool do_bias_ReLU) noexcept {
   assert(0 < nm0 && 0 < nn0 && 0 < nk0);
   assert(0 < lda && 0 < ldb && 0 < ldc);
-  deque<Param> params, params_candi;
+  deque<SgemmParam> params, params_candi;
   uint wgmin, wgmax, nlstart, nlfmmax;
-  uint mmax  = ceil_power2(nm0);
-  uint nmax  = ceil_power2(nn0);
-  uint kmax  = ceil_power2(nk0);
+  uint mmax = ceil_power2(nm0);
+  uint nmax = ceil_power2(nn0);
+  uint kmax = ceil_power2(nk0);
 
   _do_bias_ReLU = do_bias_ReLU;
-  wgmax   = static_cast<uint>(dev.gen_max_work_group_size());
+  wgmax   = min(static_cast<uint>(dev.gen_max_work_group_size()), 4096U);
   wgmin   = max(mmax*nmax/2U, 1U);
   wgmin   = min(wgmin, 16U);
   nlstart = min(mmax, nmax);
@@ -1196,41 +1538,41 @@ void ManageSgemm::start(const OCL::Device &dev, const OCL::Queue &queue,
   else if (nmax <= 2U) nlfmmax =  32U;
   else if (nmax <= 4U) nlfmmax =   8U;
   else                 nlfmmax =   2U;
-  for (uint nl = nlstart; nl <= 64U; nl *= 2U) {
-    if (mmax < nl || nmax < nl || kmax < nl) continue;
+  for (uint nl = nlstart; nl <= 64U; nl *= 2U)
     for (uint nlfm = 1U; nlfm <= nlfmmax; nlfm *= 2U) {
-      if (4096 < nl*nl*nlfm || mmax < nl*nlfm || kmax < nl*nlfm
-	  || nl*nl*nlfm < wgmin || wgmax < nl*nl*nlfm) continue;
-      for (uint npm = 1U; npm <= min(32U, nl); npm *= 2U) {
-	if (mmax < nl * nlfm * npm) continue;
-	for (uint npn = 1U; npn <= min(32U, nl); npn *= 2U) {
-	  if (nmax < nl * npn || 256U < npm*npn) continue;
+      if (nl*nl*nlfm < wgmin || wgmax < nl*nl*nlfm) continue;
+      for (uint npm = 1U; npm <= 32U; npm *= 2U)
+	for (uint npn = 1U; npn <= 32U; npn *= 2U) {
+	  if (256U < npm*npn) continue;
+	  if (nl < npm) continue;
+	  if (nl*nlfm < npn) continue;
 	  for (uint npk = 1U; npk <= min(4U, nl); npk *= 2U) {
+	    if (mmax < nl * nlfm * npm) continue;
+	    if (nmax < nl * npn) continue;
 	    if (kmax < nl * nlfm * npk) continue;
-	    params.push_back({0.0, nl, nlfm, npm, npn, npk}); } } } } }
+	    params.emplace_back(false, nl, nlfm, npm, npn, npk); } } }
 
   OCL::Queue qtmp = dev.gen_queue();
   _time = DBL_MAX;
   while (! params.empty()) {
-    Param param = params.front();
+    SgemmParam param = params.front();
     params.pop_front();
     double elapsed = DBL_MAX;
     bool flag_error = false;
     try {
-      elapsed = measure_sgemm(qtmp, param.nl, param.nlfm, param.npm, param.npn,
-			      param.npk, nm0, nn0, nk0, 1U); }
+      elapsed = measure_sgemm(qtmp, param, nm0, nn0, nk0, 1U); }
     catch (...) { elapsed = DBL_MAX; flag_error = true; }
     if (flag_error) {
       for (auto it = params.begin(); it != params.end(); ) {
 	if (param <= *it) it = params.erase(it);
 	else ++it; } }
     else {
-      params_candi.push_back({elapsed,
-	    param.nl, param.nlfm, param.npm, param.npn, param.npk});
+      param.time = elapsed;
+      params_candi.push_back(param);
       if (elapsed < _time) { _time = elapsed; _param = param; } } }
   if (_time == DBL_MAX) die(ERR_INT("ManageComputeMatM() failed."));
 
-  double time_max = min(_time * 2.0, _time + 5000.0);
+  double time_max = min(_time * 2.0 + 20.0, _time + 5000.0);
   for (auto it = params_candi.begin(); it != params_candi.end(); ) {
     if (time_max <= it->time) it = params_candi.erase(it);
     else ++it; }
@@ -1241,11 +1583,9 @@ void ManageSgemm::start(const OCL::Device &dev, const OCL::Queue &queue,
     qtmp = dev.gen_queue();
     _time = DBL_MAX;
     while (! params_candi.empty()) {
-      Param param = params_candi.front();
+      SgemmParam param = params_candi.front();
       params_candi.pop_front();
-      double elapsed = measure_sgemm(qtmp, param.nl, param.nlfm, param.npm,
-				     param.npn, param.npk, nm0, nn0, nk0,
-				     sample_size);
+      double elapsed = measure_sgemm(qtmp, param, nm0, nn0, nk0, sample_size);
       if (_time <= elapsed) continue;
       _time  = elapsed;
       _param = param; } }
@@ -1309,8 +1649,7 @@ void ManageSgemm::start(const OCL::Device &dev, const OCL::Queue &queue,
     _ker_c = pg.gen_kernel("matC_to_mat0");
     _ker_c.set_arg(0, mem_c); }
 
-  str = gen_code_sgemm(nm, nn, nk, _param.nl, _param.nlfm, _param.npm,
-    _param.npn, _param.npk);
+  str = gen_code_sgemm(nm, nn, nk, _param);
   pg = queue.gen_program(str.c_str());
   _ker_sgemm = pg.gen_kernel("sgemm");
   _ker_sgemm.set_arg(0, mem_a);
@@ -1359,10 +1698,12 @@ string ManageSgemm::gen_info() const noexcept {
   s += to_string(static_cast<uint>(_time)) + string("us)");
   return s; }
 
-void ManageComputeMatV::start(const OCL::Queue &queue,
+void ManageComputeMatV::start(bool use_half, const OCL::Queue &queue,
 			      uint nch, uint nb, uint nn, uint nk,
 			      const OCL::Memory &mem_matV) noexcept {
-  string code =
+  string code;
+  if (use_half) code += "#define DO_HALF\n";
+  code +=
     "#define NB " + to_string(nb) + "U\n"
     "#define NK " + to_string(nk) + "U\n"
     "#define NN " + to_string(nn) + "U\n" + code_common + code_compute_matV;
@@ -1589,9 +1930,8 @@ static void compress_data(uint nb0, uint nb, const float *in,
 NNetOCL::~NNetOCL() noexcept { _mng_send.end(_queue); }
 
 void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
-		    int device_id) noexcept {
+		    int device_id, bool use_half) noexcept {
   assert(0 < maxsize_batch);
-
 #if defined(USE_MKL)
   mkl_set_num_threads_local(1);
 #else
@@ -1688,37 +2028,43 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
   else {
     get_best_device(_cl_dev);
     if (!_cl_dev.ok()) die(ERR_INT("no device found")); }
+  
   std::cout << "- Device ID: " << device_id << "\n";
   std::cout << _cl_dev.gen_info();
-  std::cout << std::endl;
-  _queue = _cl_dev.gen_queue();
 
-  std::cout << "  Send:           ";
+  bool use_wmma = false;
+  if (use_half) {
+    use_wmma = test_wmma(_cl_dev);
+    std::cout << "  Wmma support:         "
+	      << (use_wmma ? "Yes" : "No") << std::endl; }
+
+  std::cout << "  Send:                 ";
   std::cout.flush();
+  _queue = _cl_dev.gen_queue();
   _mng_send.start(_cl_dev, _queue, maxsize_batch);
   std::cout << _mng_send.gen_info() << std::endl;
 
-  std::cout << "  Recv:           ";
+  std::cout << "  Recv:                 ";
   std::cout.flush();
   _mng_recv.start(_cl_dev, _queue, (1U + NNAux::nmove) * sizeof(float),
 		  maxsize_batch);
   std::cout << _mng_recv.gen_info() << std::endl;
 
-  std::cout << "  Matrix M Input: ";
+  std::cout << "  Matrix M Input:       ";
   std::cout.flush();
-  _mng_compute_matM_input.start(_cl_dev, _queue, size_tile_in,
-				_resnet_nout, maxsize_batch * ntile,
-				NNAux::nch_input);
+  _mng_compute_matM_input.start(_cl_dev, _queue, size_tile_in, _resnet_nout,
+				maxsize_batch * ntile, NNAux::nch_input,
+				use_half, use_wmma);
   std::cout << _mng_compute_matM_input.gen_info() << std::endl;
 
-  std::cout << "  Matrix M:       ";
+  std::cout << "  Matrix M:             ";
   std::cout.flush();
-  _mng_compute_matM.start(_cl_dev, _queue, size_tile_in,
-			  _resnet_nout, maxsize_batch * ntile,
-			  _resnet_nout);
+  _mng_compute_matM.start(_cl_dev, _queue, size_tile_in, _resnet_nout,
+			  maxsize_batch * ntile, _resnet_nout,
+			  use_half, use_wmma);
   std::cout << _mng_compute_matM.gen_info() << std::endl;
 
-  std::cout << "  Head 1:         ";
+  std::cout << "  Head 1:               ";
   std::cout.flush();
   _mng_head1.start(_cl_dev, _queue, true, false, _head1_nout,
 		   maxsize_batch * NNAux::size_plane, _resnet_nout, 0,
@@ -1726,14 +2072,14 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
 		   maxsize_batch * NNAux::size_plane);
   std::cout << _mng_head1.gen_info() << std::endl;
 
-  std::cout << "  Value 2:        ";
+  std::cout << "  Value 2:              ";
   std::cout.flush();
   _mng_value2.start(_cl_dev, _queue, true, false, _value2_nout, maxsize_batch,
 		    _value2_nin, 0, _value2_nout, 0, maxsize_batch, 0,
 		    maxsize_batch, true);
   std::cout << _mng_value2.gen_info() << std::endl;
 
-  std::cout << "  Value 3:        ";
+  std::cout << "  Value 3:              ";
   std::cout.flush();
   _mng_value3.start(_cl_dev, _queue, true, false, maxsize_batch, 1U,
 		    _value3_nin, 0, maxsize_batch, 0, 1U, 0, 1U, false);
@@ -1776,11 +2122,12 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
   _mng_compute_matM_input.register_c(_cl_matM);
   _mng_compute_matM.register_b(_cl_matV);
   _mng_compute_matM.register_c(_cl_matM);
-  _mng_compute_matV_input.start(_queue, NNAux::nch_input, maxsize_batch,
+  _mng_compute_matV_input.start(use_half, _queue, NNAux::nch_input,
+				maxsize_batch,
 				_mng_compute_matM_input.get_nn(),
 				_mng_compute_matM_input.get_nk(),
 				_cl_matV);
-  _mng_compute_matV.start(_queue, _resnet_nout, maxsize_batch,
+  _mng_compute_matV.start(use_half, _queue, _resnet_nout, maxsize_batch,
 			  _mng_compute_matM.get_nn(),
 			  _mng_compute_matM.get_nk(), _cl_matV);
   _mng_compute_matA_input.start(_queue, false, _resnet_nout, maxsize_batch,
@@ -1798,7 +2145,7 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
 
   std::cout << "  Loading Weights ... ";
   std::cout.flush();
-  load(wght);
+  load(use_half, wght);
   std::cout << "done" << std::endl;;
 
   _mng_head1.register_a0(_cl_head1_wght);
@@ -1842,7 +2189,8 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
   _cl_value2_wght.clear();
   _cl_value3_wght.clear(); }
 
-void NNetOCL::load(const vector<pair<uint, row_t>> &wght) noexcept {
+void NNetOCL::load(bool use_half, const vector<pair<uint, row_t>> &wght)
+  noexcept {
   uint nin   = NNAux::nch_input;
   uint nm    = _mng_compute_matM_input.get_nm();
   uint nk    = _mng_compute_matM_input.get_nk();
@@ -1850,16 +2198,13 @@ void NNetOCL::load(const vector<pair<uint, row_t>> &wght) noexcept {
   for (uint u = 0; u < 1U + _nres_block; ++u) {
     uint sizeU = size_tile_in * nm * nk;
     row_t matU = gen_matU(_resnet_nout, nin, wght[index].second.get(), nm, nk);
-    OCL::Memory cl_matU   = _queue.gen_mem_hw_dr(sizeof(float) * sizeU);
-    OCL::Memory cl_mean   = _queue.gen_mem_hw_dr(sizeof(float) * _resnet_nout);
-    OCL::Memory cl_sd_inv = _queue.gen_mem_hw_dr(sizeof(float) * _resnet_nout);
     row_t mean = gen_mean(_resnet_nout, wght[index + 1U].second.get(),
 			  wght[index + 2U].second.get());
-    row_t sd_inv = gen_sd_inv(_resnet_nout, wght[index + 3U].second.get());
-    _queue.push_write(cl_matU,   sizeof(float) * sizeU, matU.get());
-    _queue.push_write(cl_mean,   sizeof(float) * _resnet_nout, mean.get());
-    _queue.push_write(cl_sd_inv, sizeof(float) * _resnet_nout, sd_inv.get());
-    _cl_reswghts.push_back({move(cl_matU), move(cl_mean), move(cl_sd_inv)});
+    row_t sdinv= gen_sd_inv(_resnet_nout, wght[index + 3U].second.get());
+    OCL::Memory cl_matU = push_write(use_half, _queue, matU.get(), sizeU);
+    OCL::Memory cl_mean = push_write(false, _queue, mean.get(), _resnet_nout);
+    OCL::Memory cl_sdinv= push_write(false, _queue, sdinv.get(), _resnet_nout);
+    _cl_reswghts.push_back({move(cl_matU), move(cl_mean), move(cl_sdinv)});
     _queue.finish();
     nin = _resnet_nout;
     nm  = _mng_compute_matM.get_nm();

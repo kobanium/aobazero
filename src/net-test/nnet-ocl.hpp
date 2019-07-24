@@ -57,23 +57,45 @@ public:
   std::string gen_info() const noexcept;
 };
 
+struct SgemmParam {
+  double time;
+  bool do_half, do_wmma;
+  uint nl, nlfm, npm, npn, npk, ntm, ntn;
+  SgemmParam() noexcept {}
+  SgemmParam(bool do_half_, uint nl_, uint nlfm_, uint npm_, uint npn_,
+	     uint npk_) noexcept :
+  time(0.0), do_half(do_half_), do_wmma(false), nl(nl_), nlfm(nlfm_),
+    npm(npm_), npn(npn_), npk(npk_) {}
+  SgemmParam(bool do_half_, bool do_wmma_, uint nl_, uint npm_, uint npn_,
+	     uint npk_, uint ntm_, uint ntn_) noexcept :
+  time(0.0), do_half(do_half_), do_wmma(do_wmma_),
+    nl(nl_), npm(npm_), npn(npn_), npk(npk_), ntm(ntm_), ntn(ntn_) {}
+  bool operator<=(const SgemmParam &p) const noexcept {
+    if (do_wmma) {
+      return (nl <= p.nl && npm <= p.npm && npn <= p.npn && npk <= p.npk
+	      && ntm <= p.ntm && ntn <= p.ntn); }
+    return (nl <= p.nl && nlfm <= p.nlfm && npm <= p.npm && npn <= p.npn
+	    && npk <= p.npk); }
+  bool ok() const noexcept {
+    if (do_wmma) {
+      return (0.0 <= time && 0 < nl && 0 < npm && 0 < npn && 0 < npk
+	      && 0 < ntm && 0 < ntn); }
+    return (0.0 <= time && 0 < nl && 0 < nlfm && 0 < npm && 0 < npn
+	    && 0 < npk); }
+};
+
 class ManageComputeMatM {
   using uint = unsigned int;
-  struct Param {
-    double time;
-    uint nl, nlfm, npm, npn, npk;
-    bool operator<=(const Param &p) {
-      return (nl <= p.nl && nlfm <= p.nlfm && npm <= p.npm && npn <= p.npn
-	      && npk <= p.npk); } };
   OCL::Kernel _ker;
   double _time;
-  size_t size_g[3], size_l[3];
-  Param _param;
+  size_t _size_g[3], _size_l[3];
+  SgemmParam _param;
   uint _nbatch, _nm, _nn, _nk;
 public:
   ManageComputeMatM() noexcept : _nbatch(0) {};
-  void start(const OCL::Device &dev, const OCL::Queue &queue,
-	     uint nbatch, uint nm0, uint nn0, uint nk0) noexcept;
+  void start(const OCL::Device &dev, const OCL::Queue &queue, uint nbatch,
+	     uint nm0, uint nn0, uint nk0, bool use_half, bool use_wmma)
+    noexcept;
   void register_b(const OCL::Memory &mem) const noexcept;
   void register_c(const OCL::Memory &mem) const noexcept;
   void push(const OCL::Queue &queue, const OCL::Memory &mem_a) const noexcept;
@@ -85,17 +107,11 @@ public:
 
 class ManageSgemm {
   using uint = unsigned int;
-  struct Param {
-    double time;
-    uint nl, nlfm, npm, npn, npk;
-    bool operator<=(const Param &p) {
-      return (nl <= p.nl && nlfm <= p.nlfm && npm <= p.npm && npn <= p.npn
-	      && npk <= p.npk); } };
   OCL::Memory mem_a, mem_b, mem_c;
   OCL::Kernel _ker_a, _ker_b, _ker_c, _ker_sgemm;
   double _time;
   size_t size_g[3], size_l[3];
-  Param _param;
+  SgemmParam _param;
   uint _nm0, _nn0, _nk0;
   bool _done_load_a, _done_load_b, _do_bias_ReLU;
 
@@ -121,7 +137,7 @@ class ManageComputeMatV {
   uint _nm;
 public:
   ManageComputeMatV() noexcept : _nm(0) {}
-  void start(const OCL::Queue &queue,
+  void start(bool use_half, const OCL::Queue &queue,
 	     uint nch, uint nb, uint nn, uint nk,
 	     const OCL::Memory &mem_matV) noexcept;
   void push(const OCL::Queue &queue, const OCL::Memory &mem_in) const noexcept;
@@ -154,7 +170,7 @@ public:
 };
 
 class ManageComputeBNReLU {
-  using uint  = unsigned int;
+  using uint = unsigned int;
   OCL::Kernel _ker;
   uint _nm;
 public:
@@ -166,7 +182,7 @@ public:
 };
 
 class ManageComputePolicy {
-  using uint  = unsigned int;
+  using uint = unsigned int;
   OCL::Kernel _ker;
 public:
   void start(const OCL::Queue &queue, uint nch_in, uint maxsize_batch,
@@ -208,13 +224,14 @@ class NNetOCL {
   uint _head1_nout, _policy1_nout, _value1_nout, _policy2_nin;
   uint _value2_nin, _value2_nout, _value3_nin, _value3_nout;
   row_t _value3_bias;
-  void load(const std::vector<std::pair<uint, row_t>> &wght) noexcept;
+  void load(bool use_half, const std::vector<std::pair<uint, row_t>> &wght)
+    noexcept;
 
 public:
   ~NNetOCL() noexcept;
   void reset(uint maxsize_batch,
 	     const std::vector<std::pair<uint, row_t>> &wght,
-	     int device_id) noexcept;
+	     int device_id, bool use_half = true) noexcept;
   void ff(uint size_batch, const float *input, const uint *sizes_nnmove,
 	  const ushort *nnmoves, float *probs, float *values) noexcept;
 };

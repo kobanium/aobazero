@@ -48,7 +48,7 @@ using namespace ErrAux;
 using namespace SAux;
 
 constexpr uint size_batch = 7U;
-constexpr double epsilon = 1e-4;
+constexpr double epsilon = 1e-2;
 
 static double elapsed  = 0.0;
 static uint   nelapsed = 0U;
@@ -165,7 +165,7 @@ public:
     uint64_t digest;
     NNAux::wght_t wght = NNAux::read(fname, version, digest);
 #if defined(USE_OPENCL)
-    _nnet.reset(N, wght, device_id);
+    _nnet.reset(N, wght, device_id, true);
 #else
     _nnet.reset(N, wght);
 #endif
