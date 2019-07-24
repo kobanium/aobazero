@@ -165,7 +165,7 @@ public:
     uint64_t digest;
     NNAux::wght_t wght = NNAux::read(fname, version, digest);
 #if defined(USE_OPENCL)
-    _nnet.reset(N, wght, device_id, true);
+    _nnet.reset(N, wght, device_id, false);
 #else
     _nnet.reset(N, wght);
 #endif
