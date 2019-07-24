@@ -58,6 +58,7 @@ public:
 };
 
 struct SgemmParam {
+  using uint = unsigned int;
   double time;
   bool do_half, do_wmma;
   uint nl, nlfm, npm, npn, npk, ntm, ntn;
