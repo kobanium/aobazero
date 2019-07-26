@@ -7,6 +7,9 @@
 #  include <fcntl.h>
 #endif
 #include "shogi.h"
+#if defined(YSS_ZERO)
+#include "../GTP.h"
+#endif
 
 static int main_child( tree_t * restrict ptree );
 
@@ -44,6 +47,7 @@ main()
 #endif
 
 #if defined(YSS_ZERO)
+  GTP::setup_default_parameters();
   usi_mode = usi_on;
   if ( getCmdLineParam(argc, argv) < 0 ) {
     out_error( "%s", str_error );

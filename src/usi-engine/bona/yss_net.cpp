@@ -48,7 +48,6 @@ void init_global_objects();	// Leela.cpp
 
 void init_network()
 {
-	GTP::setup_default_parameters();
 //	Random::get_Rng().seedrandom(cfg_rng_seed);
 
 //	cfg_weightsfile = "networks/20180122_i362_pro_flood_F64L29_b64_1_half_version_2.txt";
@@ -274,7 +273,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 
 	set_dcnn_channels(ptree, sideToMove, ply, data);
 //	if ( 1 || ply==1 ) { prt_dcnn_data_table((float(*)[B_SIZE][B_SIZE])data);  }
-//	{ int sum=0; int i; for (i=0;i<size;i++) sum = 37*sum + (int)(data[i]+0.1); PRT("sum=%d\n",sum); }
+//	if ( 1 && ptree->nrep+ply==101+3 ) { int sum=0; int i; for (i=0;i<size;i++) sum = sum*37 + (int)(data[i]*1000.0f); PRT("sum=%08x,ply=%d,nrep=%d\n",sum,ply,ptree->nrep); }
 
 //	const auto result = Network::get_scored_moves_yss_zero((float(*)[B_SIZE][B_SIZE])data);
 	const auto result = GTP::s_network->get_scored_moves_yss_zero((float(*)[B_SIZE][B_SIZE])data);

@@ -1452,6 +1452,7 @@ extern uint64_t sequence_hash_drop[SEQUENCE_HASH_SIZE][81][7];
 void PRT(const char *fmt, ...);
 void print_board(const tree_t * restrict ptree);
 void init_yss_zero();
+void init_state( const tree_t * restrict parent, tree_t * restrict child );
 #endif
 
 #endif /* SHOGI_H */
