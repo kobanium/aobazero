@@ -3,7 +3,6 @@
 #pragma once
 #include "nnet.hpp"
 #include <memory>
-#include <utility>
 #include <vector>
 
 class FName;

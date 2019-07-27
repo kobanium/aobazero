@@ -17,7 +17,7 @@ cl %CPPFLAGS% %CXXFLAGS% src\gencode\gencode.cpp
 bin\gencode
 @if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
 
-cl %CPPFLAGS% %CXXFLAGS% src\net-test\net-test.cpp src\common\opencl.cpp src\net-test\nnet.cpp src\net-test\nnet-shogi.cpp src\net-test\nnet-cpu.cpp src\net-test\nnet-ocl.cpp src\common\err.cpp src\common\iobase.cpp src\common\shogibase.cpp src\common\xzi.cpp src\common\osi.cpp src\common\option.cpp %LDFLAGS% Ws2_32.lib liblzma.lib mkl_intel_lp64.lib mkl_intel_thread.lib mkl_core.lib libiomp5md.lib objs\OpenCL.lib
+cl %CPPFLAGS% %CXXFLAGS% src\net-test\net-test.cpp src\common\opencl.cpp src\net-test\nnet.cpp src\net-test\nnet-cpu.cpp src\net-test\nnet-ocl.cpp src\common\err.cpp src\common\iobase.cpp src\common\shogibase.cpp src\common\xzi.cpp src\common\osi.cpp src\common\option.cpp %LDFLAGS% Ws2_32.lib liblzma.lib mkl_intel_lp64.lib mkl_intel_thread.lib mkl_core.lib libiomp5md.lib objs\OpenCL.lib
 @if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
 
 rem cl %CPPFLAGS% %CXXFLAGS% src\autousi\autousi.cpp src\autousi\client.cpp src\autousi\pipe.cpp src\common\iobase.cpp src\common\option.cpp src\common\jqueue.cpp src\common\xzi.cpp src\common\err.cpp src\common\shogibase.cpp src\common\osi.cpp %LDFLAGS% Ws2_32.lib liblzma.lib

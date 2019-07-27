@@ -2,7 +2,6 @@
 // This source code is in the public domain.
 #include "err.hpp"
 #include "iobase.hpp"
-#include "nnet-shogi.hpp"
 #include "nnet-cpu.hpp"
 #include "nnet-ocl.hpp"
 #include "option.hpp"
@@ -19,7 +18,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include <cmath>
 #include <climits>
 using std::copy_n;
 using std::cout;
@@ -30,7 +28,6 @@ using std::istream;
 using std::map;
 using std::max;
 using std::move;
-using std::pair;
 using std::set;
 using std::setw;
 using std::string;
@@ -38,7 +35,7 @@ using std::stringstream;
 using std::terminate;
 using std::unique_ptr;
 using std::vector;
-using std::chrono::system_clock;
+using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 using std::chrono::microseconds;
 using uint   = unsigned int;
@@ -47,7 +44,6 @@ using uchar  = unsigned char;
 using namespace ErrAux;
 using namespace SAux;
 
-constexpr uint size_batch = 7U;
 constexpr double epsilon = 1e-2;
 
 static double elapsed  = 0.0;
@@ -63,7 +59,9 @@ static double policy_sum_e  = 0.0;
 static double policy_sum_se = 0.0;
 static double policy_max_e  = 0.0;
 
-static int opt_device_id = -1;
+static int opt_device_id   = -1;
+static uint opt_batch_size = 1;
+static bool opt_use_half   = false;
 static string opt_str_wght;
 
 static double absolute_error(double f1, double f2) noexcept {
@@ -75,55 +73,62 @@ static int get_options(int argc, const char * const *argv) noexcept {
   char *endptr;
 
   while (! flag_err) {
-    int opt = Opt::get(argc, argv, "u:");
+    int opt = Opt::get(argc, argv, "u:b:h");
     if (opt < 0) break;
 
     long l;
     switch (opt) {
     case 'u': 
       l = strtol(Opt::arg, &endptr, 10);
-      if (endptr == Opt::arg || *endptr != '\0'
-          || l == LONG_MAX || l < -1) flag_err = true;
+      if (endptr == Opt::arg || *endptr != '\0' || l < -1 || l == LONG_MAX)
+	flag_err = true;
       opt_device_id = static_cast<int>(l);
       break;
+
+    case 'b': 
+      l = strtol(Opt::arg, &endptr, 10);
+      if (endptr == Opt::arg || *endptr != '\0' || l < 1 || l == LONG_MAX)
+	flag_err = true;
+      opt_batch_size = static_cast<uint>(l);
+      break;
+
+    case 'h': opt_use_half = true;  break;
     default: flag_err = true; break; } }
 
   if (!flag_err && Opt::ind < argc) {
     opt_str_wght = string(argv[Opt::ind++]);
     return 0; }
   
-  cerr << "Usage: " << Opt::cmd << " [-u device-id] weight" << endl;
+  cerr << "Usage: " << Opt::cmd
+       << " [-u device-id] [-b batch-size] [-h] weight" << endl;
   return -1;
 }
   
-template <uint N>
 class QueueTest {
-  static_assert(0 < N, "0 < N");
-  unique_ptr<float []> _input;
-  unique_ptr<ushort []> _nnmoves;
-  unique_ptr<float []> _probs;
-  float _values[N];
-  uint _sizes_nnmove[N];
-  uint _npush;
-  uint _ntest;
 #if defined(USE_OPENCL)
   NNetOCL _nnet;
 #else
   NNetCPU _nnet;
 #endif
-  map<ushort, string> _tbl_nnmove2str[N];
-  map<string, double> _policy_answers[N];
-  double _value_answers[N];
+  unique_ptr<float []> _input;
+  unique_ptr<ushort []> _nnmoves;
+  unique_ptr<float []> _probs;
+  unique_ptr<float []> _values;
+  unique_ptr<uint []> _sizes_nnmove;
+  unique_ptr<map<ushort, string> []> _tbl_nnmove2str;
+  unique_ptr<map<string, double> []> _policy_answers;
+  unique_ptr<double []> _value_answers;
+  uint _npush, _ntest, _nbatch;
 
   void test(uint index) const noexcept {
     assert(index < N);
     
     // test output
-    double value_e  = absolute_error(_values[index], _value_answers[index]);
-    value_n        += 1U;
-    value_sum_e    += value_e;
-    value_sum_se   += value_e * value_e;
-    value_max_e     = max(value_max_e, value_e);
+    double value_e = absolute_error(_values[index], _value_answers[index]);
+    value_n       += 1U;
+    value_sum_e   += value_e;
+    value_sum_se  += value_e * value_e;
+    value_max_e    = max(value_max_e, value_e);
     if (2.0 * epsilon < value_e) {
       cerr << "value1:         " << _values[index] << endl;
       cerr << "value2:         " << _value_answers[index] << endl;
@@ -141,13 +146,13 @@ class QueueTest {
     auto &&it2 = policy.cbegin();
     while (it1 != _policy_answers[index].cend()
 	   && it2 != _policy_answers[index].cend()) {
-      double prob1       = (it1++)->second;
-      double prob2       = (it2++)->second;
-      double policy_e    = absolute_error(prob1, prob2);
-      policy_n          += 1U;
-      policy_sum_e      += policy_e;
-      policy_sum_se     += policy_e * policy_e;
-      policy_max_e       = max(policy_max_e, policy_e);
+      double prob1     = (it1++)->second;
+      double prob2     = (it2++)->second;
+      double policy_e  = absolute_error(prob1, prob2);
+      policy_n        += 1U;
+      policy_sum_e    += policy_e;
+      policy_sum_se   += policy_e * policy_e;
+      policy_max_e     = max(policy_max_e, policy_e);
       if (epsilon < policy_e) {
 	cerr << "prob1:          " << prob1 << endl;
 	cerr << "prob2:          " << prob2 << endl;
@@ -155,28 +160,35 @@ class QueueTest {
 	terminate(); } } }
   
 public:
-  explicit QueueTest() noexcept
-  : _input(new float [N * NNAux::size_input]),
-    _nnmoves(new ushort [N * SAux::maxsize_moves]),
-    _probs(new float [N * SAux::maxsize_moves]), _npush(0), _ntest(0) {}
+  explicit QueueTest() noexcept : _npush(0), _ntest(0) {}
 
-  void reset(const FName &fname, int device_id) noexcept {
+  void reset(const FName &fname, int device_id, uint nbatch, bool use_half)
+    noexcept {
+    _input.reset(new float [nbatch * NNAux::size_input]);
+    _nnmoves.reset(new ushort [nbatch * SAux::maxsize_moves]);
+    _probs.reset(new float [nbatch * SAux::maxsize_moves]);
+    _values.reset(new float [nbatch]);
+    _sizes_nnmove.reset(new uint [nbatch]);
+    _tbl_nnmove2str.reset(new map<ushort, string> [nbatch]);
+    _policy_answers.reset(new map<string, double> [nbatch]);
+    _value_answers.reset(new double [nbatch]);
+    _nbatch = nbatch;
     uint version;
     uint64_t digest;
     NNAux::wght_t wght = NNAux::read(fname, version, digest);
 #if defined(USE_OPENCL)
-    _nnet.reset(N, wght, device_id, false);
+    _nnet.reset(nbatch, wght, device_id, use_half);
 #else
-    _nnet.reset(N, wght);
+    _nnet.reset(nbatch, wght);
 #endif
-    (void)device_id; }
+    (void)device_id; (void)use_half; }
   
   void flush() noexcept {
     if (_npush == 0) return;
-    system_clock::time_point start = system_clock::now();
-    _nnet.ff(_npush, _input.get(), _sizes_nnmove, _nnmoves.get(), _probs.get(),
-	     _values);
-    system_clock::time_point end = system_clock::now();
+    steady_clock::time_point start = steady_clock::now();
+    _nnet.ff(_npush, _input.get(), _sizes_nnmove.get(), _nnmoves.get(),
+	     _probs.get(), _values.get());
+    steady_clock::time_point end = steady_clock::now();
     elapsed  += duration_cast<microseconds>(end - start).count();
     nelapsed += 1U;
 
@@ -197,10 +209,10 @@ public:
     _value_answers[_npush]  = value;
     _policy_answers[_npush] = policy_answers;
     _tbl_nnmove2str[_npush] = nnmove2str;
-    if (++_npush == N) flush(); }
+    if (++_npush == _nbatch) flush(); }
 };
 
-static QueueTest<size_batch> queue_test;
+static QueueTest queue_test;
 
 static void do_test(istream &is) noexcept {
 
@@ -315,8 +327,8 @@ static void do_test(istream &is) noexcept {
 
 int main(int argc, char **argv) {
   if (get_options(argc, argv) < 0) return 1;
-  
-  queue_test.reset(FName(opt_str_wght.c_str()), opt_device_id);
+  queue_test.reset(FName(opt_str_wght.c_str()), opt_device_id, opt_batch_size,
+		   opt_use_half);
   do_test(std::cin);
   queue_test.flush();
 

@@ -7,7 +7,6 @@
 #include <utility>
 #include <vector>
 #include <cassert>
-#include <cmath>
 #if defined(_OPENMP)
 #  include <omp.h>
 #endif
@@ -26,52 +25,12 @@ using std::max_element;
 using std::move;
 using std::pair;
 using std::swap;
-using std::unique_ptr;
 using std::vector;
-using row_t  = unique_ptr<float []>;
+using row_t  = std::unique_ptr<float []>;
 using ushort = unsigned short;
 using namespace ErrAux;
 
 constexpr char msg_bad_wght_dim[] = "bad weight dimension";
-
-#if 0
-void Conv_3x3::reset(uint, uint nin, uint nout,
-		     row_t &&weight, row_t &&bias) noexcept {
-  assert(0 < nin && 0 < nout && weight && bias);
-  Conv::reset(nin, nout, forward<row_t>(weight), forward<row_t>(bias));
-  _fcol.reset(new float [_nin * _size_kernel * NNAux::size_plane]); }
-
-void Conv_3x3::ff(uint size_batch, const float *fin, float *fout) noexcept {
-  assert(0 < size_batch && fin && fout);
-  constexpr int pad = _len_kernel / 2U;
-  for (uint ub = 0; ub < size_batch; ++ub) {
-    float *fcol = _fcol.get();
-    const float *fin_c = fin;
-    for (uint ch_in = 0; ch_in < _nin; ++ch_in) {
-      for (int kh = -pad; kh < static_cast<int>(_len_kernel) - pad; ++kh)
-	for (int kw = -pad; kw < static_cast<int>(_len_kernel) - pad; ++kw)
-	  for (int y = kh; y < kh + static_cast<int>(NNAux::height); ++y)
-	    if (0 <= y && y < static_cast<int>(NNAux::height)) {
-	      for (int x = kw; x < static_cast<int>(NNAux::width) + kw; ++x)
-		if (0 <= x && x < static_cast<int>(NNAux::width))
-		  *fcol++ = fin_c[y * NNAux::width + x];
-		else *fcol++ = 0.0f; }
-	    else for (uint ux = 0; ux < NNAux::width; ++ux) *fcol++ = 0.0f;
-      fin_c += NNAux::size_plane; }
-
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-		_nout, NNAux::size_plane, _nin * _size_kernel, 1.0f,
-		_weight.get(), _nin * _size_kernel,
-		_fcol.get(), NNAux::size_plane, 0.0f,
-		fout, NNAux::size_plane);
-    
-    if (_bias)
-      for (uint ch_out = 0; ch_out < _nout; ++ch_out)
-	for (uint u = 0; u < NNAux::size_plane; ++u)
-	  fout[ch_out * NNAux::size_plane + u] += _bias[ch_out];
-    fin  += NNAux::size_plane * _nin;
-    fout += NNAux::size_plane * _nout; } }
-#endif
 
 static float x1(float x) noexcept { return x; }
 static float x2(float x) noexcept { return x + x; }
@@ -122,7 +81,7 @@ static void softmax(uint n, float *p) noexcept {
   for (uint u = 0; u < n; ++u) p[u] *= factor; }
 
 void NNetCPU::reset(uint maxsize_batch,
-		    const std::vector<std::pair<uint, row_t>> &wght) noexcept {
+		    const vector<pair<uint, row_t>> &wght) noexcept {
   assert(0 < maxsize_batch);
 #if defined(_OPENMP)
   omp_set_num_threads(omp_get_max_threads());
@@ -201,7 +160,7 @@ static row_t gen_head1_sd_inv(uint nch1, uint nch2,
     row[nch1 + ch] = 1.0f / std::sqrt(sd2[ch] * bn_factor + bn_eps);
   return row; }
 
-void NNetCPU::load(const std::vector<std::pair<uint, row_t>> &wght) noexcept {
+void NNetCPU::load(const vector<pair<uint, row_t>> &wght) noexcept {
   constexpr uint nrow_input = 4U;
   constexpr uint nrow_head  = 14U;
   uint nrow = static_cast<uint>(wght.size());
@@ -229,10 +188,9 @@ void NNetCPU::load(const std::vector<std::pair<uint, row_t>> &wght) noexcept {
 	|| wght[index + 2U].first != _resnet_nout
 	|| wght[index + 3U].first != _resnet_nout)
       die(ERR_INT(msg_bad_wght_dim));
-    matU   = gen_matU(_resnet_nout, nin, wght[index].second.get());
-    mean   = gen_mean(_resnet_nout,
-		      wght[index + 1U].second.get(),
-		      wght[index + 2U].second.get());
+    matU = gen_matU(_resnet_nout, nin, wght[index].second.get());
+    mean = gen_mean(_resnet_nout, wght[index + 1U].second.get(),
+		    wght[index + 2U].second.get());
     sd_inv = gen_sd_inv(_resnet_nout, wght[index + 3U].second.get());
     _reswghts.push_back({move(matU), move(mean), move(sd_inv)});
     nin = _resnet_nout;
@@ -653,23 +611,7 @@ compute_probs(uint nch, uint size_batch, const uint *sizes_nnmove,
 			      size_batch * NNAux::size_plane);
       probs_b[u] += bias[ch]; }
     softmax(sizes_nnmove[ub], probs_b); } }
-/*
-#include <iostream>
-#include <chrono>
-using std::chrono::system_clock;
-using std::chrono::duration_cast;
-using std::chrono::microseconds;
-static double elapsed = 0.0;
-static uint nelapsed = 0;
-system_clock::time_point start = system_clock::now();
-system_clock::time_point end = system_clock::now();
-elapsed  += duration_cast<microseconds>(end - start).count();
-nelapsed += 1U;
-std::cout << std::endl;
-std::cout << elapsed / static_cast<double>(nelapsed) << std::endl;
-std::cout << std::endl;
-*/
-#include <iostream>
+
 void NNetCPU::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
 		 const ushort *nnmoves, float *probs, float *values) noexcept {
   assert(input && sizes_nnmove && nnmoves && probs && values);
@@ -683,19 +625,6 @@ void NNetCPU::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
   compute_matV_input(size_batch, input, _matV.get());
   compute_matM(_resnet_nout, NNAux::nch_input, size_batch,
 	       _reswghts[0].matU.get(), _matV.get(), _matM.get());
-  /*
-  for (uint u = size_tile_in - 1U; u < size_tile_in; ++u)
-    for (uint m = 0; m < _resnet_nout; ++m)
-      for (uint n = 0; n < size_batch * ntile; ++n) {
-	std::cout << u << " " << m << " "
-		  << _matM[u * _resnet_nout * size_batch * ntile
-			   + m * size_batch * ntile
-			   + n]
-		  << std::endl;
-      }
-  std::terminate();
-  */
-
   compute_matA_BNReLU_fork_matV(_resnet_nout, size_batch, _matM.get(),
 				_reswghts[0].mean.get(),
 				_reswghts[0].sd_inv.get(),

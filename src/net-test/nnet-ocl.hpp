@@ -95,8 +95,7 @@ class ManageComputeMatM {
 public:
   ManageComputeMatM() noexcept : _nbatch(0) {};
   void start(const OCL::Device &dev, const OCL::Queue &queue, uint nbatch,
-	     uint nm0, uint nn0, uint nk0, bool use_half, bool use_wmma)
-    noexcept;
+	     uint nm0, uint nn0, uint nk0, bool use_wmma) noexcept;
   void register_b(const OCL::Memory &mem) const noexcept;
   void register_c(const OCL::Memory &mem) const noexcept;
   void push(const OCL::Queue &queue, const OCL::Memory &mem_a) const noexcept;
@@ -138,21 +137,20 @@ class ManageComputeMatV {
   uint _nm;
 public:
   ManageComputeMatV() noexcept : _nm(0) {}
-  void start(bool use_half, const OCL::Queue &queue,
+  void start(bool store_half, const OCL::Queue &queue,
 	     uint nch, uint nb, uint nn, uint nk,
 	     const OCL::Memory &mem_matV) noexcept;
   void push(const OCL::Queue &queue, const OCL::Memory &mem_in) const noexcept;
 };
 
 class ManageComputeMatA {
-  using uint  = unsigned int;
+  using uint = unsigned int;
   OCL::Kernel _ker;
   uint _nm;
 public:
   ManageComputeMatA() noexcept : _nm(0) {}
-  void start(const OCL::Queue &queue, bool flag_join,
-	     uint nch, uint nb, uint nm, uint nn,
-	     const OCL::Memory &mem_matM,
+  void start(bool load_half, const OCL::Queue &queue, bool flag_join, uint nch,
+	     uint nb, uint nm, uint nn, const OCL::Memory &mem_matM,
 	     const OCL::Memory &mem_output) noexcept;
   void push(const OCL::Queue &queue, const OCL::Memory &mean,
 	    const OCL::Memory &sd_inv) const noexcept;
