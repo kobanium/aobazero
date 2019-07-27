@@ -302,9 +302,9 @@ __kernel void compute_matV(__global const float *fin, __global void *matV) {
 
 const string code_compute_matA = R"(
 #ifdef LOAD_HALF
-float load(uint off, __global half *p) { return vload_half(off, p); }
+float load(uint off, __global const half *p) { return vload_half(off, p); }
 #else
-float load(uint off, __global float *p) { return p[off]; }
+float load(uint off, __global const float *p) { return p[off]; }
 #endif
 
 #ifdef JOIN_BYPASS
@@ -1654,13 +1654,22 @@ void ManageComputeMatA::start(bool load_half, const OCL::Queue &queue,
 			      const OCL::Memory &mem_output) noexcept {
   uint offc = nm * nn;
   string code;
-  if (WMMA_ACCUMU16 && load_half) code += "#define LOAD_HALF\n";
-  if (flag_join)                  code += "#define JOIN_BYPASS\n";
+#if WMMA_ACCUMU16 == 1
+  if (load_half) code += "#define LOAD_HALF\n";
+#else
+  (void)load_half;
+#endif
+  if (flag_join) code += "#define JOIN_BYPASS\n";
   code +=
     "#define NB   " + to_string(nb)   + "\n"
     "#define OFFC " + to_string(offc) + "\n"
     "#define NN   " + to_string(nn)   + "\n" + code_common + code_compute_matA;
-  OCL::Program pg = queue.gen_program(code.c_str());
+
+  OCL::Program pg;
+  try { pg = queue.gen_program(code.c_str()); }
+  catch (std::exception &e) {
+    std::cout << e.what() << std::endl;
+    std::terminate(); }
   _ker = pg.gen_kernel("compute_matA_BNReLU");
   _ker.set_arg(0, mem_matM);
   _ker.set_arg(3, mem_output);
@@ -1955,7 +1964,7 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
   else {
     get_best_device(_cl_dev);
     if (!_cl_dev.ok()) die(ERR_INT("no device found")); }
-  
+
   std::cout << "- Device ID: " << device_id << "\n";
   std::cout << _cl_dev.gen_info();
 
@@ -2073,7 +2082,7 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
 
   std::cout << "  Loading Weights ... ";
   std::cout.flush();
-  load(use_half, wght);
+  load(use_wmma, wght);
   std::cout << "done" << std::endl;;
 
   _mng_head1.register_a0(_cl_head1_wght);
