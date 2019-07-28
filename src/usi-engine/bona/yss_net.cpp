@@ -64,7 +64,7 @@ void init_network()
 
 	init_global_objects();
 
-	PRT("cfg_softmax_temp=%.3f,cfg_random_temp=%.3f,cfg_num_threads=%d,cfg_batch_size=%d\n",cfg_softmax_temp,cfg_random_temp,cfg_num_threads,cfg_batch_size);
+	PRT("cfg_random_temp=%.3f,cfg_num_threads=%d,cfg_batch_size=%d\n",cfg_random_temp,cfg_num_threads,cfg_batch_size);
 
 	// Initialize network
 //	Network::initialize();

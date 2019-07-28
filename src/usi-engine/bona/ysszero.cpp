@@ -17,6 +17,9 @@
 #include <string>
 #include <vector>
 #include <random>
+#include <thread>
+#include <mutex>
+#include <atomic>
 
 #include "shogi.h"
 
@@ -39,8 +42,8 @@ int fVerbose = 1;
 int fClearHashAlways = 0;
 int fUsiInfo = 0;
 
-int UCT_LOOP_FIX = 100;
-int reached_ply = 0;
+int nLimitUctLoop = 100;
+double dLimitSec = 0;
 
 HASH_SHOGI *hash_shogi_table = NULL;
 const int HASH_SHOGI_TABLE_SIZE_MIN = 1024*4*4;
@@ -613,38 +616,47 @@ int is_stop_search()
 
 std::mutex g_mtx;
 
-struct Data {
-  int uct_count;
-  std::mutex mtx;
-} d;
+std::atomic<int> uct_count(0);
 
 int inc_uct_count()
 {
-  d.mtx.lock();
-  d.uct_count++;
-  if ( d.uct_count >= UCT_LOOP_FIX + 1 - (int)cfg_num_threads ) set_stop_search();
-  d.mtx.unlock();
-  return d.uct_count;
+	int expected = uct_count.load();
+	int desired;
+	do {
+	    desired = expected + 1;
+	} while ( !uct_count.compare_exchange_weak(expected, desired) );	// 失敗でexpectedの値が現在の値に変わる
+
+	int count = uct_count.load();
+	if ( count >= nLimitUctLoop + 1 - (int)cfg_num_threads ) set_stop_search();
+	return count;
 }
 
 int is_main_thread(tree_t * restrict ptree)
 {
 	return ( ptree == &tlp_atree_work[0] );
 }
-
+int is_limit_sec()
+{
+	if ( dLimitSec == 0 ) return 0;
+	if ( get_spend_time(search_start_ct) >= dLimitSec ) return 1;
+	return 0;
+}
 
 void uct_tree_loop(tree_t * restrict ptree, int sideToMove, int ply)
 {
-//	int sum_reached_ply = 0;
+	ptree->sum_reached_ply = 0;
+	ptree->max_reached_ply = 0;
 	for (;;) {
-//		reached_ply = 0;
+		ptree->reached_ply = 0;
 		uct_tree(ptree, sideToMove, ply);
-//		sum_reached_ply += reached_ply;
+		ptree->sum_reached_ply += ptree->reached_ply;
+		if ( ptree->reached_ply > ptree->max_reached_ply ) ptree->max_reached_ply = ptree->reached_ply; 
 		int count = inc_uct_count();
 		if ( is_main_thread(ptree) ) {
 			if ( is_send_usi_info(0) ) send_usi_info(ptree, sideToMove, ply, count, (int)(count/get_spend_time(search_start_ct)));
 			if ( check_enter_input() == 1 ) set_stop_search();
 			if ( IsHashFull() ) set_stop_search();
+			if ( is_limit_sec() ) set_stop_search();
 		}
 		if ( is_stop_search() ) break;
 	}
@@ -679,7 +691,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 
 	int thread_max = cfg_num_threads;
 	std::vector<std::thread> ths(thread_max);
-	d.uct_count = 0;
+	uct_count = 0;
 	stop_search_flag = 0;
 	int i;
 	for (i=1;i<thread_max;i++) {
@@ -694,11 +706,18 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		th.join();
 	}
 
-	int loop = d.uct_count;
-	int sum_reached_ply = 0;
-	int loop_count = 0;
+	int loop = uct_count.load();
+	int sum_r_ply = 0;
+	int max_r_ply = 0;
+	for (i=0;i<thread_max;i++) {
+		tree_t * restrict ptree = &tlp_atree_work[i];
+		sum_r_ply += ptree->sum_reached_ply;
+		if ( ptree->max_reached_ply > max_r_ply ) max_r_ply = ptree->max_reached_ply;
+	}
+
+	int loop_count = loop;
 	if ( loop_count == 0 ) loop_count = 1;
-	double ave_reached_ply = (double)sum_reached_ply / loop_count;
+	double ave_reached_ply = (double)sum_r_ply / loop_count;
 	double ct = get_spend_time(search_start_ct);
 
 	// select best
@@ -707,7 +726,6 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 	int max_games = 0;
 	int sum_games = 0;
 	const int SORT_MAX = MAX_LEGAL_MOVES;	// 593
-//	const int SORT_MAX = 8;
 	int sort[SORT_MAX][2];
 	int sort_n = 0;
 	int select_count = 0;
@@ -809,8 +827,8 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		PRT("rand select:%s,%3d,%6.3f,bias=%6.3f,r=%d/%d\n",str_CSA_move(pc->move),pc->games,pc->value,pc->bias,r,sum_games);
 	}
 
-	PRT("%.2f sec, child=%d,net_v=%.3f,create=%d,loop=%d,%.0f/s,ave_ply=%.1f (%d/%d),Noise=%d,mt=%d,b=%d\n",
-		ct,phg->child_num,phg->net_value,hash_shogi_use,loop,(double)loop/ct,ave_reached_ply,ptree->nrep,nVisitCount,fAddNoise,thread_max,cfg_batch_size );
+	PRT("%.2f sec, c=%d,net_v=%.3f,h_use=%d,po=%d,%.0f/s,ave_ply=%.1f/%d (%d/%d),Noise=%d,mt=%d,b=%d\n",
+		ct,phg->child_num,phg->net_value,hash_shogi_use,loop,(double)loop/ct,ave_reached_ply,max_r_ply,ptree->nrep,nVisitCount,fAddNoise,thread_max,cfg_batch_size );
 
 	return best_move;
 }
@@ -898,7 +916,7 @@ double uct_tree(tree_t * restrict ptree, int sideToMove, int ply)
 {
 	int create_new_node_limit = 1;
 
-	reached_ply = ply;
+	ptree->reached_ply = ply;
 	HASH_SHOGI *phg = HashShogiReadLock(ptree, sideToMove);	// phgに触る場合は必ずロック！
 
 	if ( phg->deleted ) {
@@ -1222,11 +1240,6 @@ int getCmdLineParam(int argc, char *argv[])
 			cfg_random_temp = nf;
 			continue;
 		}
-		if ( strstr(p,"-time_sec") ) {
-//			PRT("sec=%d\n",n);
-//			NegaMaxTimeLimit = n;
-			continue;
-		}
 		if ( strstr(q,"--never_pass") ) {
 //			fNeverPassTillEnd = n;
 //			PRT("fNeverPassTillEnd=%d\n",fNeverPassTillEnd);
@@ -1234,7 +1247,7 @@ int getCmdLineParam(int argc, char *argv[])
 		}
 		if ( strstr(p,"-p") ) {
 			PRT("playouts=%d\n",n);
-			UCT_LOOP_FIX = n;
+			nLimitUctLoop = n;
 			set_Hash_Shogi_Table_Size(n);
 		}
 #ifdef USE_OPENCL
@@ -1256,6 +1269,11 @@ int getCmdLineParam(int argc, char *argv[])
 			if ( n > TLP_NUM_WORK ) n = TLP_NUM_WORK;
 			cfg_num_threads = n;
 			PRT("cfg_num_threads=%d\n",n);
+		}
+		if ( strstr(p,"-s") ) {
+			if ( nf <= 0 ) nf = 0;
+			PRT("dLimitSec=%.3f\n",nf);
+			dLimitSec = nf;
 		}
 		
 		if ( strstr(p,"-w") ) {
