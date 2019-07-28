@@ -112,7 +112,9 @@ extern unsigned char ailast_one[512];
 //#define BNZ_VER                 "6"	// 20190419
 //#define BNZ_VER                 "7"	// 20190420
 //#define BNZ_VER                 "8"	// 20190430
-#define BNZ_VER                 "9"	// 20190527
+//#define BNZ_VER                 "9"	// 20190527
+//#define BNZ_VER                 "10"	// 20190708
+#define BNZ_VER                 "11"	// 20190709
 #define BNZ_NAME                "AobaZero"
 
 #define REP_MAX_PLY             32
@@ -1450,6 +1452,7 @@ extern uint64_t sequence_hash_drop[SEQUENCE_HASH_SIZE][81][7];
 void PRT(const char *fmt, ...);
 void print_board(const tree_t * restrict ptree);
 void init_yss_zero();
+void init_state( const tree_t * restrict parent, tree_t * restrict child );
 #endif
 
 #endif /* SHOGI_H */

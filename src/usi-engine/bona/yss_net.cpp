@@ -48,7 +48,6 @@ void init_global_objects();	// Leela.cpp
 
 void init_network()
 {
-	GTP::setup_default_parameters();
 //	Random::get_Rng().seedrandom(cfg_rng_seed);
 
 //	cfg_weightsfile = "networks/20180122_i362_pro_flood_F64L29_b64_1_half_version_2.txt";
@@ -274,7 +273,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 
 	set_dcnn_channels(ptree, sideToMove, ply, data);
 //	if ( 1 || ply==1 ) { prt_dcnn_data_table((float(*)[B_SIZE][B_SIZE])data);  }
-//	{ int sum=0; int i; for (i=0;i<size;i++) sum = 37*sum + (int)(data[i]+0.1); PRT("sum=%d\n",sum); }
+//	if ( 1 && ptree->nrep+ply==101+3 ) { int sum=0; int i; for (i=0;i<size;i++) sum = sum*37 + (int)(data[i]*1000.0f); PRT("sum=%08x,ply=%d,nrep=%d\n",sum,ply,ptree->nrep); }
 
 //	const auto result = Network::get_scored_moves_yss_zero((float(*)[B_SIZE][B_SIZE])data);
 	const auto result = GTP::s_network->get_scored_moves_yss_zero((float(*)[B_SIZE][B_SIZE])data);
@@ -341,8 +340,8 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 		int to   = (int)I2To(move);
 		int drop = (int)From2Drop(from);
 		int is_promote = (int)I2IsPromote(move);
-		int cap  = (int)UToCap(move);
-		int piece_m	= (int)I2PieceMove(move);
+//		int cap  = (int)UToCap(move);
+//		int piece_m	= (int)I2PieceMove(move);
 
 		int bz = get_yss_z_from_bona_z(from);
 		int az = get_yss_z_from_bona_z(to);
@@ -361,7 +360,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 		// node[i].second ... id
 		float bias = node[id].first;
 		if ( id != node[id].second ) { PRT("id=%d,%d err\n",id,node[id].second); debug(); }
-		if ( ply==1 ) PRT("%3d:%s(%d)(%08x)id=%5d, bias=%8f,from=%2d,to=%2d,cap=%2d,drop=%3d,pr=%d,peice=%d\n",i,str_CSA_move(move),sideToMove,yss_m,id,bias, from,to,cap,drop,is_promote,piece_m);
+//		if ( ply==1 ) PRT("%3d:%s(%d)(%08x)id=%5d, bias=%8f,from=%2d,to=%2d,cap=%2d,drop=%3d,pr=%d,peice=%d\n",i,str_CSA_move(move),sideToMove,yss_m,id,bias, from,to,cap,drop,is_promote,piece_m);
 
 		if ( is_nan_inf(bias) ) bias = 0;
 		pc->bias = bias;
@@ -397,7 +396,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 	if ( all_sum > legal_sum && legal_sum > 0 ) mul = 1.0f / legal_sum;
 	for ( i = 0; i < phg->child_num; i++ ) {
 		CHILD *pc = &phg->child[i];
-		if ( 1 && ply==1 && i < 30 ) {
+		if ( 0 && ply==1 && i < 30 ) {
 			PRT("%3d:%s(%08x), bias=%8f->(%8f)\n",i,str_CSA_move(pc->move), get_yss_packmove_from_bona_move(pc->move), pc->bias, pc->bias*mul);
 		}
 		pc->bias *= mul;

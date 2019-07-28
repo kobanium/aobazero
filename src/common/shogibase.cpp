@@ -98,6 +98,8 @@ Sq::Sq(int ch1, int ch2, Mode mode) noexcept {
   _u = static_cast<uchar>(rank * 9 + file); }
 
 constexpr unsigned char Pc::num_array[hand_size];
+constexpr Action::Type Action::normal;
+constexpr Action::Type Action::promotion;
 
 FixLStr<7U> Action::to_str(SAux::Mode mode) const noexcept {
   assert(ok());
@@ -336,12 +338,14 @@ bool Board::action_ok_full(const Color &turn, const Action &a) noexcept {
   if (a.is_resign()) return true;
   if (a.is_windecl()) return is_nyugyoku(turn);
 
-  bool is_ok = true;
+
   assert(a.is_move());
   update(turn, a, false);
-  if (is_incheck(turn) || is_mate_by_drop_pawn(turn, a)) is_ok = false;
+  bool b_incheck = is_incheck(turn);
   undo(turn, a, false);
-  return is_ok; }
+  if (b_incheck) return false;
+  if (is_mate_by_drop_pawn(turn, a)) return false;
+  return true; }
 
 bool Board::is_mate_by_drop_pawn(const Color &turn, const Action &action)
   noexcept {

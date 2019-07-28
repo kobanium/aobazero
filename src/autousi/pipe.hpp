@@ -12,7 +12,7 @@ class Pipe {
   std::queue<std::string> _moves_id0;
   std::unique_ptr<class USIEngine []> _children;
   OSI::Selector _selector;
-  uint _nchild, _max_csa, _ngen_records;
+  uint _nchild, _max_csa, _ngen_records, _verbose_eng;
   FName _cname, _dname_csa;
   Pipe() noexcept;
   ~Pipe() noexcept;
@@ -24,7 +24,7 @@ public:
   static Pipe & get() noexcept;
   void start(const char *cname, const char *dlog,
 	     const std::vector<int> &devices, const char *cstr_csa,
-	     uint max_csa) noexcept;
+	     uint max_csa, uint verbose_eng) noexcept;
   void wait() noexcept;
   void end() noexcept;
   bool get_moves_id0(std::string &move) noexcept;

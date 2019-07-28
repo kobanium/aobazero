@@ -36,7 +36,7 @@ int fAddNoise = 0;				// always add dirichlet noise on root node.
 int fUSIMoveCount;	// USIで上位ｎ手の訪問回数も返す
 int fPrtNetworkRawPath = 0;
 int fVerbose = 1;
-int fClearHashAlways = 1;
+int fClearHashAlways = 0;
 int fUsiInfo = 0;
 
 int UCT_LOOP_FIX = 100;
@@ -50,8 +50,8 @@ int hash_shogi_use = 0;
 int hash_shogi_sort_num = 0;
 int thinking_age = 0;
 
-#define REHASH_MAX (2048*1)
-#define REHASH_SHOGI (REHASH_MAX-1)
+const int REHASH_MAX = (2048*1);
+const int REHASH_SHOGI = (REHASH_MAX-1);
 
 int rehash[REHASH_MAX-1];	// バケットが衝突した際の再ハッシュ用の場所を求めるランダムデータ
 int rehash_flag[REHASH_MAX];	// 最初に作成するために
@@ -74,7 +74,7 @@ void PRT(const char *fmt, ...)
 	va_end( arg );
 }
 
-const int TMP_BUF_LEN = 256;
+const int TMP_BUF_LEN = 256*2;
 static char debug_str[TMP_BUF_LEN];
 
 void debug_set(const char *file, int line)
@@ -173,7 +173,7 @@ unsigned long rand_m521()
 	return mx521[rnd521_count];
 }
 #else
-//std::random_device seed_gen;
+
 std::mt19937 get_mt_rand;
 
 void init_rnd521(unsigned long u_seed)
@@ -190,11 +190,11 @@ unsigned long rand_m521()
 
 float f_rnd()
 {
-//	float f = (double)rand_m521() / (0xffffffffUL + 1.0);	// 0 <= rnd() <  1, ULONG_MAX は gcc 64bitで違う
-	float f = (double)rand_m521() / (0xffffffffUL + 0.0);	// 0 <= rnd() <= 1
-//	float f = (double)(rand_m521()&0xff) / (0xffUL + 0.0);	// 0 <= rnd() <= 1
+//	double f = (double)rand_m521() / (0xffffffffUL + 1.0);	// 0 <= rnd() <  1, ULONG_MAX は gcc 64bitで違う
+	double f = (double)rand_m521() / (0xffffffffUL + 0.0);	// 0 <= rnd() <= 1
+//	double f = (double)(rand_m521()&0xff) / (0xffUL + 0.0);	// 0 <= rnd() <= 1
 //	PRT("f_rnd()=%f\n",f);
-	return f;
+	return (float)f;
 }
 
 void print_path() {}
@@ -281,7 +281,7 @@ const int USI_BESTMOVE_LEN = MAX_LEGAL_MOVES*(8+5)+10;
 
 int YssZero_com_turn_start( tree_t * restrict ptree )
 {
-	PRT("start aobazero...\n");
+//	PRT("start aobazero...\n");
 //	init_yss_zero();
 	if ( 0 ) {
 		int ct1 = get_clock();
@@ -390,7 +390,7 @@ void init_seqence_hash()
 
 void set_Hash_Shogi_Table_Size(int playouts)
 {
-	int n = playouts * 2;
+	int n = playouts * 3;
 	
 	Hash_Shogi_Table_Size = HASH_SHOGI_TABLE_SIZE_MIN;
 	for (;;) {
@@ -516,6 +516,7 @@ research_empty_block:
 
 	n = (int)hashcode64 & Hash_Shogi_Mask;
 	first_n = n;
+	const int TRY_MAX = 8;
 
 	HASH_SHOGI *pt_base = hash_shogi_table;
 	HASH_SHOGI *pt_first = NULL;
@@ -534,9 +535,10 @@ research_empty_block:
 		UnLock(pt->entry_lock);
 		// 違う局面だった
 		if ( loop == REHASH_SHOGI ) break;	// 見つからず
-		if ( loop >= 2 && pt_first ) break;	// 妥協。2回探してなければ未登録扱い。
+		if ( loop >= TRY_MAX && pt_first ) break;	// 妥協。TRY_MAX回探してなければ未登録扱い。
 		n = (rehash[loop++] + first_n ) & Hash_Shogi_Mask;
 	}
+//	{ static int count, loop_sum; count++; loop_sum+=loop; PRT("%d,",loop); if ( (count%100)==0 ) PRT("loop_ave=%.1f\n",(float)loop_sum/count); }
 	if ( pt_first ) {
 		// 検索中に既にpt_firstが使われてしまっていることもありうる。もしくは同時に同じ場所を選んでしまうケースも。
 		Lock(pt_first->entry_lock);
@@ -596,6 +598,59 @@ char *prt_pv_from_hash(tree_t * restrict ptree, int ply, int sideToMove, int fus
 	return str;
 }
 
+
+int search_start_ct;
+int stop_search_flag = 0;
+
+void set_stop_search()
+{
+	stop_search_flag = 1;
+}
+int is_stop_search()
+{
+	return stop_search_flag;
+}
+
+std::mutex g_mtx;
+
+struct Data {
+  int uct_count;
+  std::mutex mtx;
+} d;
+
+int inc_uct_count()
+{
+  d.mtx.lock();
+  d.uct_count++;
+  if ( d.uct_count >= UCT_LOOP_FIX + 1 - (int)cfg_num_threads ) set_stop_search();
+  d.mtx.unlock();
+  return d.uct_count;
+}
+
+int is_main_thread(tree_t * restrict ptree)
+{
+	return ( ptree == &tlp_atree_work[0] );
+}
+
+
+void uct_tree_loop(tree_t * restrict ptree, int sideToMove, int ply)
+{
+//	int sum_reached_ply = 0;
+	for (;;) {
+//		reached_ply = 0;
+		uct_tree(ptree, sideToMove, ply);
+//		sum_reached_ply += reached_ply;
+		int count = inc_uct_count();
+		if ( is_main_thread(ptree) ) {
+			if ( is_send_usi_info(0) ) send_usi_info(ptree, sideToMove, ply, count, (int)(count/get_spend_time(search_start_ct)));
+			if ( check_enter_input() == 1 ) set_stop_search();
+			if ( IsHashFull() ) set_stop_search();
+		}
+		if ( is_stop_search() ) break;
+	}
+}
+
+
 int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf_move_count)
 {
 	if ( fClearHashAlways ) {
@@ -614,31 +669,37 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 	create_node(ptree, sideToMove, ply, phg);
 	UnLock(phg->entry_lock);
 
-	const float epsilon = 0.25;	// epsilon = 0.25
-	const float alpha   = 0.15;	// alpha ... Chess = 0.3, Shogi = 0.15, Go = 0.03
+	const float epsilon = 0.25f;	// epsilon = 0.25
+	const float alpha   = 0.15f;	// alpha ... Chess = 0.3, Shogi = 0.15, Go = 0.03
 	if ( fAddNoise ) add_dirichlet_noise(epsilon, alpha, phg);
 //{ void test_dirichlet_noise(float epsilon, float alpha);  test_dirichlet_noise(0.25f, 0.03f); }
 	PRT("root phg->hash=%" PRIx64 ", child_num=%d\n",phg->hashcode64,phg->child_num);
 
-	int ct1 = get_clock();
-	int uct_count = UCT_LOOP_FIX;
+	search_start_ct = get_clock();
+
+	int thread_max = cfg_num_threads;
+	std::vector<std::thread> ths(thread_max);
+	d.uct_count = 0;
+	stop_search_flag = 0;
+	int i;
+	for (i=1;i<thread_max;i++) {
+		init_state( &tlp_atree_work[0], &tlp_atree_work[i]);
+//		tlp_atree_work[i] = tlp_atree_work[0];	// lock_init()してるものがあるのでダメ
+	}
+	for (i=0;i<thread_max;i++) {
+		ths[i] = std::thread(uct_tree_loop, &tlp_atree_work[i], sideToMove, ply);
+	}
+
+	for (std::thread& th : ths) {
+		th.join();
+	}
+
+	int loop = d.uct_count;
 	int sum_reached_ply = 0;
 	int loop_count = 0;
-	int loop;
-	for (loop=0; loop<uct_count; loop++) {
-		reached_ply = 0;
-		uct_tree(ptree, sideToMove, ply);
-		sum_reached_ply += reached_ply;
-		loop_count++;
-//		if ( IsNegaMaxTimeOver() ) break;
-//		if ( is_main_thread() ) PassWindowsSystem();	// GUIスレッド以外に渡すと中断が利かない場合あり
-		if ( is_send_usi_info(loop+1) ) send_usi_info(ptree, sideToMove, ply, loop+1, (int)((loop+1)/get_spend_time(ct1)));
-		if ( check_enter_input() == 1 ) break;
-		if ( IsHashFull() ) break;
-	}
 	if ( loop_count == 0 ) loop_count = 1;
 	double ave_reached_ply = (double)sum_reached_ply / loop_count;
-	double ct = get_spend_time(ct1);
+	double ct = get_spend_time(search_start_ct);
 
 	// select best
 	int best_move = 0;
@@ -651,7 +712,6 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 	int sort_n = 0;
 	int select_count = 0;
 
-	int i;
 	for (i=0;i<phg->child_num;i++) {
 		CHILD *pc = &phg->child[i];
 		if ( pc->games > max_games ) {
@@ -660,7 +720,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		}
 		sum_games += pc->games;
 		if ( pc->games ) {
-			PRT("%3d(%3d):%8s,%3d,%6.3f,bias=%6.3f\n",i,select_count++,str_CSA_move(pc->move),pc->games,pc->value,pc->bias);
+			PRT("%3d(%3d)%7s,%5d,%6.3f,bias=%6.3f\n",i,select_count++,str_CSA_move(pc->move),pc->games,pc->value,pc->bias);
 			if ( sort_n < SORT_MAX ) {
 				sort[sort_n][0] = pc->games;
 				sort[sort_n][1] = pc->move;
@@ -710,7 +770,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 //	PRT("\n");
 
 	// selects moves proportionally to their visit count
-	if ( ptree->nrep < nVisitCount && sum_games > 0 ) {
+	if ( ptree->nrep < nVisitCount && sum_games > 0 && phg->child_num > 0 ) {
 		CHILD *pc = NULL;
 #if 0
 		int r = rand_m521() % sum_games;
@@ -721,12 +781,12 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 			if ( s > r ) break;
 		}
 #else
-		static std::mt19937_64 mt64;
+//		static std::mt19937_64 mt64;
 		static std::uniform_real_distribution<> dist(0, 1);
-		double indicator = dist(mt64);
+		double indicator = dist(get_mt_rand);
 
 		double inv_temperature = 1.0 / cfg_random_temp;
-		double wheel[phg->child_num];
+		double wheel[MAX_LEGAL_MOVES];
 		double w_sum = 0.0;
 		for (int i = 0; i < phg->child_num; i++) {
 			double d = static_cast<double>(phg->child[i].games);
@@ -749,8 +809,8 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		PRT("rand select:%s,%3d,%6.3f,bias=%6.3f,r=%d/%d\n",str_CSA_move(pc->move),pc->games,pc->value,pc->bias,r,sum_games);
 	}
 
-	PRT("%.2f sec, child=%d,net_v=%.3f,create=%d,loop=%d,%.0f/s,ave_ply=%.1f (%d/%d),fAddNoise=%d\n",
-		ct,phg->child_num,phg->net_value,hash_shogi_use,loop,(double)loop/ct,ave_reached_ply,ptree->nrep,nVisitCount,fAddNoise );
+	PRT("%.2f sec, child=%d,net_v=%.3f,create=%d,loop=%d,%.0f/s,ave_ply=%.1f (%d/%d),Noise=%d,mt=%d,b=%d\n",
+		ct,phg->child_num,phg->net_value,hash_shogi_use,loop,(double)loop/ct,ave_reached_ply,ptree->nrep,nVisitCount,fAddNoise,thread_max,cfg_batch_size );
 
 	return best_move;
 }
@@ -761,6 +821,7 @@ void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *p
 		PRT("already created? ply=%d,sideToMove=%d,games_sum=%d,child_num=%d\n",ply,sideToMove,phg->games_sum,phg->child_num); print_path();
 		return;
 	}
+//PRT("create_node in..   ply=%d,sideToMove=%d,games_sum=%d,child_num=%d,slot=%d\n",ply,sideToMove,phg->games_sum,phg->child_num, ptree->tlp_slot);
 
 	int move_num = generate_all_move( ptree, sideToMove, ply );
 
@@ -800,6 +861,7 @@ void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *p
 		}
 	}
 
+//PRT("create_node net.   ply=%d,sideToMove=%d,games_sum=%d,child_num=%d,slot=%d\n",ply,sideToMove,phg->games_sum,phg->child_num, ptree->tlp_slot);
 	float v = 0;
 	if ( NOT_USE_NN ) {
 		float f = f_rnd()*2.0f - 1.0f;
@@ -823,8 +885,13 @@ void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *p
 	phg->net_value      = v;
 	phg->deleted        = 0;
 
-//	PRT("create_node(),"); prt64(phg->hashcode64); PRT("\n"); print_path(); 
-	hash_shogi_use++;
+//	if ( ! is_main_thread(ptree) && ply==3 ) { PRT("create_node(),ply=%2d,c=%3d,v=%.5f,seqhash=%" PRIx64 "\n",ply,move_num,v,ptree->sequence_hash); print_board(ptree); }
+//PRT("create_node done...ply=%d,sideToMove=%d,games_sum=%d,child_num=%d,slot=%d\n",ply,sideToMove,phg->games_sum,phg->child_num, ptree->tlp_slot);
+
+	{
+		std::lock_guard<std::mutex> guard(g_mtx); 
+ 		hash_shogi_use++;
+	}
 }
 
 double uct_tree(tree_t * restrict ptree, int sideToMove, int ply)
@@ -954,7 +1021,7 @@ select_again:
 			if ( ptree->rep_board_list[i] == key && ptree->rep_hand_list[i] == HAND_B ) { sum++; break; }
 		}
 		if ( sum > 0 ) {
-			PRT("sennnitite=%d,i=%d(%d),nrep=%d,ply=%d,%s\n",sum,i,np-i,ptree->nrep,ply,str_CSA_move(pc->move));
+//			PRT("sennnitite=%d,i=%d(%d),nrep=%d,ply=%d,%s\n",sum,i,np-i,ptree->nrep,ply,str_CSA_move(pc->move));
 			flag_sennitite = SENNITITE_DRAW;
 
 			// 連続王手か？。王手をかけた場合と王が逃げた場合、の2通りあり
@@ -969,10 +1036,10 @@ select_again:
 			}
 			if ( flag_consecutive_check ) {
 				if ( now_in_check ) {
-					PRT("perpetual check! delete this move.  %d -> %d (%d)\n",start_j,i,(start_j-i)+1);
+//					PRT("perpetual check! delete this move.  %d -> %d (%d)\n",start_j,i,(start_j-i)+1);
 					flag_illegal_move = 1;
 				} else {
-					PRT("perpetual check escape! %d -> %d (%d)\n",start_j,i,(start_j-i)+1);
+///					PRT("perpetual check escape! %d -> %d (%d)\n",start_j,i,(start_j-i)+1);
 					flag_sennitite = SENNITITE_WIN;
 				}
 			}
@@ -998,56 +1065,60 @@ select_again:
 			win = +1.0;
 			if ( sideToMove==BLACK ) win = +1.0;
 		}
-		PRT("flag_sennitite=%d, win=%.1f, ply=%d\n",flag_sennitite,win,ply);
+//		PRT("flag_sennitite=%d, win=%.1f, ply=%d\n",flag_sennitite,win,ply);
 		skip_search = 1;
 	}
 
 
 
-
 	if ( ply >= PLY_MAX-10 ) { PRT("depth over=%d\n",ply); debug(); }
 
-
-	int do_playout = 0;
-	if ( pc->games < create_new_node_limit || ply >= PLY_MAX-11 ) {
-		do_playout = 1;
-	}
-	if ( skip_search ) {
-	} else if ( do_playout ) {	// evaluate this position
-		UnLock(phg->entry_lock);
-
-		HASH_SHOGI *phg2 = HashShogiReadLock(ptree, Flip(sideToMove));	// 1手進めた局面のデータ
-		if ( phg2->deleted ) {
-			create_node(ptree, Flip(sideToMove), ply+1, phg2);
+	if ( skip_search == 0 ) {
+		int down_tree = 0;
+		int do_playout = 0;
+		int force_do_playout = (ply >= PLY_MAX-11);
+		if ( pc->games < create_new_node_limit || force_do_playout ) {
+			do_playout = 1;
 		} else {
-//			PRT("has come already?\n"); //debug();	// 手順前後?
+			down_tree = 1;
 		}
-		win = -phg2->net_value;
-		
-		UnLock(phg2->entry_lock);
-		Lock(phg->entry_lock);
+		if ( do_playout ) {	// evaluate this position
+			UnLock(phg->entry_lock);
 
-	} else {
-		// down tree
-		const int VL_N = 6;
-		const int fVirtualLoss = 0;
-		const int one_win = -1;	// 最初は負け、を仮定
-		if ( fVirtualLoss ) {	// この手が負けた、とする。複数スレッドの時に、なるべく別の手を探索するように
-			pc->value = (float)(((double)pc->games * pc->value + one_win*VL_N) / (pc->games + VL_N));	// games==0 の時はpc->value は無視されるので問題なし
-			pc->games      += VL_N;
-			phg->games_sum += VL_N;	// 末端のノードで減らしても意味がない、のでUCTの木だけで減らす
+			HASH_SHOGI *phg2 = HashShogiReadLock(ptree, Flip(sideToMove));	// 1手進めた局面のデータ
+			if ( phg2->deleted ) {
+				create_node(ptree, Flip(sideToMove), ply+1, phg2);
+			} else {
+//				static int count; PRT("has come already? ply=%d,%d\n",ply,++count); //debug();	// 手順前後? 複数スレッドの場合
+				if ( force_do_playout == 0 ) down_tree = 1;
+			}
+			win = -phg2->net_value;
+			
+			UnLock(phg2->entry_lock);
+			Lock(phg->entry_lock);
 		}
+		if ( down_tree ) {
+			// down tree
+			const int fVirtualLoss = 1;
+			const int VL_N = 1;
+			const int one_win = -1;	// 最初は負け、を仮定
+			if ( fVirtualLoss ) {	// この手が負けた、とする。複数スレッドの時に、なるべく別の手を探索するように
+				pc->value = (float)(((double)pc->games * pc->value + one_win*VL_N) / (pc->games + VL_N));	// games==0 の時はpc->value は無視されるので問題なし
+				pc->games      += VL_N;
+				phg->games_sum += VL_N;	// 末端のノードで減らしても意味がない、のでUCTの木だけで減らす
+			}
 
-		UnLock(phg->entry_lock);
-		win = -uct_tree(ptree, Flip(sideToMove), ply+1);
-		Lock(phg->entry_lock);
+			UnLock(phg->entry_lock);
+			win = -uct_tree(ptree, Flip(sideToMove), ply+1);
+			Lock(phg->entry_lock);
 
-		if ( fVirtualLoss ) {
-			phg->games_sum -= VL_N;
-			pc->games      -= VL_N;		// gamesを減らすのは非常に危険！ あちこちで games==0 で判定してるので
-			if ( pc->games < 0 ) { PRT("Err pc->games=%d\n",pc->games); debug(); }
-			if ( pc->games == 0 ) pc->value = 0;
-			else                  pc->value = (float)((((double)pc->games+VL_N) * pc->value - one_win*VL_N) / pc->games);
+			if ( fVirtualLoss ) {
+				phg->games_sum -= VL_N;
+				pc->games      -= VL_N;		// gamesを減らすのは非常に危険！ あちこちで games==0 で判定してるので
+				if ( pc->games < 0 ) { PRT("Err pc->games=%d\n",pc->games); debug(); }
+				if ( pc->games == 0 ) pc->value = 0;
+				else                  pc->value = (float)((((double)pc->games+VL_N) * pc->value - one_win*VL_N) / pc->games);
+			}
 		}
 	}
 
@@ -1138,7 +1209,7 @@ int getCmdLineParam(int argc, char *argv[])
 		char *q = sa[1];
 		if ( strncmp(p,"-",1) != 0 ) continue;
 
-		float nf = atof(q);
+		float nf = (float)atof(q);
 		int n = (int)nf;
 		// 2文字以上は先に判定してcontinueを付けること
 		if ( strstr(p,"-nn_rand") ) {
@@ -1174,11 +1245,19 @@ int getCmdLineParam(int argc, char *argv[])
         		PRT("default_gpus[%d]=%d\n", i,default_gpus[i]);
 			}
 		}
+		if ( strstr(p,"-b") ) {
+			if ( n < 1 ) n = 1;
+			cfg_batch_size = n;
+			PRT("cfg_batch_size=%d\n",n);
+		}
 #endif
 		if ( strstr(p,"-t") ) {
-//			PRT("mt=%d\n",n);
-//			aya_set_thread(n);
+			if ( n < 1            ) n = 1;
+			if ( n > TLP_NUM_WORK ) n = TLP_NUM_WORK;
+			cfg_num_threads = n;
+			PRT("cfg_num_threads=%d\n",n);
 		}
+		
 		if ( strstr(p,"-w") ) {
 			PRT("network path=%s\n",q);
 			default_weights = q;
@@ -1312,8 +1391,8 @@ void send_usi_info(tree_t * restrict ptree, int sideToMove, int ply, int nodes, 
 	float wr = (pc->value + 1.0f) / 2.0f;	// -1 <= x <= +1   -->   0 <= y <= +1
 	int score = winrate_to_score(wr);
 	
-//	char *pv_str = prt_pv_from_hash(ptree, ply, sideToMove, PV_USI);
-	char *pv_str = prt_pv_from_hash(ptree, ply, sideToMove, PV_CSA);
+	char *pv_str = prt_pv_from_hash(ptree, ply, sideToMove, PV_USI);
+//	char *pv_str = prt_pv_from_hash(ptree, ply, sideToMove, PV_CSA);
 	int depth = (int)(1.0+log(nodes+1.0));
 	char str[TMP_BUF_LEN];
 	sprintf(str,"info depth %d score cp %d nodes %d nps %d pv %s",depth,score,nodes,nps,pv_str);
@@ -1326,3 +1405,46 @@ void usi_newgame()
 	hash_shogi_table_clear();
 }
 
+
+void test_dist()
+{
+	static std::mt19937_64 mt64;
+//	std::random_device rd;
+//	mt64.seed(rd());
+	const int N = 10;
+	int count[N];
+	for (int i=0; i<N; i++) count[i] = 0;
+	for (int loop=0; loop < 1000; loop++) {
+		static std::uniform_real_distribution<> dist(0, 1);
+//		double indicator = dist(mt64);
+		double indicator = dist(get_mt_rand);
+
+		double inv_temperature = 1.0 / 1.0;
+		double wheel[N];
+		int games[N] = { 500,250,100,50,30, 20,20,20,9,1 };
+		double w_sum = 0.0;
+		for (int i = 0; i < N; i++) {
+			double d = static_cast<double>(games[i]);
+			wheel[i] = pow(d, inv_temperature);
+			w_sum += wheel[i];
+		}
+		double factor = 1.0 / w_sum;
+
+		int best_i = -1;
+		double sum = 0.0;
+		for (int i = 0; i < N; i++) {
+			sum += factor * wheel[i];
+			if (sum <= indicator && i + 1 < N) continue;	// 誤差が出た場合は最後の手を必ず選ぶ
+			best_i = i;
+			break;
+		}
+		if ( best_i < 0 ) DEBUG_PRT("Err. nVisitCount not found.\n");
+		count[best_i]++;
+	}
+	PRT("\n"); for (int i=0; i<N; i++) PRT("[%2d]=%5d\n",i,count[i]);
+
+}
+void test_dist_loop()
+{
+	for (int i = 0; i<10; i++) test_dist();
+}
