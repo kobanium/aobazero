@@ -103,7 +103,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
        << " [-u device-id] [-b batch-size] [-h] weight" << endl;
   return -1;
 }
-
+  
 class QueueTest {
 #if defined(USE_OPENCL)
   NNetOCL _nnet;

@@ -50,7 +50,7 @@ else ifeq ($(BLAS), OpenBLAS)
 endif
 
 CXXFLAGS += -std=c++11 -Wextra -Ofast -march=native -mtune=native
-CPPFLAGS += -MMD -MP -Isrc/common -DNDEBUG -DUSE_SSE4
+CPPFLAGS += -MMD -MP -Isrc/common -DUSE_SSE4
 LDFLAGS  += -llzma -lpthread
 
 TARGETS        += bin/aobaz bin/autousi bin/server bin/playshogi bin/crc64 bin/extract bin/net-test bin/gencode

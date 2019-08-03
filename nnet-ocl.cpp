@@ -2209,7 +2209,6 @@ void NNetOCL::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
   uint n_one, ntot_moves;
   compress_data(size_batch, _maxsize_batch, input, sizes_nnmove, nnmoves,
 		_ptr_input_c.get(), size_write, n_one, ntot_moves);
-
   _mng_send.push(_queue, _ptr_input_c.get(), size_write, n_one);
 
   // body part
@@ -2223,18 +2222,18 @@ void NNetOCL::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
     _mng_compute_matM.push(_queue, _cl_reswghts[ulayer].matU);
     _mng_compute_matA.push(_queue, _cl_reswghts[ulayer].mean,
 			   _cl_reswghts[ulayer].sd_inv);
-    
+
     _mng_compute_matV.push(_queue, _cl_output);
     _mng_compute_matM.push(_queue, _cl_reswghts[ulayer + 1U].matU);
     _mng_compute_matA_join.push(_queue, _cl_reswghts[ulayer + 1U].mean,
 				_cl_reswghts[ulayer + 1U].sd_inv); }
-  
+
   // head part
   // in:  f1[_policy1_nout + _value1_nout][size_batch][size_plane]
   // out: f2[size_batch][_value1_nout][size_plane]
   _mng_head1.push(_queue);
   _mng_compute_BNReLU.push(_queue);
-  
+
   _mng_compute_policy.push(_queue, ntot_moves,
 			   2U*send_nch_fill*_maxsize_batch + n_one);
   _mng_transform_value2.push(_queue);
