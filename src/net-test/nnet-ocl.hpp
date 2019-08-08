@@ -71,6 +71,7 @@ struct SgemmParam {
 	     uint npk_, uint ntm_, uint ntn_) noexcept :
   time(0.0), do_half(do_half_), do_wmma(do_wmma_),
     nl(nl_), npm(npm_), npn(npn_), npk(npk_), ntm(ntm_), ntn(ntn_) {}
+  std::string gen_info() const noexcept;
   bool operator<=(const SgemmParam &p) const noexcept {
     if (do_wmma) {
       return (nl <= p.nl && npm <= p.npm && npn <= p.npn && npk <= p.npk
@@ -88,21 +89,18 @@ struct SgemmParam {
 class ManageComputeMatM {
   using uint = unsigned int;
   OCL::Kernel _ker;
-  double _time;
   size_t _size_g[3], _size_l[3];
-  SgemmParam _param;
   uint _nbatch, _nm, _nn, _nk;
 public:
-  ManageComputeMatM() noexcept : _nbatch(0) {};
+  ManageComputeMatM() noexcept {};
   void start(const OCL::Device &dev, const OCL::Queue &queue, uint nbatch,
-	     uint nm0, uint nn0, uint nk0, bool use_wmma) noexcept;
+	     uint nm0, uint nn0, uint nk0, const SgemmParam &param) noexcept;
   void register_b(const OCL::Memory &mem) const noexcept;
   void register_c(const OCL::Memory &mem) const noexcept;
   void push(const OCL::Queue &queue, const OCL::Memory &mem_a) const noexcept;
-  std::string gen_info() const noexcept;
-  uint get_nm() const noexcept { assert(0 < _nbatch); return _nm; }
-  uint get_nn() const noexcept { assert(0 < _nbatch); return _nn; }
-  uint get_nk() const noexcept { assert(0 < _nbatch); return _nk; }
+  uint get_nm() const noexcept { assert(_ker.ok()); return _nm; }
+  uint get_nn() const noexcept { assert(_ker.ok()); return _nn; }
+  uint get_nk() const noexcept { assert(_ker.ok()); return _nk; }
 };
 
 class ManageSgemm {
@@ -132,9 +130,11 @@ public:
 };
 
 class ManageComputeMatV {
-  using uint  = unsigned int;
+  using uint = unsigned int;
+  size_t _size_g[3], _size_l[3];
   OCL::Kernel _ker;
   uint _nm;
+
 public:
   ManageComputeMatV() noexcept : _nm(0) {}
   void start(bool store_half, const OCL::Queue &queue,
@@ -145,6 +145,7 @@ public:
 
 class ManageComputeMatA {
   using uint = unsigned int;
+  size_t _size_g[3], _size_l[3];
   OCL::Kernel _ker;
   uint _nm;
 public:
@@ -152,6 +153,19 @@ public:
   void start(bool load_half, const OCL::Queue &queue, bool flag_join, uint nch,
 	     uint nb, uint nm, uint nn, const OCL::Memory &mem_matM,
 	     const OCL::Memory &mem_output) noexcept;
+  void push(const OCL::Queue &queue, const OCL::Memory &mean,
+	    const OCL::Memory &sd_inv) const noexcept;
+};
+
+class ManageComputeMatAV {
+  using uint = unsigned int;
+  size_t _size_g[3], _size_l[3];
+  OCL::Kernel _ker;
+public:
+  void start(bool do_half, bool do_join, bool do_fork, const OCL::Queue &queue,
+	     uint nch, uint nb, uint nm, uint nn, uint nk,
+	     const OCL::Memory &mem_matM, const OCL::Memory &mem_matV,
+	     const OCL::Memory &mem_bypass) noexcept;
   void push(const OCL::Queue &queue, const OCL::Memory &mean,
 	    const OCL::Memory &sd_inv) const noexcept;
 };
@@ -202,9 +216,10 @@ class NNetOCL {
   ManageRecv _mng_recv;
   ManageComputeMatM _mng_compute_matM_input, _mng_compute_matM;
   ManageSgemm _mng_head1, _mng_value2, _mng_value3;
-  ManageComputeMatV _mng_compute_matV_input, _mng_compute_matV;
-  ManageComputeMatA _mng_compute_matA_input;
-  ManageComputeMatA _mng_compute_matA_join, _mng_compute_matA;
+  ManageComputeMatV _mng_compute_matV_input;
+  ManageComputeMatA _mng_compute_matA_join;
+  ManageComputeMatAV _mng_compute_matAV_input;
+  ManageComputeMatAV _mng_compute_matAV, _mng_compute_matAV_join;
   ManageComputeBNReLU _mng_compute_BNReLU;
   ManageTransformValue2 _mng_transform_value2;
   ManageComputePolicy _mng_compute_policy;
