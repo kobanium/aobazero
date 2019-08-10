@@ -77,15 +77,6 @@
 namespace x3 = boost::spirit::x3;
 using namespace Utils;
 
-#include <iostream>
-#include <chrono>
-using std::chrono::steady_clock;
-using std::chrono::duration_cast;
-using std::chrono::microseconds;
-static double elapsed_sum = 0.0;
-static uint nelapsed      = 0;
-const int fCalcNetTime = 0;
-
 #ifndef USE_BLAS
 // Eigen helpers
 template <typename T>
@@ -927,21 +918,8 @@ Network::Netresult_old Network::get_output_internal(
     } else {
         m_forward->forward(input_data, policy_data, value_data);
     }
-	if ( fCalcNetTime ) { myprintf("USE_OPENCL_SELFCHECK must be off.\n",); exit(EXIT_FAILURE); }
 #else
-	steady_clock::time_point start;
-	if ( fCalcNetTime ) start = steady_clock::now();
     m_forward->forward(input_data, policy_data, value_data);
-	if ( fCalcNetTime ) {
-		steady_clock::time_point end = steady_clock::now();
-		double elapsed = static_cast<double>(duration_cast<microseconds>(end - start).count());
-		elapsed_sum += elapsed;
-		nelapsed    += 1U;
-		if ( 800 == nelapsed) {
-			std::cout << std::endl;
-			std::cout << "network calc sum=" << elapsed_sum /(1000.0*1000.0) << "sec, count=" << nelapsed << ", ave mSec=" << (elapsed_sum / static_cast<double>(nelapsed)) / 1000.0 << std::endl;
-		}
-	}
     (void) selfcheck;
 #endif
 
