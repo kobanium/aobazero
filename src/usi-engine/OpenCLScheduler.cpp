@@ -128,7 +128,7 @@ void OpenCLScheduler<net_t>::initialize(const int channels) {
         }
         gnum++;
     }
-    myprintf("OpenCLScheduler. gnum=%d\n",gnum);
+    myprintf("OpenCLScheduler. gnum=%d, num_worker_threads(per GPU)=%d\n",gnum,num_worker_threads);
 
     // Exit immediately after tuning.  We should exit here because we skipped
     // initializing rest of the kernels due to some NVIDIA drivers crashing.
