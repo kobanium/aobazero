@@ -17,23 +17,33 @@ class ManageSend {
   static constexpr char pinned_memory[] = "Pinned Memory";
   static constexpr char zero_copy[]     = "Zero Copy";
   double _time;
-  OCL::Memory _mem_b, _mem_out, _mem_work;
-  OCL::Kernel _ker_zero_clear, _ker_plane_fill, _ker_set_one;
+  OCL::Memory _mem_b, _mem_work;
   const char *_method;
   void *_ptr;
-  uint _nbatch, _nm;
+  uint _nbatch;
 
 public:
   ManageSend() noexcept : _method(nullptr), _ptr(nullptr) {}
   void start(const OCL::Device &dev, const OCL::Queue &queue,
 	     uint maxsize_batch) noexcept;
-  void push(const OCL::Queue &queue, const void *p, size_t size,
-	    uint n_one) noexcept;
+  void push(const OCL::Queue &queue, const void *p, size_t size) noexcept;
   void end(const OCL::Queue &queue) noexcept;
-  const OCL::Memory &get() const noexcept { assert(_method); return _mem_out; }
   const OCL::Memory &get_work() const noexcept {
     assert(_method); return _mem_work; }
   std::string gen_info() const noexcept;
+};
+
+class ManageDecode {
+  using uint = unsigned int;
+  size_t _size_g[3], _size_l[3];
+  OCL::Kernel _ker_zero_clear, _ker_plane_fill, _ker_set_one;
+  uint _nbatch, _nm;
+
+public:
+  void start(const OCL::Device &dev, const OCL::Queue &queue,
+	     const OCL::Memory &mem_in, const OCL::Memory &mem_out,
+	     uint maxsize_batch) noexcept;
+  void push(const OCL::Queue &queue, uint n_one) noexcept;
 };
 
 class ManageRecv {
@@ -213,6 +223,7 @@ class NNetOCL {
   using row_t  = std::unique_ptr<float []>;
   struct CLResWght { OCL::Memory matU, mean, sd_inv; };
   ManageSend _mng_send;
+  ManageDecode _mng_decode;
   ManageRecv _mng_recv;
   ManageComputeMatM _mng_compute_matM_input, _mng_compute_matM;
   ManageSgemm _mng_head1, _mng_value2, _mng_value3;
