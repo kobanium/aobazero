@@ -190,18 +190,17 @@ void store(float f, uint off, __global float *p) { p[off] = f; }
 #endif
 
 void compute_matV_child(uint ch, uint ub, uint utile, uint uh, uint uw,
-                        __local const float *fl, __global void *matV) {
+                        __local const float *flin, __local float *flV,
+                        __global void *matV) {
   int y0 = uh*LEN_TILE_OUT - PAD;
   int x0 = uw*LEN_TILE_OUT - PAD;
   float md[LEN_TILE_IN][LEN_TILE_IN];
   for (int y = 0; y < LEN_TILE_IN; ++y)
     for (int x = 0; x < LEN_TILE_IN; ++x) {
       if (0 <= y0 + y && y0 + y < HEIGHT && 0 <= x0 + x && x0 + x < WIDTH)
-        md[y][x] = fl[ub*SIZE_PLANE + (y0 + y)*WIDTH + x0 + x];
+        md[y][x] = flin[ub*SIZE_PLANE + (y0 + y)*WIDTH + x0 + x];
       else md[y][x] = 0.0f; }
 
-  __local float flV[LEN_TILE_IN*LEN_TILE_IN*NB*NTILE]
-                __attribute__((aligned(SIZE_ALIGN)));
   flV[(0U*LEN_TILE_IN + 0U)*NB*NTILE + ub*NTILE + utile]
     = + x4(md[0][0]) - x2(md[0][1]) - x4(md[0][2]) + x2(md[0][3])
       - x2(md[1][0]) + x1(md[1][1]) + x2(md[1][2]) - x1(md[1][3])
@@ -428,11 +427,13 @@ void compute_matV(__global const float *fin, __global void *matV) {
   uint uh    = utile / NTILE_W;
   uint uw    = utile % NTILE_W;
   __local float flin[NB*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
+  __local float flV[LEN_TILE_IN*LEN_TILE_IN*NB*NTILE]
+                __attribute__((aligned(SIZE_ALIGN)));
   for (uint u = 0; u < 9U; ++u)
     flin[u*NB*NTILE + ub*NTILE + utile]
       = fin[ch*NB*SIZE_PLANE + u*NB*NTILE + ub*NTILE + utile];
   barrier(CLK_LOCAL_MEM_FENCE);
-  compute_matV_child(ch, ub, utile, uh, uw, flin, matV); }
+  compute_matV_child(ch, ub, utile, uh, uw, flin, flV, matV); }
 )";
 
 const string code_compute_matAV = R"(
@@ -474,6 +475,8 @@ void compute_matAV(__global const void *matM,
   float mean   = mean_array[ch];
   float sd_inv = sd_inv_array[ch];
   __local float flout[NB*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
+  __local float flV[LEN_TILE_IN*LEN_TILE_IN*NB*NTILE]
+                __attribute__((aligned(SIZE_ALIGN)));
 
 #ifdef DO_JOIN
   for (uint u = 0; u < NTILE; ++u)
@@ -490,7 +493,7 @@ void compute_matAV(__global const void *matM,
       = flout[u*NB*NTILE + ub*NTILE + utile];
 #endif
 
-  compute_matV_child(ch, ub, utile, uh, uw, flout, matV); }
+  compute_matV_child(ch, ub, utile, uh, uw, flout, flV, matV); }
 )";
 
 const string code_compute_matM_wmma = R"(
@@ -997,7 +1000,7 @@ static SgemmParam tune_compute_matM(bool use_wmma, const OCL::Device &dev,
   noexcept {
   assert(dev.ok() && 0 < nbatch && 0 < nm0 && 0 < nn0 && 0 < nk0);
   deque<SgemmParam> params, params_candi;
-  uint wgmin, wgmax, nlstart, nlfmmax, factor;
+  uint wgmin, wgmax, nlstart, nlfmmax;
   uint mmax = ceil_power2(nm0);
   uint nmax = ceil_power2(nn0);
   uint kmax = ceil_power2(nk0);
@@ -1269,9 +1272,10 @@ string ManageSend::gen_info() const noexcept {
   s += " (" + to_string(static_cast<uint>(_time)) + "us)";
   return s; }
 
-void ManageDecode::start(const OCL::Device &dev, const OCL::Queue &queue,
-			 const OCL::Memory &mem_in, const OCL::Memory &mem_out,
-			 uint index_block, uint maxsize_batch) noexcept {
+void ManageDecode::start(const OCL::Queue &queue, const OCL::Memory &mem_in,
+			 const OCL::Memory &mem_out, uint index_block,
+			 uint maxsize_batch) noexcept {
+  assert(queue.ok() && mem_in.ok() && mem_out.ok());
   _nbatch = maxsize_batch;
   _nm     = _nbatch * NNAux::nch_input * NNAux::size_plane;
 
@@ -1432,9 +1436,9 @@ string ManageRecv::gen_info() const noexcept {
   s += " (" + to_string(static_cast<uint>(_time)) + "us)";
   return s; }
 
-void ManageComputeMatM::start(const OCL::Device &dev, const OCL::Queue &queue,
-			      uint nbatch, uint nm0, uint nn0, uint nk0,
-			      const SgemmParam &param) noexcept {
+void ManageComputeMatM::start(const OCL::Queue &queue, uint nbatch, uint nm0,
+			      uint nn0, uint nk0, const SgemmParam &param)
+  noexcept {
   assert(dev.ok() && queue.ok() && 0 < nbatch && 0 < nm0 && 0 < nn0
 	 && 0 < nk0 && param.ok());
   string str;
@@ -1687,6 +1691,7 @@ void ManageComputeMatV::start(bool store_half, const OCL::Queue &queue,
 			      uint nch, uint nb, uint nn, uint nk,
 			      const OCL::Memory &mem_matV) noexcept {
   string code;
+
   if (store_half) code += "#define STORE_HALF\n";
   code += ("#define NB " + to_string(nb) + "U\n"
 	   "#define NK " + to_string(nk) + "U\n"
@@ -2153,9 +2158,10 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
     std::cout << "  Wmma support:         "
 	      << (use_wmma ? "Yes" : "No") << std::endl; }
 
+  _queue = _cl_dev.gen_queue();
+    
   std::cout << "  Send:                 ";
   std::cout.flush();
-  _queue = _cl_dev.gen_queue();
   _mng_send.start(_cl_dev, _queue, maxsize_batch);
   std::cout << _mng_send.gen_info() << std::endl;
 
@@ -2170,10 +2176,10 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
 			maxsize_batch * ntile, _resnet_nout);
   std::cout << "  Matrix M:             ";
   std::cout << param_matM.gen_info() << std::endl;
-  _mng_compute_matM_input.start(_cl_dev, _queue, size_tile_in, _resnet_nout,
+  _mng_compute_matM_input.start(_queue, size_tile_in, _resnet_nout,
 				maxsize_batch * ntile, NNAux::nch_input,
 				param_matM);
-  _mng_compute_matM.start(_cl_dev, _queue, size_tile_in, _resnet_nout,
+  _mng_compute_matM.start(_queue, size_tile_in, _resnet_nout,
 			  maxsize_batch * ntile, _resnet_nout, param_matM);
 
   std::cout << "  Head 1:               ";
@@ -2233,8 +2239,8 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
 					  * _value2_nout * _value2_nin);
   _cl_value3_wght  = _queue.gen_mem_hw_dr(sizeof(float) * _value3_nin);
 
-  _mng_decode.start(_cl_dev, _queue, _mng_send.get_work(), _cl_output,
-		    _index_block, maxsize_batch);
+  _mng_decode.start(_queue, _mng_send.get_work(), _cl_output, _index_block,
+		    maxsize_batch);
 
   _mng_compute_matM_input.register_b(_cl_matV);
   _mng_compute_matM_input.register_c(_cl_matM);

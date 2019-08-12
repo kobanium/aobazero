@@ -42,9 +42,9 @@ class ManageDecode {
   uint _nbatch, _nm;
 
 public:
-  void start(const OCL::Device &dev, const OCL::Queue &queue,
-	     const OCL::Memory &mem_in, const OCL::Memory &mem_out,
-	     uint _index_block, uint maxsize_batch) noexcept;
+  void start(const OCL::Queue &queue, const OCL::Memory &mem_in,
+	     const OCL::Memory &mem_out, uint _index_block,
+	     uint maxsize_batch) noexcept;
   void push(const OCL::Queue &queue, uint n_one) noexcept;
 };
 
@@ -105,8 +105,8 @@ class ManageComputeMatM {
   uint _nbatch, _nm, _nn, _nk;
 public:
   ManageComputeMatM() noexcept {};
-  void start(const OCL::Device &dev, const OCL::Queue &queue, uint nbatch,
-	     uint nm0, uint nn0, uint nk0, const SgemmParam &param) noexcept;
+  void start(const OCL::Queue &queue, uint nbatch, uint nm0, uint nn0,
+	     uint nk0, const SgemmParam &param) noexcept;
   void register_b(const OCL::Memory &mem) const noexcept;
   void register_c(const OCL::Memory &mem) const noexcept;
   void push(const OCL::Queue &queue, const OCL::Memory &mem_a) const noexcept;
