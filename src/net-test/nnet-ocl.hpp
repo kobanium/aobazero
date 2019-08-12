@@ -35,14 +35,16 @@ public:
 
 class ManageDecode {
   using uint = unsigned int;
-  size_t _size_g[3], _size_l[3];
+  size_t _one_size_g[3],  _one_size_l[3];
+  size_t _zero_size_g[3], _zero_size_l[3];
+  size_t _fill_size_g[3], _fill_size_l[3];
   OCL::Kernel _ker_zero_clear, _ker_plane_fill, _ker_set_one;
   uint _nbatch, _nm;
 
 public:
   void start(const OCL::Device &dev, const OCL::Queue &queue,
 	     const OCL::Memory &mem_in, const OCL::Memory &mem_out,
-	     uint maxsize_batch) noexcept;
+	     uint _index_block, uint maxsize_batch) noexcept;
   void push(const OCL::Queue &queue, uint n_one) noexcept;
 };
 
@@ -120,20 +122,24 @@ class ManageSgemm {
   double _time;
   size_t size_g[3], size_l[3];
   SgemmParam _param;
-  uint _nm0, _nn0, _nk0;
-  bool _done_load_a, _done_load_b, _do_bias_ReLU;
+  uint _nm0, _nn0, _nk0, _nm, _nn, _nk;
+  bool _done_load_a, _done_load_b, _do_transa, _do_transb, _do_transc;
 
 public:
-  ManageSgemm() noexcept : _nm0(0) {}
   void start(const OCL::Device &dev, const OCL::Queue &queue, bool transa,
-	     bool transb, uint nm0, uint nn0, uint nk0, uint offa, uint lda,
-	     uint offb, uint ldb, uint offc, uint ldc,
-	     bool do_bias_ReLU = false) noexcept;
+	     bool transb, bool do_transa, bool do_transb, bool do_transc,
+	     uint nm0, uint nn0, uint nk0, uint offa, uint lda,
+	     uint offb, uint ldb, uint offc, uint ldc) noexcept;
+  uint get_nm() const noexcept { return _nm; }
+  uint get_nn() const noexcept { return _nn; }
+  uint get_nk() const noexcept { return _nk; }
   void push(const OCL::Queue &queue) const noexcept;
+  void register_a(const OCL::Memory &mem) const noexcept;
+  void register_b(const OCL::Memory &mem) const noexcept;
+  void register_c(const OCL::Memory &mem) const noexcept;
   void register_a0(const OCL::Memory &mem) const noexcept;
   void register_b0(const OCL::Memory &mem) const noexcept;
   void register_c0(const OCL::Memory &mem) const noexcept;
-  void register_bias(const OCL::Memory &mem) const noexcept;
   void push_load_a(const OCL::Queue &queue) noexcept;
   void push_load_b(const OCL::Queue &queue) noexcept;
   std::string gen_info() const noexcept;
@@ -161,8 +167,10 @@ class ManageComputeMatA {
 public:
   ManageComputeMatA() noexcept : _nm(0) {}
   void start(bool load_half, const OCL::Queue &queue, bool flag_join, uint nch,
-	     uint nb, uint nm, uint nn, const OCL::Memory &mem_matM,
-	     const OCL::Memory &mem_output) noexcept;
+	     uint nb, uint nm, uint nn, uint nn_out,
+	     const OCL::Memory &mem_matM, const OCL::Memory &mem_bypass,
+	     const OCL::Memory &mem_output)
+    noexcept;
   void push(const OCL::Queue &queue, const OCL::Memory &mean,
 	    const OCL::Memory &sd_inv) const noexcept;
 };
@@ -182,25 +190,34 @@ public:
 
 class ManageTransformValue2 {
   using uint  = unsigned int;
+  size_t _size_g[3], _size_l[3];
   OCL::Kernel _ker;
-  uint _nm;
 public:
-  ManageTransformValue2() noexcept : _nm(0) {}
   void start(const OCL::Queue &queue, uint nch, uint nb,
-	     const OCL::Memory &mem_in, uint offin,
+	     const OCL::Memory &mem_in, uint offin, uint nn_out,
+	     const OCL::Memory &mem_out) noexcept;
+  void push(const OCL::Queue &queue) const noexcept;
+};
+
+class ManageResizeBiasReLU {
+  using uint = unsigned int;
+  size_t _size_g[3], _size_l[3];
+  OCL::Kernel _ker;
+public:
+  void start(const OCL::Queue &queue, uint nm, uint nn, uint ldin, uint ldout,
+	     const OCL::Memory &mem_bias, const OCL::Memory &mem_in,
 	     const OCL::Memory &mem_out) noexcept;
   void push(const OCL::Queue &queue) const noexcept;
 };
 
 class ManageComputeBNReLU {
   using uint = unsigned int;
+  size_t _size_g[3], _size_l[3];
   OCL::Kernel _ker;
-  uint _nm;
 public:
-  ManageComputeBNReLU() noexcept : _nm(0) {}
-  void start(const OCL::Queue &queue, uint nch, uint nb,
+  void start(const OCL::Queue &queue, uint nch, uint nb, uint nn_in,
 	     const OCL::Memory &mean, const OCL::Memory &sd_inv,
-	     const OCL::Memory &mem_io) noexcept;
+	     const OCL::Memory &mem_in, const OCL::Memory &mem_out) noexcept;
   void push(const OCL::Queue &queue) const noexcept;
 };
 
@@ -233,6 +250,7 @@ class NNetOCL {
   ManageComputeMatAV _mng_compute_matAV, _mng_compute_matAV_join;
   ManageComputeBNReLU _mng_compute_BNReLU;
   ManageTransformValue2 _mng_transform_value2;
+  ManageResizeBiasReLU _mng_resize_bias_ReLU_value3;
   ManageComputePolicy _mng_compute_policy;
   std::unique_ptr<uchar []> _ptr_input_c;
   std::unique_ptr<float []> _ptr_result;
@@ -247,7 +265,7 @@ class NNetOCL {
 
   uint _maxsize_batch, _maxsize_out, _resnet_nout, _nres_block;
   uint _head1_nout, _policy1_nout, _value1_nout, _policy2_nin;
-  uint _value2_nin, _value2_nout, _value3_nin, _value3_nout;
+  uint _value2_nin, _value2_nout, _value3_nin, _value3_nout, _index_block;
   row_t _value3_bias;
   void load(bool use_half, const std::vector<std::pair<uint, row_t>> &wght)
     noexcept;

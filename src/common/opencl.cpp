@@ -331,7 +331,8 @@ Memory OCL::Queue::gen_mem_hr_dw(size_t size) const {
   return Memory(_impl->gen_memory(CL_MEM_HOST_READ_ONLY | CL_MEM_WRITE_ONLY,
 				  size)); }
 Memory OCL::Queue::gen_mem_drw(size_t size) const {
-  return Memory(_impl->gen_memory(CL_MEM_HOST_NO_ACCESS | CL_MEM_READ_WRITE,
+  return Memory(_impl->gen_memory(/*CL_MEM_HOST_NO_ACCESS |*/
+				  CL_MEM_HOST_READ_ONLY | CL_MEM_READ_WRITE,
 				  size)); }
 void OCL::Queue::finish() const { _impl->finish(); }
 void *OCL::Queue::map_w(const Memory &m, size_t size) const {

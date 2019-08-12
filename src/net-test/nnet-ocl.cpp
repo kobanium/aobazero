@@ -97,18 +97,22 @@ __kernel void zero_clear(__global float *p) { p[get_global_id(0)] = 0.0f; }
 
 const string code_decode =
   "#define NCH_FILL " + to_string(send_nch_fill) + R"(U
-__kernel void zero_clear(__global float *p) { p[get_global_id(0)] = 0.0f; }
+__kernel __attribute__((reqd_work_group_size(128, 1, 1)))
+void zero_clear(__global float *p) {
+  uint sq128 = get_global_id(0);
+  uint chb   = get_global_id(1);
+  p[chb*128U + sq128] = 0.0f; }
 
-__kernel void plane_fill(__global const float *pvalue,
-                         __global const uint *pindex, __global float *p) {
-  uint gid    = get_global_id(0);
-  uint uplane = gid / (NCH_FILL * NBATCH);
-  uint ich    = gid % (NCH_FILL * NBATCH);
-  uint index  = pindex[NCH_FILL * NBATCH + ich];
+__kernel __attribute__((reqd_work_group_size(81, 1, 1)))
+void plane_fill(__global const float *pvalue, __global const uint *pindex,
+                __global float *p) {
+  uint uplane = get_global_id(0);
+  uint ich    = get_global_id(1);
+  uint index  = pindex[INDEX_BLOCK + ich];
   p[index + uplane] = pvalue[ich]; }
 
 __kernel void set_one(__global const uint *pindex, __global float *p) {
-  uint index = pindex[2U * NCH_FILL * NBATCH + get_global_id(0)];
+  uint index = pindex[2U*INDEX_BLOCK + get_global_id(0)];
   p[index] = 1.0f; }
 )";
 
@@ -128,32 +132,35 @@ __kernel void compute_policy(__global const uint *nnmoves, uint offin,
   uint sq     = nnmove % SIZE_PLANE;
   float fsum  = bias[chout];
   for (uint chin = 0; chin < NCH_IN; ++chin)
-    fsum += weight[chout*NCH_IN + chin]
-            * fin[chin*NBATCH*SIZE_PLANE + ub*SIZE_PLANE + sq];
-  result[NBATCH + gid] = fsum; }
+    fsum += weight[chout*NCH_IN + chin] * fin[chin*NB*128U + ub*128U + sq];
+  result[NB + gid] = fsum; }
 )";
 
 const string code_transform_value2 =
   "#define SIZE_PLANE " + to_string(NNAux::size_plane) + R"(U
-__kernel void transform_value2(__global const float *fin, uint offin,
-                               __global float *fout) {
-  uint gid = get_global_id(0);
-  uint bch = gid / SIZE_PLANE;
-  uint sq  = gid % SIZE_PLANE;
-  uint ub  = bch / NCH;
-  uint ch  = bch % NCH;
-  fout[(ch*SIZE_PLANE + sq)*NBATCH + ub]
-    = fin[offin + (ch*NBATCH + ub)*SIZE_PLANE + sq]; }
+__kernel __attribute__((reqd_work_group_size(SIZE_PLANE, 1, 1)))
+void transform_value2(__global const float *fin, uint offin,
+                      __global float *fout) {
+  uint sq = get_global_id(0);
+  uint ub = get_global_id(1);
+  uint ch = get_global_id(2);
+  fout[ch*SIZE_PLANE*NN_OUT + sq*NN_OUT + ub]
+    = fin[offin + ch*NBATCH*128U + ub*128U + sq]; }
 )";
 
 const string code_BNReLU =
   "#define SIZE_PLANE " + to_string(NNAux::size_plane) + R"(U
-__kernel void compute_BNReLU(__global const float *mean,
-                             __global const float *sd_inv,
-                             __global float *fio) {
-  uint gid = get_global_id(0);
-  uint ch  = gid / (NBATCH * SIZE_PLANE);
-  fio[gid] = max(0.0f, sd_inv[ch] * (fio[gid] - mean[ch])); }
+__kernel __attribute__((reqd_work_group_size(SIZE_PLANE, 1, 1)))
+void compute_BNReLU(__global const float *mean, __global const float *sd_inv,
+                    __global const float *fin, __global float *fout) {
+  uint sq = get_global_id(0);
+  uint ub = get_global_id(1);
+  uint ch = get_global_id(2);
+  float a = sd_inv[ch];
+  float b = mean[ch];
+  fout[ch*NB*128U + ub*128U + sq]
+    = max(0.0f, a*(fin[ch*NN_IN + ub*SIZE_PLANE + sq] - b));
+}
 )";
 
 const string code_common =
@@ -371,6 +378,7 @@ __kernel __attribute__((reqd_work_group_size(NTILE, NB, 1)))
 void compute_matA_BNReLU(__global const void *matM,
                          __global const float *mean_array,
                          __global const float *sd_inv_array,
+                         __global const float *fbypass,
                          __global float *fout) {
   uint utile = get_global_id(0);
   uint ub    = get_global_id(1);
@@ -400,14 +408,14 @@ void compute_matA_BNReLU(__global const void *matM,
 #ifdef DO_JOIN
   for (uint u = 0; u < NTILE; ++u)
     flout[u*NB*NTILE + ub*NTILE + utile]
-      = fout[ch*NB*128U + u*NB*NTILE + ub*NTILE + utile];
+      = fbypass[ch*NB*128U + u*NB*NTILE + ub*NTILE + utile];
   barrier(CLK_LOCAL_MEM_FENCE);
 #endif
 
   compute_matA_child(origin, mean, sd_inv, mm, flout);
 
   for (uint u = 0; u < NTILE; ++u)
-    fout[ch*NB*SIZE_PLANE + u*NB*NTILE + ub*NTILE + utile]
+    fout[ch*NN_OUT + u*NB*NTILE + ub*NTILE + utile]
       = flout[u*NB*NTILE + ub*NTILE + utile]; }
 )";
 
@@ -777,15 +785,15 @@ __kernel void matC_to_mat0(__global const float *p0, __global float *p1) {
   uint urow0 = gid / NN0;
   uint ucol0 = gid % NN0;
   p1[OFFC0 + urow0*LDC0 + ucol0] = p0[urow0*NN + ucol0]; }
+)";
 
-__kernel void matC_to_mat0_bias_ReLU(__global const float *p0,
-                                     __global const float *bias,
-                                     __global float *p1) {
-  uint gid   = get_global_id(0);
-  uint urow0 = gid / NN0;
-  uint ucol0 = gid % NN0;
-  p1[OFFC0 + urow0*LDC0 + ucol0]
-    = fmax(0.0f, p0[urow0*NN + ucol0] + bias[urow0]); }
+const string code_resize_bias_ReLU = R"(
+__kernel __attribute__((reqd_work_group_size(NN, NL, 1)))
+void resize_bias_ReLU(__global const float *bias, __global const float *fin,
+                      __global float *fout) {
+  uint nn = get_global_id(0);
+  uint nm = get_global_id(1);
+  fout[nm*LD_OUT + nn] = fmax(0.0f, fin[nm*LD_IN + nn] + bias[nm]); }
 )";
 
 static uint ceil_multi(uint u, uint mul) noexcept {
@@ -1049,7 +1057,7 @@ static SgemmParam tune_compute_matM(bool use_wmma, const OCL::Device &dev,
     try {
       elapsed = measure_compute_matM(qtmp, param, nbatch, nm0, nn0, nk0, 1U); }
     catch (...) { elapsed = DBL_MAX; flag_error = true; }
-    //catch (std::exception &e) { std::cout << e.what() << std::endl; }
+
     if (flag_error) {
       for (auto it = params.begin(); it != params.end(); ) {
 	if (param <= *it) it = params.erase(it);
@@ -1263,10 +1271,24 @@ string ManageSend::gen_info() const noexcept {
 
 void ManageDecode::start(const OCL::Device &dev, const OCL::Queue &queue,
 			 const OCL::Memory &mem_in, const OCL::Memory &mem_out,
-			 uint maxsize_batch) noexcept {
+			 uint index_block, uint maxsize_batch) noexcept {
   _nbatch = maxsize_batch;
   _nm     = _nbatch * NNAux::nch_input * NNAux::size_plane;
-  string code = "#define NBATCH " + to_string(_nbatch) + "U\n" + code_decode;
+
+  _zero_size_l[0] = _zero_size_g[0] = 128U;
+  _zero_size_g[1] = NNAux::nch_input * _nbatch;
+  _zero_size_l[1] = _zero_size_l[2] = _zero_size_g[2] = 1U;
+
+  _one_size_l[0] = 32U;
+  _one_size_l[1] = _one_size_g[1] = _one_size_l[2] = _one_size_g[2] = 1U;
+
+  _fill_size_l[0] = _fill_size_g[0] = 81U;
+  _fill_size_l[1] = _fill_size_l[2] = _fill_size_g[2] = 1U;
+  _fill_size_g[1] = send_nch_fill * _nbatch;
+
+  string code = ("#define INDEX_BLOCK " + to_string(index_block) + "U\n"
+		 "#define NB          " + to_string(_nbatch) + "U\n"
+		 + code_decode);
   OCL::Program pg = queue.gen_program(code.c_str());
   _ker_zero_clear = pg.gen_kernel("zero_clear");
   _ker_zero_clear.set_arg(0, mem_out);
@@ -1281,10 +1303,11 @@ void ManageDecode::start(const OCL::Device &dev, const OCL::Queue &queue,
   _ker_set_one.set_arg(1, mem_out); }
 
 void ManageDecode::push(const OCL::Queue &queue, uint n_one) noexcept {
-  queue.push_kernel(_ker_zero_clear, _nm);
-  queue.push_kernel(_ker_set_one, n_one);
-  queue.push_kernel(_ker_plane_fill,
-		    send_nch_fill * _nbatch * NNAux::size_plane); }
+  assert(queue.ok());
+  queue.push_ndrange_kernel(_ker_zero_clear, 3, _zero_size_g, _zero_size_l);
+  queue.push_ndrange_kernel(_ker_plane_fill, 3, _fill_size_g, _fill_size_l);
+  _one_size_g[0] = n_one;
+  queue.push_ndrange_kernel(_ker_set_one, 3, _one_size_g, _one_size_l); }
 
 static double measure_recv_global(const OCL::Queue &queue, size_t size) {
   assert(queue.ok() && 0 < size);
@@ -1472,9 +1495,10 @@ static double measure_sgemm(const OCL::Queue &queue, const SgemmParam param,
   return (elapsed / static_cast<double>(sample_size)); }
 
 void ManageSgemm::start(const OCL::Device &dev, const OCL::Queue &queue,
-			bool, bool, uint nm0, uint nn0, uint nk0,
+			bool, bool, bool do_transa, bool do_transb,
+			bool do_transc, uint nm0, uint nn0, uint nk0,
 			uint offa0, uint lda0, uint offb0, uint ldb0,
-			uint offc0, uint ldc0, bool do_bias_ReLU) noexcept {
+			uint offc0, uint ldc0) noexcept {
   assert(dev.ok() && queue.ok() && 0 < nm0 && 0 < nn0 && 0 < nk0);
   assert(0 < lda0 && 0 < ldb0 && 0 < ldc0);
   deque<SgemmParam> params, params_candi;
@@ -1483,7 +1507,9 @@ void ManageSgemm::start(const OCL::Device &dev, const OCL::Queue &queue,
   uint nmax = ceil_power2(nn0);
   uint kmax = ceil_power2(nk0);
 
-  _do_bias_ReLU = do_bias_ReLU;
+  _do_transa = do_transa;
+  _do_transb = do_transb;
+  _do_transc = do_transc;
   wgmax   = min(static_cast<uint>(dev.gen_max_work_group_size()), 4096U);
   wgmin   = max(mmax*nmax, 1U);
   wgmin   = min(wgmin, 16U);
@@ -1550,11 +1576,11 @@ void ManageSgemm::start(const OCL::Device &dev, const OCL::Queue &queue,
   _nm0 = nm0;
   _nn0 = nn0;
   _nk0 = nk0;
-  uint nm = ceil_multi(nm0, _param.nl * _param.nlfm * _param.npm);
-  uint nn = ceil_multi(nn0, _param.nl * _param.npn);
-  uint nk = ceil_multi(nk0, _param.nl * _param.nlfm * _param.npk);
-  size_g[0] = nn / _param.npn;
-  size_g[1] = nm / _param.npm;
+  _nm = ceil_multi(nm0, _param.nl * _param.nlfm * _param.npm);
+  _nn = ceil_multi(nn0, _param.nl * _param.npn);
+  _nk = ceil_multi(nk0, _param.nl * _param.nlfm * _param.npk);
+  size_g[0] = _nn / _param.npn;
+  size_g[1] = _nm / _param.npm;
   size_g[2] = 1U;
   size_l[0] = _param.nl;
   size_l[1] = _param.nl * _param.nlfm;
@@ -1563,85 +1589,88 @@ void ManageSgemm::start(const OCL::Device &dev, const OCL::Queue &queue,
   OCL::Program pg = queue.gen_program(code_zero_clear);
   OCL::Kernel ker_zero_clear = pg.gen_kernel("zero_clear");
 
-  mem_a = queue.gen_mem_drw(nm * nk * sizeof(float));
-  ker_zero_clear.set_arg(0, mem_a);
-  queue.push_kernel(ker_zero_clear, nm * nk);
-
-  mem_b = queue.gen_mem_drw(nk * nn * sizeof(float));
-  ker_zero_clear.set_arg(0, mem_b);
-  queue.push_kernel(ker_zero_clear, nk * nn);
-
-  mem_c = queue.gen_mem_drw(nm * nn * sizeof(float));
-  ker_zero_clear.set_arg(0, mem_c);
-  queue.push_kernel(ker_zero_clear, nm * nn);
-  queue.finish();
-
-  string str =
-    "#define NM0   " + to_string(_nm0)  + "\n"
-    "#define NN0   " + to_string(_nn0)  + "\n"
-    "#define NK0   " + to_string(_nk0)  + "\n"
-    "#define OFFA0 " + to_string(offa0) + "\n"
-    "#define OFFB0 " + to_string(offb0) + "\n"
-    "#define OFFC0 " + to_string(offc0) + "\n"
-    "#define LDA0  " + to_string(lda0)  + "\n"
-    "#define LDB0  " + to_string(ldb0)  + "\n"
-    "#define LDC0  " + to_string(ldc0)  + "\n"
-    "#define NM    " + to_string(nm)    + "\n"
-    "#define NN    " + to_string(nn)    + "\n"
-    "#define NK    " + to_string(nk)    + "\n" + code_sgemm_aux;
+  string str = ("#define NM0   " + to_string(_nm0)  + "\n"
+		"#define NN0   " + to_string(_nn0)  + "\n"
+		"#define NK0   " + to_string(_nk0)  + "\n"
+		"#define OFFA0 " + to_string(offa0) + "\n"
+		"#define OFFB0 " + to_string(offb0) + "\n"
+		"#define OFFC0 " + to_string(offc0) + "\n"
+		"#define LDA0  " + to_string(lda0)  + "\n"
+		"#define LDB0  " + to_string(ldb0)  + "\n"
+		"#define LDC0  " + to_string(ldc0)  + "\n"
+		"#define NM    " + to_string(_nm)   + "\n"
+		"#define NN    " + to_string(_nn)   + "\n"
+		"#define NK    " + to_string(_nk)   + "\n" + code_sgemm_aux);
   pg = queue.gen_program(str.c_str());
   _done_load_a = _done_load_b = false;
 
-  _ker_a = pg.gen_kernel("mat0_to_matA");
-  _ker_a.set_arg(1, mem_a);
+  if (do_transa) {
+    mem_a = queue.gen_mem_drw(_nm * _nk * sizeof(float));
+    ker_zero_clear.set_arg(0, mem_a);
+    queue.push_kernel(ker_zero_clear, _nm * _nk);
+    _ker_a = pg.gen_kernel("mat0_to_matA");
+    _ker_a.set_arg(1, mem_a); }
 
-  _ker_b = pg.gen_kernel("mat0_to_matB");
-  _ker_b.set_arg(1, mem_b);
+  if (do_transb) {
+    mem_b = queue.gen_mem_drw(_nk * _nn * sizeof(float));
+    ker_zero_clear.set_arg(0, mem_b);
+    queue.push_kernel(ker_zero_clear, _nk * _nn);
+    _ker_b = pg.gen_kernel("mat0_to_matB");
+    _ker_b.set_arg(1, mem_b); }
 
-  if (do_bias_ReLU) {
-    _ker_c = pg.gen_kernel("matC_to_mat0_bias_ReLU");
-    _ker_c.set_arg(0, mem_c); }
-  else {
+  if (do_transc) {
+    mem_c = queue.gen_mem_drw(_nm * _nn * sizeof(float));
+    ker_zero_clear.set_arg(0, mem_c);
+    queue.push_kernel(ker_zero_clear, _nm * _nn);
     _ker_c = pg.gen_kernel("matC_to_mat0");
     _ker_c.set_arg(0, mem_c); }
+  queue.finish();
 
-  str = gen_code_sgemm(nm, nn, nk, _param);
+  str = gen_code_sgemm(_nm, _nn, _nk, _param);
   pg = queue.gen_program(str.c_str());
   _ker_sgemm = pg.gen_kernel("sgemm");
-  _ker_sgemm.set_arg(0, mem_a);
-  _ker_sgemm.set_arg(1, mem_b);
-  _ker_sgemm.set_arg(2, mem_c); }
+  if (do_transa) _ker_sgemm.set_arg(0, mem_a);
+  if (do_transb) _ker_sgemm.set_arg(1, mem_b);
+  if (do_transc) _ker_sgemm.set_arg(2, mem_c);
+}
+
+void ManageSgemm::register_a(const OCL::Memory &mem) const noexcept {
+  assert(_ker_sgemm.ok() && mem.ok() && !_do_transa);
+  _ker_sgemm.set_arg(0, mem); }
+
+void ManageSgemm::register_b(const OCL::Memory &mem) const noexcept {
+  assert(_ker_sgemm.ok() && mem.ok() && !_do_transb);
+  _ker_sgemm.set_arg(1, mem); }
+
+void ManageSgemm::register_c(const OCL::Memory &mem) const noexcept {
+  assert(_ker_sgemm.ok() && mem.ok() && !_do_transc);
+  _ker_sgemm.set_arg(2, mem); }
 
 void ManageSgemm::register_a0(const OCL::Memory &mem) const noexcept {
-  assert(0 < _nm0 && mem.ok()); _ker_a.set_arg(0, mem); }
+  assert(_ker_sgemm.ok() && mem.ok()); _ker_a.set_arg(0, mem); }
 
 void ManageSgemm::register_b0(const OCL::Memory &mem) const noexcept {
-  assert(0 < _nm0 && mem.ok()); _ker_b.set_arg(0, mem); }
+  assert(_ker_sgemm.ok() && mem.ok()); _ker_b.set_arg(0, mem); }
 
 void ManageSgemm::register_c0(const OCL::Memory &mem) const noexcept {
-  assert(0 < _nm0 && mem.ok());
-  if (_do_bias_ReLU) _ker_c.set_arg(2, mem);
-  else               _ker_c.set_arg(1, mem); }
-
-void ManageSgemm::register_bias(const OCL::Memory &mem) const noexcept {
-  assert(0 < _nm0 && mem.ok() && _do_bias_ReLU); _ker_c.set_arg(1, mem); }
+  assert(_ker_sgemm.ok() && mem.ok()); _ker_c.set_arg(1, mem); }
 
 void ManageSgemm::push_load_a(const OCL::Queue &queue) noexcept {
-  assert(0 < _nm0);
+  assert(_ker_sgemm.ok() && queue.ok());
   queue.push_kernel(_ker_a, _nk0 * _nm0);
   _done_load_a = true; }
 
 void ManageSgemm::push_load_b(const OCL::Queue &queue) noexcept {
-  assert(0 < _nm0);
+  assert(_ker_sgemm.ok() && queue.ok());
   queue.push_kernel(_ker_b, _nk0 * _nn0);
   _done_load_b = true; }
 
 void ManageSgemm::push(const OCL::Queue &queue) const noexcept {
   assert(queue.ok());
-  if (!_done_load_a) queue.push_kernel(_ker_a, _nk0 * _nm0);
-  if (!_done_load_b) queue.push_kernel(_ker_b, _nk0 * _nn0);
+  if (!_done_load_a && _do_transa) queue.push_kernel(_ker_a, _nk0 * _nm0);
+  if (!_done_load_b && _do_transb) queue.push_kernel(_ker_b, _nk0*_nn0);
   queue.push_ndrange_kernel(_ker_sgemm, 3U, size_g, size_l);
-  queue.push_kernel(_ker_c, _nm0 * _nn0); }
+  if (_do_transc) queue.push_kernel(_ker_c, _nm0*_nn0); }
 
 string ManageSgemm::gen_info() const noexcept {
   assert(0 < _nm0);
@@ -1682,7 +1711,9 @@ void ManageComputeMatV::push(const OCL::Queue &queue,
 
 void ManageComputeMatA::start(bool load_half, const OCL::Queue &queue,
 			      bool flag_join, uint nch, uint nb, uint nm,
-			      uint nn, const OCL::Memory &mem_matM,
+			      uint nn, uint nn_out,
+			      const OCL::Memory &mem_matM,
+			      const OCL::Memory &mem_bypass,
 			      const OCL::Memory &mem_output) noexcept {
   assert(0 < _nm && queue.ok() && mem_matM.ok() && mem_output.ok());
   string code;
@@ -1692,9 +1723,10 @@ void ManageComputeMatA::start(bool load_half, const OCL::Queue &queue,
   (void)load_half;
 #endif
   if (flag_join) code += "#define DO_JOIN\n";
-  code += ("#define NB " + to_string(nb) + "\n"
-	   "#define NM " + to_string(nm) + "\n"
-	   "#define NN " + to_string(nn) + "\n"
+  code += ("#define NB     " + to_string(nb) + "\n"
+	   "#define NM     " + to_string(nm) + "\n"
+	   "#define NN     " + to_string(nn) + "\n"
+	   "#define NN_OUT " + to_string(nn_out) + "\n"
 	   + code_common + code_compute_matA_child + code_compute_matA);
 
   OCL::Program pg;
@@ -1704,7 +1736,8 @@ void ManageComputeMatA::start(bool load_half, const OCL::Queue &queue,
     std::terminate(); }
   _ker = pg.gen_kernel("compute_matA_BNReLU");
   _ker.set_arg(0, mem_matM);
-  _ker.set_arg(3, mem_output);
+  _ker.set_arg(3, mem_bypass);
+  _ker.set_arg(4, mem_output);
   _size_l[0] = ntile;
   _size_l[1] = nb;
   _size_l[2] = 1U;
@@ -1766,19 +1799,66 @@ void ManageComputeMatAV::push(const OCL::Queue &queue, const OCL::Memory &mean,
   queue.push_ndrange_kernel(_ker, 3, _size_g, _size_l); }
 
 void ManageComputeBNReLU::start(const OCL::Queue &queue, uint nch, uint nb,
+				uint nn_in,
 				const OCL::Memory &mean,
 				const OCL::Memory &sd_inv,
-				const OCL::Memory &mem_io) noexcept {
-  string code = "#define NBATCH " + to_string(nb) + "U\n" + code_BNReLU;
+				const OCL::Memory &mem_in,
+				const OCL::Memory &mem_out) noexcept {
+  string code = ("#define NB    " + to_string(nb) + "U\n"
+		 "#define NN_IN " + to_string(nn_in) + "U\n"
+		 + code_BNReLU);
   OCL::Program pg = queue.gen_program(code.c_str());
   _ker = pg.gen_kernel("compute_BNReLU");
   _ker.set_arg(0, mean);
   _ker.set_arg(1, sd_inv);
-  _ker.set_arg(2, mem_io);
-  _nm = nch * nb * NNAux::size_plane; }
+  _ker.set_arg(2, mem_in);
+  _ker.set_arg(3, mem_out);
+  _size_l[0] = NNAux::size_plane;
+  _size_l[1] = 1U;
+  _size_l[2] = 1U;
+  _size_g[0] = NNAux::size_plane;
+  _size_g[1] = nb;
+  _size_g[2] = nch; }
 
 void ManageComputeBNReLU::push(const OCL::Queue &queue) const noexcept {
-  assert(0 < _nm); queue.push_kernel(_ker, _nm); }
+  assert(_ker.ok() && queue.ok());
+  queue.push_ndrange_kernel(_ker, 3, _size_g, _size_l); }
+
+//class ManageTransformBNReLU {
+//  using uint = unsigned int;
+//  size_t _size_g[3], _size_l[3];
+//  OCL::Kernel _ker;
+//public:
+void ManageResizeBiasReLU::start(const OCL::Queue &queue, uint nm, uint nn,
+				 uint ldin, uint ldout,
+				 const OCL::Memory &mem_bias,
+				 const OCL::Memory &mem_in,
+				 const OCL::Memory &mem_out) noexcept {
+  assert(queue.ok() && 0 < nm && 0 < nn && 0 < ldin && 0 < ldout);
+  assert(mem_bias.ok() && mem_in.ok() && mem_out.ok());
+  uint nl;
+  for (nl = 16U; nm % nl; nl /= 2U);
+
+  string code = ("#define NN     " + to_string(nn)    + "U\n"
+		 "#define NL     " + to_string(nl)    + "U\n"
+		 "#define LD_IN  " + to_string(ldin)  + "U\n"
+		 "#define LD_OUT " + to_string(ldout) + "U\n"
+		 + code_resize_bias_ReLU);
+  OCL::Program pg = queue.gen_program(code.c_str());
+  _ker = pg.gen_kernel("resize_bias_ReLU");
+  _ker.set_arg(0, mem_bias);
+  _ker.set_arg(1, mem_in);
+  _ker.set_arg(2, mem_out);
+  _size_l[0] = nn;
+  _size_l[1] = nl;
+  _size_l[2] = 1U;
+  _size_g[0] = nn;
+  _size_g[1] = nm;
+  _size_g[2] = 1U; }
+
+void ManageResizeBiasReLU::push(const OCL::Queue &queue) const noexcept {
+  assert(_ker.ok() && queue.ok());
+  queue.push_ndrange_kernel(_ker, 3, _size_g, _size_l); }
 
 void ManageComputePolicy::start(const OCL::Queue &queue, uint nch_in,
 				uint maxsize_batch,
@@ -1789,7 +1869,7 @@ void ManageComputePolicy::start(const OCL::Queue &queue, uint nch_in,
 				const OCL::Memory &mem_out) noexcept {
   string code =
     "#define NCH_IN " + to_string(nch_in) + "U\n"
-    "#define NBATCH " + to_string(maxsize_batch) + "U\n"
+    "#define NB     " + to_string(maxsize_batch) + "U\n"
     + code_compute_policy;
   OCL::Program pg = queue.gen_program(code.c_str());
   _ker = pg.gen_kernel("compute_policy");
@@ -1807,19 +1887,27 @@ void ManageComputePolicy::push(const OCL::Queue &queue, uint ntot_moves,
 
 void ManageTransformValue2::start(const OCL::Queue &queue, uint nch, uint nb,
 				  const OCL::Memory &mem_in, uint offin,
-				  const OCL::Memory &mem_out) noexcept {
+				  uint nn_out, const OCL::Memory &mem_out)
+  noexcept {
   string code =
-    "#define NCH "    + to_string(nch) + "U\n"
+    "#define NN_OUT " + to_string(nn_out) + "U\n"
+    "#define NCH    " + to_string(nch) + "U\n"
     "#define NBATCH " + to_string(nb)  + "U\n" + code_transform_value2;
   OCL::Program pg = queue.gen_program(code.c_str());
   _ker = pg.gen_kernel("transform_value2");
   _ker.set_arg(0, mem_in);
   _ker.set_arg(1, sizeof(offin), &offin);
   _ker.set_arg(2, mem_out);
-  _nm = nch * nb * NNAux::size_plane; }
+  _size_l[0] = NNAux::size_plane;
+  _size_l[1] = 1U;
+  _size_l[2] = 1U;
+  _size_g[0] = NNAux::size_plane;
+  _size_g[1] = nb;
+  _size_g[2] = nch; }
 
 void ManageTransformValue2::push(const OCL::Queue &queue) const noexcept {
-  assert(0 < _nm); queue.push_kernel(_ker, _nm); }
+  assert(_ker.ok() && queue.ok());
+  queue.push_ndrange_kernel(_ker, 3, _size_g, _size_l); }
 
 // in:  weight[nout][nin][size_kernel]
 // ret: matrix_U[size_tile_in][nout][nin]
@@ -1908,12 +1996,12 @@ static void compute_probs(uint nb, const uint *sizes_nnmove, const float *fin,
     softmax(sizes_nnmove[ub], probs_b);
     fin += sizes_nnmove[ub]; } }
 
-static void compress_data(uint nb0, uint nb, const float *in,
+static void compress_data(uint index_block, uint nb0, uint nb, const float *in,
 			  const uint *sizes_nnmove, const ushort *nnmoves,
 			  void *out, size_t &size_write, uint &n_one,
 			  uint &ntot_moves) noexcept {
   float *pvalue = reinterpret_cast<float *>(out);
-  uint  *pindex = reinterpret_cast<uint *>(out) + send_nch_fill * nb;
+  uint  *pindex = reinterpret_cast<uint *>(out) + index_block;
   uint index;
   for (uint ub = 0; ub < nb; ++ub) {
     for (uint uposi = 0; uposi < 8U; ++uposi)
@@ -1929,7 +2017,8 @@ static void compress_data(uint nb0, uint nb, const float *in,
     *pindex++ = (361U * nb + ub) * NNAux::size_plane;
     *pvalue++ = (ub < nb0) ? in[index] : 0.0f; }
 
-  n_one = 0;
+  pindex = reinterpret_cast<uint *>(out) + index_block*2U;
+  n_one  = 0;
   for (uint ub = 0; ub < nb0; ++ub)
     for (uint uposi = 0; uposi < 8U; ++uposi)
       for (uint ufplane = 0; ufplane < 28U; ++ufplane) {
@@ -1938,9 +2027,13 @@ static void compress_data(uint nb0, uint nb, const float *in,
 	uint chb = (ch * nb + ub) * NNAux::size_plane;
 	for (uint u = 0; u < NNAux::size_plane; ++u) {
 	  if (in[bch + u] < 0.5f) continue;
-	  n_one    += 1U;
-	  *pindex++ = chb + u; } }
+	  pindex[n_one++] = chb + u; } }
 
+  uint n_one_end = ceil_multi(n_one, 32U);
+  for (; n_one < n_one_end; ++n_one)
+    pindex[n_one] = NNAux::nch_input * 128U * nb + (n_one % 32U);
+
+  pindex = reinterpret_cast<uint *>(out) + index_block*2U + n_one;
   ntot_moves = 0;
   for (uint ub = 0; ub < nb0; ++ub)
     for (uint unn = 0; unn < sizes_nnmove[ub]; ++unn) {
@@ -1948,8 +2041,8 @@ static void compress_data(uint nb0, uint nb, const float *in,
       ntot_moves += 1U;
       assert(nnmove < NNAux::nch_out_policy * NNAux::size_plane);
       *pindex++ = ub * NNAux::nch_out_policy * NNAux::size_plane + nnmove; }
-
-  size_write = (2U*send_nch_fill*nb + n_one + ntot_moves) * sizeof(uint); }
+  
+  size_write = (2U*index_block + n_one + ntot_moves) * sizeof(uint); }
 
 NNetOCL::~NNetOCL() noexcept { _mng_send.end(_queue); }
 
@@ -1961,6 +2054,7 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
   // compute network dimension
   //
   _maxsize_batch = maxsize_batch;
+  _index_block   = ceil_multi(maxsize_batch * send_nch_fill, 32U);
   constexpr uint nrow_input = 4U;
   constexpr uint nrow_head  = 14U;
   uint nrow = static_cast<uint>(wght.size());
@@ -1977,7 +2071,8 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
   // (4*index + 3) standard deviation [nout]
   _resnet_nout = wght[1].first;
   _maxsize_out = _resnet_nout * NNAux::size_plane;
-  _maxsize_out = max(_maxsize_out, _resnet_nout*128U);
+  _maxsize_out = max(_maxsize_out, NNAux::nch_input * 128U + 32U);
+  _maxsize_out = max(_maxsize_out, 128U * _resnet_nout);
   _nres_block  = nrow_res / 4U;
   uint nin = NNAux::nch_input;
   uint index = 0;
@@ -2083,23 +2178,25 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
 
   std::cout << "  Head 1:               ";
   std::cout.flush();
-  _mng_head1.start(_cl_dev, _queue, true, false, _head1_nout,
-		   maxsize_batch * NNAux::size_plane, _resnet_nout, 0,
+  _mng_head1.start(_cl_dev, _queue, true, false, true, false, false,
+		   _head1_nout, maxsize_batch * NNAux::size_plane,
+		   _resnet_nout, 0,
 		   _head1_nout, 0, maxsize_batch * NNAux::size_plane, 0,
 		   maxsize_batch * NNAux::size_plane);
   std::cout << _mng_head1.gen_info() << std::endl;
 
   std::cout << "  Value 2:              ";
   std::cout.flush();
-  _mng_value2.start(_cl_dev, _queue, true, false, _value2_nout, maxsize_batch,
-		    _value2_nin, 0, _value2_nout, 0, maxsize_batch, 0,
-		    maxsize_batch, true);
+  _mng_value2.start(_cl_dev, _queue, true, false, true, false, false,
+		    _value2_nout, maxsize_batch, _value2_nin, 0, _value2_nout,
+		    0, maxsize_batch, 0, maxsize_batch);
   std::cout << _mng_value2.gen_info() << std::endl;
 
   std::cout << "  Value 3:              ";
   std::cout.flush();
-  _mng_value3.start(_cl_dev, _queue, true, false, maxsize_batch, 1U,
-		    _value3_nin, 0, maxsize_batch, 0, 1U, 0, 1U, false);
+  _mng_value3.start(_cl_dev, _queue, true, false, false, true, true,
+		    maxsize_batch, 1U, _value3_nin, 0, maxsize_batch, 0, 1U, 0,
+		    1U);
   std::cout << _mng_value3.gen_info() << std::endl;
 
   uint mmax, nmax, kmax;
@@ -2108,6 +2205,9 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
   kmax = max(_mng_compute_matM_input.get_nk(), _mng_compute_matM.get_nk());
   uint sizeV = size_tile_in * kmax * nmax;
   uint sizeM = size_tile_in * mmax * nmax;
+  uint size_output = maxsize_batch * _maxsize_out;
+  size_output = max(size_output, _mng_head1.get_nk() * _mng_head1.get_nn());
+
   _ptr_input_c.reset(new uchar [sizeof(float) * maxsize_batch * 
 				(NNAux::nmove
 				 + NNAux::nch_input * NNAux::size_plane)]);
@@ -2115,10 +2215,8 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
 
   _cl_matV   = _queue.gen_mem_drw(sizeof(float) * sizeV);
   _cl_matM   = _queue.gen_mem_drw(sizeof(float) * sizeM);
-  _cl_bypass = _queue.gen_mem_drw(sizeof(float)
-				  * maxsize_batch * _maxsize_out);
-  _cl_output = _queue.gen_mem_drw(sizeof(float)
-				  * maxsize_batch * _maxsize_out);
+  _cl_bypass = _queue.gen_mem_drw(sizeof(float) * size_output);
+  _cl_output = _queue.gen_mem_drw(sizeof(float) * size_output);
   _cl_result = _queue.gen_mem_hr_dw(sizeof(float) * maxsize_batch
 				    * (NNAux::nmove + 1U));
   _cl_head1_mean   = _queue.gen_mem_hw_dr(sizeof(float) * _head1_nout);
@@ -2136,7 +2234,7 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
   _cl_value3_wght  = _queue.gen_mem_hw_dr(sizeof(float) * _value3_nin);
 
   _mng_decode.start(_cl_dev, _queue, _mng_send.get_work(), _cl_output,
-		    maxsize_batch);
+		    _index_block, maxsize_batch);
 
   _mng_compute_matM_input.register_b(_cl_matV);
   _mng_compute_matM_input.register_c(_cl_matM);
@@ -2165,7 +2263,8 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
   _mng_compute_matA_join.start(use_wmma, _queue, true, _resnet_nout,
 			       maxsize_batch, _mng_compute_matM.get_nm(),
 			       _mng_compute_matM.get_nn(),
-			       _cl_matM, _cl_bypass);
+			       _mng_head1.get_nn(),
+			       _cl_matM, _cl_bypass, _cl_output);
 
   std::cout << "  Loading Weights ... ";
   std::cout.flush();
@@ -2173,27 +2272,33 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
   std::cout << "done" << std::endl;;
 
   _mng_head1.register_a0(_cl_head1_wght);
-  _mng_head1.register_b0(_cl_bypass);
-  _mng_head1.register_c0(_cl_bypass);
+  _mng_head1.register_b(_cl_output);
+  _mng_head1.register_c(_cl_bypass);
   _mng_head1.push_load_a(_queue);
 
-  _mng_compute_BNReLU.start(_queue, _head1_nout, maxsize_batch, 
-			    _cl_head1_mean, _cl_head1_sd_inv, _cl_bypass);
+  _mng_compute_BNReLU.start(_queue, _head1_nout, maxsize_batch,
+			    _mng_head1.get_nn(),
+			    _cl_head1_mean, _cl_head1_sd_inv, _cl_bypass,
+			    _cl_output);
   _mng_compute_policy.start(_queue, _policy2_nin, maxsize_batch,
 			    _mng_send.get_work(), _cl_policy2_wght,
-			    _cl_policy2_bias, _cl_bypass, _mng_recv.get());
-  _mng_transform_value2.start(_queue, _value1_nout, maxsize_batch, _cl_bypass,
-			      _policy1_nout * maxsize_batch
-			      * NNAux::size_plane,
-			      _cl_output);
+			    _cl_policy2_bias, _cl_output, _mng_recv.get());
+  _mng_transform_value2.start(_queue, _value1_nout, maxsize_batch, _cl_output,
+			      _policy1_nout * maxsize_batch * 128U,
+			      _mng_value2.get_nn(), _cl_bypass);
+
+  _mng_resize_bias_ReLU_value3.start(_queue, _value2_nout, maxsize_batch,
+				     _mng_value2.get_nn(),
+				     _mng_value3.get_nm(),
+				     _cl_value2_bias,
+				     _cl_output, _cl_bypass);
 
   _mng_value2.register_a0(_cl_value2_wght);
-  _mng_value2.register_b0(_cl_output);
-  _mng_value2.register_c0(_cl_output);
-  _mng_value2.register_bias(_cl_value2_bias);
+  _mng_value2.register_b(_cl_bypass);
+  _mng_value2.register_c(_cl_output);
   _mng_value2.push_load_a(_queue);
 
-  _mng_value3.register_a0(_cl_output);
+  _mng_value3.register_a(_cl_bypass);
   _mng_value3.register_b0(_cl_value3_wght);
   _mng_value3.register_c0(_mng_recv.get());
   _mng_value3.push_load_b(_queue);
@@ -2208,22 +2313,6 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
   _cl_head1_wght.clear();
   _cl_value2_wght.clear();
   _cl_value3_wght.clear();
-
-#if 0
-  _mng_compute_matAV_join.push(_queue, _cl_reswghts[1].mean,
-			       _cl_reswghts[1].sd_inv);
-  _queue.finish();
-  steady_clock::time_point start = steady_clock::now();
-  for (uint u = 0; u < 128U; ++u)
-    _mng_compute_matAV_join.push(_queue, _cl_reswghts[1].mean,
-				 _cl_reswghts[1].sd_inv);
-  _queue.finish();
-  steady_clock::time_point end = steady_clock::now();
-  double elapsed
-    = static_cast<double>(duration_cast<microseconds>(end - start).count());
-  std::cout << elapsed / 128.0f << std::endl;
-  std::terminate();
-#endif
 }
 
 void NNetOCL::load(bool use_half, const vector<pair<uint, row_t>> &wght)
@@ -2307,8 +2396,8 @@ void NNetOCL::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
 
   size_t size_write;
   uint n_one, ntot_moves;
-  compress_data(size_batch, _maxsize_batch, input, sizes_nnmove, nnmoves,
-		_ptr_input_c.get(), size_write, n_one, ntot_moves);
+  compress_data(_index_block, size_batch, _maxsize_batch, input, sizes_nnmove,
+		nnmoves, _ptr_input_c.get(), size_write, n_one, ntot_moves);
   _mng_send.push(_queue, _ptr_input_c.get(), size_write);
   _mng_decode.push(_queue, n_one);
 
@@ -2329,7 +2418,7 @@ void NNetOCL::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
   _mng_compute_matM.push(_queue, _cl_reswghts[ulayer].matU);
   _mng_compute_matAV.push(_queue, _cl_reswghts[ulayer].mean,
 			  _cl_reswghts[ulayer].sd_inv);
-  _mng_compute_matM.push(_queue, _cl_reswghts[ulayer + 1U].matU);
+  _mng_compute_matM.push(_queue, _cl_reswghts[ulayer + 1U].matU);  
   _mng_compute_matA_join.push(_queue, _cl_reswghts[ulayer + 1U].mean,
 			      _cl_reswghts[ulayer + 1U].sd_inv);
 
@@ -2338,22 +2427,11 @@ void NNetOCL::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
   // out: f2[size_batch][_value1_nout][size_plane]
   _mng_head1.push(_queue);
   _mng_compute_BNReLU.push(_queue);
-  _mng_compute_policy.push(_queue, ntot_moves,
-			   2U*send_nch_fill*_maxsize_batch + n_one);
-  /*
-  _queue.finish();
-  steady_clock::time_point start = steady_clock::now();
-  for (uint u = 0; u < 128U; ++u)
-    _mng_compute_BNReLU.push(_queue);
-  _queue.finish();
-  steady_clock::time_point end = steady_clock::now();
-  double elapsed
-    = static_cast<double>(duration_cast<microseconds>(end - start).count());
-  std::cout << elapsed / 128.0f << std::endl;
-  std::terminate();
-  */
+  _mng_compute_policy.push(_queue, ntot_moves, 2U*_index_block + n_one);
+
   _mng_transform_value2.push(_queue);
   _mng_value2.push(_queue);
+  _mng_resize_bias_ReLU_value3.push(_queue);
   _mng_value3.push(_queue);
   _mng_recv.push_finish(_queue, _ptr_result.get(),
 			(_maxsize_batch + ntot_moves) * sizeof(float));
