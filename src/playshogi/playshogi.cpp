@@ -48,7 +48,7 @@ static void play_shogi(USIEngine & player_black, USIEngine & player_white,
 static void addup_result(const Node & node, const Color & turn_player0,
 			 int nplay, uint result[][NodeType::ok_size][3])
   noexcept;
-static void result_out(Color turn, uint result[][NodeType::ok_size][3])
+static double result_out(Color turn, uint result[][NodeType::ok_size][3])
   noexcept;
 static void start_engine(USIEngine & c) noexcept;
 static int get_options(int argc, const char * const *argv) noexcept;
@@ -172,7 +172,7 @@ static void addup_result(const Node & node, const Color & turn_player0,
     cout << "'\n"; }
   
   cout << "'Results of player0:\n";
-  result_out(SAux::black, tot);
+  double se = result_out(SAux::black, tot);
 
   if ( 1 ) {
     int nwin  = sum_result( SAux::black, tot, win);
@@ -193,7 +193,8 @@ static void addup_result(const Node & node, const Color & turn_player0,
     float wr = (float)(nwin + (float)ndraw/2) / ntot;
     double elo = 0;
     if ( wr != 0 && wr != 1.0 ) elo = -400.0 * log10(1.0 / wr - 1.0);
-    double ci = 1.96*sqrt(wr*(1-wr)/ntot);	// 95% Confidence interval
+//  double ci = 1.96*sqrt(wr*(1-wr)/ntot);	// 95% Confidence interval
+    double ci = 1.96*se;
     std::time_t tt = std::time(nullptr);
     struct std::tm *tb = std::localtime(&tt);
     const int BUFSIZE = 256;
@@ -207,7 +208,7 @@ static void addup_result(const Node & node, const Color & turn_player0,
 
 }
 
-static void result_out(Color turn,
+static double result_out(Color turn,
 		       uint result[][NodeType::ok_size][3]) noexcept {
   int nwin  = sum_result( turn, result, win);
   int ndraw = sum_result( turn, result, draw);
@@ -236,6 +237,7 @@ static void result_out(Color turn,
 	    + result[turn.to_u()][SAux::illegal_wwin.to_u()][lose] )
        << ")\n";
 
+  double ret_se = 0;
   // win 1 point, draw 0.5 point, lose 0 point
   if (2 <= ntot) {
     double deno  = 1.0 / static_cast<double>(ntot);
@@ -251,8 +253,10 @@ static void result_out(Color turn,
     double se    = sqrt( deno * corr * ( dwin * dwin * pwin
 					 + ddraw * ddraw * pdraw
 					 + dlose * dlose * plose ) );
+    ret_se = se;
     cout << "'point: " << mean << " pm " << 1.96 * se << "\n";
   }
+  return ret_se;
 }
 
 static void play_shogi(USIEngine & player_black, USIEngine & player_white,
