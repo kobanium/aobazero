@@ -4,6 +4,7 @@
 #include "iobase.hpp"
 #include "nnet-cpu.hpp"
 #include "nnet-ocl.hpp"
+#include "nnet-cuda.hpp"
 #include "option.hpp"
 #include "param.hpp"
 #include "shogibase.hpp"
@@ -105,7 +106,9 @@ static int get_options(int argc, const char * const *argv) noexcept {
 }
 
 class QueueTest {
-#if defined(USE_OPENCL)
+#if defined(USE_CUDNN)
+  NNetCUDA _nnet;
+#elif defined(USE_OPENCL)
   NNetOCL _nnet;
 #else
   NNetCPU _nnet;
@@ -176,7 +179,9 @@ public:
     uint version;
     uint64_t digest;
     NNAux::wght_t wght = NNAux::read(fname, version, digest);
-#if defined(USE_OPENCL)
+#if defined(USE_CUDNN)
+    _nnet.reset(nbatch, wght, device_id, use_half);
+#elif defined(USE_OPENCL)
     _nnet.reset(nbatch, wght, device_id, use_half);
 #else
     _nnet.reset(nbatch, wght);

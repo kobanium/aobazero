@@ -28,6 +28,18 @@ else
 	LIB_OpenCL :=
 endif
 
+USE_CuDNN ?= 0
+ifeq ($(USE_CuDNN), 1)
+	LIB_CUDA :=  -lcudnn -lcuda -lcublas -lcudart
+	CPPFLAGS += -DUSE_CUDNN
+	ifdef CUDA_INC
+		CPPFLAGS += -I$(CUDA_INC)
+	endif
+	ifdef CUDA_LIB
+		LDFLAGS  += -L$(CUDA_LIB) -Wl,-rpath,$(CUDA_LIB)
+	endif
+endif
+
 BLAS ?= None
 ifeq ($(BLAS), IntelMKL)
 	LIB_BLAS := -lmkl_rt
@@ -61,7 +73,7 @@ PLAYSHOGI_OBJS := src/playshogi/playshogi.o src/common/option.o src/common/err.o
 CRC64_OBJS     := src/crc64/crc64.o src/common/xzi.o src/common/err.o src/common/iobase.o src/common/osi.o
 EXTRACT_OBJS   := src/extract/extract.o src/common/xzi.o src/common/err.o src/common/iobase.o src/common/osi.o
 OCLDEVS_OBJS   := src/ocldevs/ocldevs.o src/common/err.o src/common/opencl.o
-NET_TEST_OBJS  := src/net-test/net-test.o src/net-test/nnet.o src/net-test/nnet-cpu.o src/net-test/nnet-ocl.o src/common/err.o src/common/iobase.o src/common/shogibase.o src/common/xzi.o src/common/osi.o src/common/option.o src/common/opencl.o
+NET_TEST_OBJS  := src/net-test/net-test.o src/net-test/nnet.o src/net-test/nnet-cpu.o src/net-test/nnet-ocl.o src/common/err.o src/common/iobase.o src/common/shogibase.o src/common/xzi.o src/common/osi.o src/common/option.o src/common/opencl.o src/net-test/nnet-cuda.o
 OBJS           := $(AUTOUSI_OBJS) $(SERVER_OBJS) $(GENCODE_OBJS) $(PLAYSHOGI_OBJS) $(CRC64_OBJS) $(EXTRACT_OBJS) $(OCLDEVS_OBJS) $(NET_TEST_OBJS)
 INC_OUT        := src/common/tbl_zkey.inc src/common/tbl_board.inc src/common/tbl_sq.inc src/common/tbl_bmap.inc
 
@@ -93,7 +105,7 @@ bin/ocldevs: $(OCLDEVS_OBJS)
 	$(CXX) -o $@ $^ $(LDFLAGS) $(LIB_OpenCL)
 
 bin/net-test: $(NET_TEST_OBJS)
-	$(CXX) -o $@ $^ $(LDFLAGS) $(LIB_BLAS) $(LIB_OpenCL)
+	$(CXX) -o $@ $^ $(LDFLAGS) $(LIB_BLAS) $(LIB_OpenCL) $(LIB_CUDA)
 
 .cpp.o:
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
