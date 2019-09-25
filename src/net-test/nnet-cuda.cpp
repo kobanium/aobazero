@@ -232,8 +232,10 @@ void NNetCUDA::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
   conv_value->Forward(cuda_handles.cudnn, hidden_descriptor, conv_value_descriptor, h1_ptr, conv_value_ptr);
   bias_conv_value->Forward(cuda_handles.cudnn, conv_value_descriptor, conv_value_ptr);
   bn_value->Forward(cuda_handles.cudnn, conv_value_descriptor, conv_value_ptr, conv_value_ptr);
+  relu->Forward(cuda_handles.cudnn, conv_value_descriptor, conv_value_ptr);
   value_ip1->Forward(cuda_handles.cublas, conv_value_ptr, value_ip_ptr, size_batch);
   bias_value_ip1->Forward(cuda_handles.cudnn, value_ip_descriptor, value_ip_ptr);
+  relu->Forward(cuda_handles.cudnn, value_ip_descriptor, value_ip_ptr);
   value_ip2->Forward(cuda_handles.cublas, value_ip_ptr, value_ptr, size_batch);
   bias_value_ip2->Forward(cuda_handles.cudnn, value_descriptor, value_ptr);
   tanh->Forward(cuda_handles.cudnn, value_descriptor, value_ptr);
