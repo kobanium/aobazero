@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <utility>
 #include <vector>
 #include <cassert>
@@ -24,17 +25,18 @@ class ManageSend {
   static constexpr char pinned_memory[] = "Pinned Memory";
   static constexpr char zero_copy[]     = "Zero Copy";
   double _time;
-  OCL::Memory _mem_b, _mem_work;
+  OCL::Memory _mem_pin[NNAux::nslot], _mem_work;
   OCL::Event _event;
   const char *_method;
-  void *_ptr;
+  void *_ptr_map[NNAux::nslot];
   uint _nbatch;
 
 public:
-  ManageSend() noexcept : _method(nullptr), _ptr(nullptr) {}
+  ManageSend() noexcept : _method(nullptr) {}
   void start(const OCL::Device &dev, const OCL::Queue &queue,
 	     uint maxsize_batch) noexcept;
-  void push(const OCL::Queue &queue, const void *p, size_t size) noexcept;
+  void push(const OCL::Queue &queue, const void *p, size_t size, uint uslot)
+    noexcept;
   void end(const OCL::Queue &queue) noexcept;
   const OCL::Memory &get_work() const noexcept {
     assert(_method); return _mem_work; }
@@ -296,9 +298,10 @@ class NNetOCL {
 
 public:
   ~NNetOCL() noexcept;
-  void reset(uint maxsize_batch,
-	     const std::vector<std::pair<uint, row_t>> &wght,
-	     int device_id, bool use_half = true) noexcept;
+  std::string reset(uint maxsize_batch,
+		    const std::vector<std::pair<uint, row_t>> &wght,
+		    int device_id, bool use_half = true, bool flag_out = true)
+    noexcept;
   void ff(uint size_batch, const float *input, const uint *sizes_nnmove,
 	  const ushort *nnmoves, float *probs, float *values) noexcept;
   uint push_ff(uint size_batch, const float *input, const uint *sizes_nnmove,

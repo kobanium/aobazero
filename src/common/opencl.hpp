@@ -25,9 +25,10 @@ namespace OCL {
     ~Event();
     Event(Event &&e);
     Event &operator=(Event &&event);
+    bool ok() const;
+    void wait() const;
     Event_impl &get();
     const Event_impl &get() const;
-    void wait() const;
   };
 
   class Memory {
@@ -93,11 +94,15 @@ namespace OCL {
     Memory gen_mem_hw_dr(size_t size) const;
     Memory gen_mem_hr_dw(size_t size) const;
     Memory gen_mem_drw(size_t size) const;
-    void *map_w(const Memory &m, size_t size) const;
-    void *map_r(const Memory &m, size_t size) const;
+    void *push_map_w(const Memory &m, size_t size) const;
+    void *push_map_r(const Memory &m, size_t size) const;
+    void *push_map_w(const Memory &m, size_t size, Event &e) const;
+    void *push_map_r(const Memory &m, size_t size, Event &e) const;
     void push_unmap(const Memory &m, void *ptr) const;
+    void push_unmap(const Memory &m, void *ptr, Event &e) const;
     void push_write(const Memory &m, size_t size, const void *p) const;
     void push_read(const Memory &m, size_t size, void *p) const;
+    void push_read(const Memory &m, size_t size, void *p, Event &e) const;
     void push_kernel(const Kernel &k, size_t size_global) const;
     void push_ndrange_kernel(const Kernel &k, uint dim, const size_t *size_g,
 			     const size_t *size_l) const;

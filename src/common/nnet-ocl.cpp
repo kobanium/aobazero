@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <deque>
 #include <iostream>
-#include <string>
+#include <sstream>
 #include <thread>
 #include <tuple>
 #include <utility>
@@ -25,7 +25,9 @@ using std::chrono::duration_cast;
 using std::chrono::microseconds;
 using std::this_thread::sleep_for;
 using std::copy_n;
+using std::cout;
 using std::deque;
+using std::endl;
 using std::fill_n;
 using std::forward;
 using std::make_tuple;
@@ -38,6 +40,7 @@ using std::pair;
 using std::set;
 using std::sort;
 using std::string;
+using std::stringstream;
 using std::swap;
 using std::tie;
 using std::to_string;
@@ -54,9 +57,6 @@ static_assert(sizeof(float) == sizeof(uint), "sizeof(float) == sizeof(uint)");
 static_assert(sizeof(float) == sizeof(ushort) * 2U,
 	      "sizeof(float) == sizeof(ushort) * 2U");
 
-static double elapsed_sum = 0.0;
-static uint nelapsed      = 0;
-
 constexpr char msg_bad_wght_dim[] = "bad weight dimension";
 constexpr uint tune_sample_size   = 128U;
 constexpr uint tune_sleep         = 1000U; // usec
@@ -72,13 +72,16 @@ constexpr uint ntile              = ntile_h * ntile_w;
 constexpr uint size_plane_in      = size_tile_in * ntile;
 constexpr uint pad                = 1U;
 constexpr uint send_size_ave      = 3000U;
-constexpr uint read_size_ave      = 600U;
+constexpr uint read_size_ave      = 400U;
 constexpr uint send_nch_fill      = 17U * 8U + 2U;
 constexpr uint size_align_local   = 16U;
 constexpr float bn_factor         = 1.0f / 999.982f;
 constexpr float bn_eps            = 1e-5f;
 
 /*
+  static double elapsed_sum = 0.0;
+  static uint nelapsed      = 0;
+
   _queue.finish();
   steady_clock::time_point start = steady_clock::now();
   _queue.finish();
@@ -1016,11 +1019,11 @@ static SgemmParam tune_compute_matM(bool use_wmma, const OCL::Device &dev,
     else if (nmax <= 2U) nlfmmax =  32U;
     else if (nmax <= 4U) nlfmmax =   8U;
     else                 nlfmmax =   2U;
-    for (uint nl = nlstart; nl <= 64U; nl *= 2U)
+    for (uint nl = nlstart; nl <= 16U; nl *= 2U)
       for (uint nlfm = 1U; nlfm <= nlfmmax; nlfm *= 2U) {
 	if (nl*nl*nlfm < wgmin || wgmax < nl*nl*nlfm) continue;
-	for (uint npm = 1U; npm <= 32U; npm *= 2U)
-	  for (uint npn = 1U; npn <= 32U; npn *= 2U) {
+	for (uint npm = 1U; npm <= 16U; npm *= 2U)
+	  for (uint npn = 1U; npn <= 16U; npn *= 2U) {
 	    if (256U < npm*npn) continue;
 	    if (nl < npm) continue;
 	    if (nl*nlfm < npn) continue;
@@ -1113,17 +1116,6 @@ string SgemmParam::gen_info() const noexcept {
     s += to_string(static_cast<uint>(time)) + string("us)"); }
   return s; }
 
-static void softmax(uint n, float *p) noexcept {
-  assert(0 < n && p);
-  float fmax = *std::max_element(p, p + n);
-  float fsum = 0.0f;
-  for (uint u = 0; u < n; ++u) {
-    p[u] = std::exp(p[u] - fmax);
-    fsum += p[u]; }
-  
-  float factor = 1.0f / fsum;
-  for (uint u = 0; u < n; ++u) p[u] *= factor; }
-
 static void get_device(uint udev, OCL::Device &device_udev) noexcept {
   uint id = 0;
   vector<OCL::Platform> platforms = OCL::gen_platforms();
@@ -1188,7 +1180,7 @@ static double measure_send_pinned(const OCL::Queue &queue, size_t size) {
   queue.finish();
   return (static_cast<double>(count)
 	  / static_cast<double>(tune_sample_size)); }
-
+/*
 static double measure_send_zcopy(const OCL::Queue &queue, size_t size) {
   assert(queue.ok() && 0 < size);
   unique_ptr<uchar> data(new uchar [size]);
@@ -1214,7 +1206,7 @@ static double measure_send_zcopy(const OCL::Queue &queue, size_t size) {
 							   - start).count()); }
   return (static_cast<double>(count)
 	  / static_cast<double>(tune_sample_size)); }
-
+*/
 constexpr char ManageSend::global_memory[];
 constexpr char ManageSend::pinned_memory[];
 constexpr char ManageSend::zero_copy[];
@@ -1226,31 +1218,40 @@ void ManageSend::start(const OCL::Device &dev, const OCL::Queue &queue,
 			   * sizeof(float));
   double elapsed_global = DBL_MAX;
   double elapsed_pinned = DBL_MAX;
-  double elapsed_zcopy  = DBL_MAX;
+  //double elapsed_zcopy  = DBL_MAX;
   { size_t ave = send_size_ave * _nbatch;
     OCL::Queue qtmp = dev.gen_queue();
     try { elapsed_global = measure_send_global(qtmp, ave); } catch (...) {}
     try { elapsed_pinned = measure_send_pinned(qtmp, ave); } catch (...) {}
-    try { elapsed_zcopy  = measure_send_zcopy (qtmp, ave); } catch (...) {} }
+    /*try { elapsed_zcopy  = measure_send_zcopy (qtmp, ave); } catch (...) {}*/
+  }
 
-  if (elapsed_zcopy < elapsed_global && elapsed_zcopy < elapsed_pinned) {
+  /*if (elapsed_zcopy < elapsed_global && elapsed_zcopy < elapsed_pinned) {
     _time   = elapsed_zcopy;
     _method = zero_copy; }
-  else if (elapsed_pinned < elapsed_global) {
+    else*/
+  if (elapsed_pinned < elapsed_global) {
     _time   = elapsed_pinned;
     _method = pinned_memory; }
   else {
     _time   = elapsed_global;
     _method = global_memory; }
   if (_time == DBL_MAX) die(ERR_INT("ManageSend() failed."));
-  /*
-  _time   = elapsed_global;
-  _method = global_memory;
-  */
+
+  //_time   = elapsed_global;
+  //_method = global_memory;
+
+  //_time   = elapsed_pinned;
+  //_method = pinned_memory;
+
+  //_time   = elapsed_zcopy;
+  //_method = zero_copy;
+
   if (_method == pinned_memory) {
     _mem_work = queue.gen_mem_hw_dr(size_max);
-    _mem_b    = queue.gen_mem_map_hw_dr(size_max);
-    _ptr      = queue.push_map_w(_mem_b, size_max); }
+    for (uint u = 0; u < NNAux::nslot; ++u) {
+      _mem_pin[u] = queue.gen_mem_map_hw_dr(size_max);
+      _ptr_map[u] = queue.push_map_w(_mem_pin[u], size_max); } }
   else if (_method == zero_copy)
     _mem_work = queue.gen_mem_map_hw_dr(size_max);
   else _mem_work = queue.gen_mem_hw_dr(size_max); }
@@ -1258,23 +1259,23 @@ void ManageSend::start(const OCL::Device &dev, const OCL::Queue &queue,
 void ManageSend::end(const OCL::Queue &queue) noexcept {
   assert(_method && queue.ok());
   if (_method == pinned_memory) {
-    queue.push_unmap(_mem_b, _ptr);
+    for (uint u = 0; u < NNAux::nslot; ++u)
+      queue.push_unmap(_mem_pin[u], _ptr_map[u]);
     queue.finish(); } }
 
-void ManageSend::push(const OCL::Queue &queue, const void *p, size_t size)
-  noexcept {
+void ManageSend::push(const OCL::Queue &queue, const void *p, size_t size,
+		      uint uslot) noexcept {
   assert(_method && queue.ok() && p && 0 < size);
 
   if (_method == global_memory) queue.push_write(_mem_work, size, p);
   else if (_method == pinned_memory) {
-    memcpy(_ptr, p, size);
-    queue.push_write(_mem_work, size, _ptr); }
+    memcpy(_ptr_map[uslot], p, size);
+    queue.push_write(_mem_work, size, _ptr_map[uslot]); }
   else {
-    _ptr = queue.push_map_w(_mem_work, size, _event);
+    _ptr_map[uslot] = queue.push_map_w(_mem_work, size, _event);
     _event.wait();
-    memcpy(_ptr, p, size);
-    queue.push_unmap(_mem_work, _ptr); }
-}
+    memcpy(_ptr_map[uslot], p, size);
+    queue.push_unmap(_mem_work, _ptr_map[uslot]); } }
 
 string ManageSend::gen_info() const noexcept {
   string s(_method);
@@ -1345,7 +1346,7 @@ static double measure_recv_pinned(const OCL::Queue &queue, size_t size) {
   OCL::Memory mem     = queue.gen_mem_hr_dw(size);
   OCL::Memory mem_pin = queue.gen_mem_map_hr_dw(size);
   OCL::Event event;
-  void *ptr = queue.push_map_r(mem_pin, size, event);
+  void *ptr = queue.push_map_r(mem_pin, size);
   queue.push_read(mem, size, ptr);
   queue.finish();
   uint count = 0;
@@ -1556,11 +1557,11 @@ void ManageSgemm::start(const OCL::Device &dev, const OCL::Queue &queue,
   else if (nmax <= 2U) nlfmmax =  32U;
   else if (nmax <= 4U) nlfmmax =   8U;
   else                 nlfmmax =   2U;
-  for (uint nl = nlstart; nl <= 64U; nl *= 2U)
+  for (uint nl = nlstart; nl <= 16U; nl *= 2U)
     for (uint nlfm = 1U; nlfm <= nlfmmax; nlfm *= 2U) {
       if (nl*nl*nlfm < wgmin || wgmax < nl*nl*nlfm) continue;
-      for (uint npm = 1U; npm <= 32U; npm *= 2U)
-	for (uint npn = 1U; npn <= 32U; npn *= 2U) {
+      for (uint npm = 1U; npm <= 16U; npm *= 2U)
+	for (uint npn = 1U; npn <= 16U; npn *= 2U) {
 	  if (256U < npm*npn) continue;
 	  if (nl < npm) continue;
 	  if (nl*nlfm < npn) continue;
@@ -1917,7 +1918,8 @@ void ManageComputePolicy::start(const OCL::Queue &queue, uint nch_in,
 
 void ManageComputePolicy::push(const OCL::Queue &queue, uint ntot_moves,
 			       uint offin) const noexcept {
-  assert(_ker.ok());
+  assert(_ker.ok() && queue.ok());
+  if (ntot_moves == 0) return;
   _ker.set_arg(1, sizeof(offin), &offin);
   queue.push_kernel(_ker, ntot_moves); }
 
@@ -2029,7 +2031,7 @@ static void compute_probs(uint nb, const uint *sizes_nnmove, const float *fin,
   for (uint ub = 0; ub < nb; ++ub) {
     float *probs_b = probs + ub * NNAux::nmove;
     copy_n(fin, sizes_nnmove[ub], probs_b);
-    softmax(sizes_nnmove[ub], probs_b);
+    NNAux::softmax(sizes_nnmove[ub], probs_b);
     fin += sizes_nnmove[ub]; } }
 
 static void compress_data(uint index_block, uint nb0, uint nb, const float *in,
@@ -2082,9 +2084,12 @@ static void compress_data(uint index_block, uint nb0, uint nb, const float *in,
 
 NNetOCL::~NNetOCL() noexcept { _mng_send.end(_queue); }
 
-void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
-		    int device_id, bool use_half) noexcept {
+string NNetOCL::reset(uint maxsize_batch,
+		      const vector<pair<uint, row_t>> &wght, int device_id,
+		      bool use_half, bool flag_out) noexcept {
   assert(0 < maxsize_batch);
+  stringstream lines;
+
   for (uint uslot = 0; uslot < NNAux::nslot; ++uslot)
     _pool_slots[NNAux::nslot - uslot - 1U] = uslot;
   _pool_size = NNAux::nslot;
@@ -2183,8 +2188,8 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
     get_best_device(_cl_dev);
     if (!_cl_dev.ok()) die(ERR_INT("no device found")); }
 
-  std::cout << "- Device ID: " << device_id << "\n";
-  std::cout << _cl_dev.gen_info();
+  lines << "- Device ID: " << device_id << "\n";
+  lines << _cl_dev.gen_info();
 
   bool use_wmma = false;
   if (use_half) {
@@ -2194,50 +2199,46 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
 
   _queue = _cl_dev.gen_queue();
     
-  std::cout << "  Send:                 ";
-  std::cout.flush();
-  _mng_send.start(_cl_dev, _queue, maxsize_batch);
-  std::cout << _mng_send.gen_info() << std::endl;
+  lines << "  Send:                 ";
 
-  std::cout << "  Recv:                 ";
-  std::cout.flush();
+  _mng_send.start(_cl_dev, _queue, maxsize_batch);
+  lines << _mng_send.gen_info() << "\n";
+
+  lines << "  Recv:                 ";
   _mng_recv.start(_cl_dev, _queue, (1U + NNAux::nmove) * sizeof(float),
 		  maxsize_batch);
-  std::cout << _mng_recv.gen_info() << std::endl;
+  lines << _mng_recv.gen_info() << "\n";
 
   SgemmParam param_matM
     = tune_compute_matM(use_wmma, _cl_dev, size_tile_in, _resnet_nout,
 			maxsize_batch * ntile, _resnet_nout);
-  std::cout << "  Matrix M:             ";
-  std::cout << param_matM.gen_info() << std::endl;
+  lines << "  Matrix M:             ";
+  lines << param_matM.gen_info() << "\n";
   _mng_compute_matM_input.start(_queue, size_tile_in, _resnet_nout,
 				maxsize_batch * ntile, NNAux::nch_input,
 				param_matM);
   _mng_compute_matM.start(_queue, size_tile_in, _resnet_nout,
 			  maxsize_batch * ntile, _resnet_nout, param_matM);
 
-  std::cout << "  Head 1:               ";
-  std::cout.flush();
+  lines << "  Head 1:               ";
   _mng_head1.start(_cl_dev, _queue, true, false, true, false, false,
 		   _head1_nout, maxsize_batch * NNAux::size_plane,
 		   _resnet_nout, 0,
 		   _head1_nout, 0, maxsize_batch * NNAux::size_plane, 0,
 		   maxsize_batch * NNAux::size_plane);
-  std::cout << _mng_head1.gen_info() << std::endl;
+  lines << _mng_head1.gen_info() << "\n";
 
-  std::cout << "  Value 2:              ";
-  std::cout.flush();
+  lines << "  Value 2:              ";
   _mng_value2.start(_cl_dev, _queue, true, false, true, false, false,
 		    _value2_nout, maxsize_batch, _value2_nin, 0, _value2_nout,
 		    0, maxsize_batch, 0, maxsize_batch);
-  std::cout << _mng_value2.gen_info() << std::endl;
+  lines << _mng_value2.gen_info() << "\n";
 
-  std::cout << "  Value 3:              ";
-  std::cout.flush();
+  lines << "  Value 3:              ";
   _mng_value3.start(_cl_dev, _queue, true, false, false, true, true,
 		    maxsize_batch, 1U, _value3_nin, 0, maxsize_batch, 0, 1U, 0,
 		    1U);
-  std::cout << _mng_value3.gen_info() << std::endl;
+  lines << _mng_value3.gen_info() << "\n";
 
   uint mmax, nmax, kmax;
   mmax = max(_mng_compute_matM_input.get_nm(), _mng_compute_matM.get_nm());
@@ -2308,10 +2309,7 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
 			       _mng_head1.get_nn(),
 			       _cl_matM, _cl_bypass, _cl_output);
 
-  std::cout << "  Loading Weights ... ";
-  std::cout.flush();
   load(use_wmma, wght);
-  std::cout << "done" << std::endl;;
 
   _mng_head1.register_a0(_cl_head1_wght);
   _mng_head1.register_b(_cl_output);
@@ -2355,7 +2353,8 @@ void NNetOCL::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
   _cl_head1_wght.clear();
   _cl_value2_wght.clear();
   _cl_value3_wght.clear();
-}
+  if (flag_out) cout << lines.str() << std::flush;
+  return lines.str(); }
 
 void NNetOCL::load(bool use_half, const vector<pair<uint, row_t>> &wght)
   noexcept {
@@ -2453,7 +2452,7 @@ uint NNetOCL::push_ff(uint size_batch, const float *input,
   compress_data(_index_block, size_batch, _maxsize_batch, input, sizes_nnmove,
 		nnmoves, _ptr_input[uslot].get(), size_write, n_one,
 		ntot_moves);
-  _mng_send.push(_queue, _ptr_input[uslot].get(), size_write);
+  _mng_send.push(_queue, _ptr_input[uslot].get(), size_write, uslot);
   _mng_decode.push(_queue, n_one);
 
   // body part

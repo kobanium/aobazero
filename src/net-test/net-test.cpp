@@ -9,30 +9,40 @@
 #include "shogibase.hpp"
 #include <algorithm>
 #include <chrono>
+#include <condition_variable>
+#include <deque>
 #include <iostream>
 #include <iomanip>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 #include <climits>
+using std::cerr;
 using std::copy_n;
 using std::cout;
-using std::cerr;
+using std::condition_variable;
+using std::deque;
 using std::endl;
 using std::getline;
 using std::istream;
+using std::lock_guard;
 using std::map;
 using std::max;
 using std::move;
+using std::mutex;
 using std::set;
 using std::setw;
 using std::string;
 using std::stringstream;
 using std::terminate;
+using std::thread;
+using std::unique_lock;
 using std::unique_ptr;
 using std::vector;
 using std::chrono::steady_clock;
@@ -103,49 +113,58 @@ static int get_options(int argc, const char * const *argv) noexcept {
        << " [-u device-id] [-b batch-size] [-h] weight" << endl;
   return -1;
 }
-  
-class QueueTest {
-#if defined(USE_OPENCL)
-  NNetOCL _nnet;
-#else
-  NNetCPU _nnet;
-#endif
-  unique_ptr<float []> _input;
-  unique_ptr<ushort []> _nnmoves;
-  unique_ptr<float []> _probs;
-  unique_ptr<float []> _values;
-  unique_ptr<uint []> _sizes_nnmove;
-  unique_ptr<map<ushort, string> []> _tbl_nnmove2str;
-  unique_ptr<map<string, double> []> _policy_answers;
-  unique_ptr<double []> _value_answers;
-  uint _npush, _ntest, _nbatch;
 
-  void test(uint index) const noexcept {
-    assert(index < N);
+class Entry {
+  uint _no;
+  uint _size_nnmove;
+  double _value_answer;
+  map<string, double> _policy_answers;
+  map<ushort, string> _nnmove2str;
+
+public:
+  vector<float> input;
+  vector<ushort> nnmoves;
+  explicit Entry() noexcept {}
+  explicit Entry(uint no, uint size_nnmove, double value_answer,
+		 map<string, double> &&policy_answers,
+		 map<ushort, string> &&nnmove2str) noexcept :
+    _no(no), _size_nnmove(size_nnmove), _value_answer(value_answer),
+    _policy_answers(move(policy_answers)), _nnmove2str(move(nnmove2str)) {}
+  explicit Entry(const Entry &) = default;
+  Entry &operator=(Entry &&entry) noexcept {
+    _no             = entry._no;
+    _size_nnmove    = entry._size_nnmove;
+    _value_answer   = entry._value_answer;
+    _policy_answers = move(entry._policy_answers);
+    _nnmove2str     = move(entry._nnmove2str);
+    input           = move(entry.input);
+    nnmoves         = move(entry.nnmoves); }
+  uint get_size_nnmove() const noexcept { return _size_nnmove; }
+  uint get_no() const noexcept { return _no; }
+  bool ok() const noexcept { return _size_nnmove == _policy_answers.size(); }
+  void compare(const float *probs, float value) const noexcept {
+    assert(probs);
     
     // test output
-    double value_e = absolute_error(_values[index], _value_answers[index]);
-    value_n       += 1U;
-    value_sum_e   += value_e;
-    value_sum_se  += value_e * value_e;
-    value_max_e    = max(value_max_e, value_e);
+    double value_e = absolute_error(value, _value_answer);
+    value_n      += 1U;
+    value_sum_e  += value_e;
+    value_sum_se += value_e * value_e;
+    value_max_e   = max(value_max_e, value_e);
     if (2.0 * epsilon < value_e) {
-      cerr << "value1:         " << _values[index] << endl;
-      cerr << "value2:         " << _value_answers[index] << endl;
+      cerr << "value1:         " << value << endl;
+      cerr << "value2:         " << _value_answer << endl;
       cerr << "absolute error: " << value_e << endl;
       terminate(); }
-  
+    
     map<string, double> policy;
-    for (uint u = 0; u < _sizes_nnmove[index]; ++u) {
-      ushort us = _nnmoves[index * SAux::maxsize_moves + u];
-      const string &str = _tbl_nnmove2str[index].at(us);
-      policy[str] = _probs[index * SAux::maxsize_moves + u]; }
-	   
-    assert(_sizes_nnmove[index] == _policy_answers[index].size());
-    auto &&it1 = _policy_answers[index].cbegin();
+    for (uint u = 0; u < _size_nnmove; ++u) {
+      const string &str = _nnmove2str.at( nnmoves[u] );
+      policy[str] = probs[u]; }
+    
+    auto &&it1 = _policy_answers.cbegin();
     auto &&it2 = policy.cbegin();
-    while (it1 != _policy_answers[index].cend()
-	   && it2 != _policy_answers[index].cend()) {
+    while (it1 != _policy_answers.cend() && it2 != it1) {
       double prob1     = (it1++)->second;
       double prob2     = (it2++)->second;
       double policy_e  = absolute_error(prob1, prob2);
@@ -158,24 +177,90 @@ class QueueTest {
 	cerr << "prob2:          " << prob2 << endl;
 	cerr << "absolute error: " << policy_e << endl;
 	terminate(); } } }
+};
+
+struct TestSet {
+  uint wait_id;
+  uint nentry;
+  vector<Entry> data;
+  unique_ptr<float []> probs;
+  unique_ptr<float []> values;
+};
+
+class QueueTest {
+#if defined(USE_OPENCL)
+  NNetOCL _nnet;
+#else
+  NNetCPU _nnet;
+#endif
+  mutex _m;
+  condition_variable _cv;
+  thread _th_worker;
+  deque<TestSet> _deque_ts;
+  vector<Entry> _data;
+  uint _npush, _nbatch;
+
+  void worker() noexcept {
+    unique_lock<mutex> lock(_m);
+    TestSet ts;
+    while (true) {
+      _cv.wait(lock, [&]{ return 0 < _deque_ts.size(); });
+      ts = move(_deque_ts.front());
+      _deque_ts.pop_front();
+      lock.unlock();
+
+      if (ts.nentry == 0) return;
+      _nnet.wait_ff(ts.wait_id);
+      for (uint index = 0; index < ts.nentry; ++index)
+	ts.data[index].compare(ts.probs.get() + index * SAux::maxsize_moves,
+			       ts.values[index]);
+
+      lock.lock();
+      for (uint index = 0; index < ts.nentry; ++index)
+	cout << setw(5) << ts.data[index].get_no();
+      cout << " OK" << endl;
+      nelapsed += 1U;
+ } }
+
+  void flush() noexcept {
+    if (_npush == 0) return;
+
+    unique_ptr<float []> _probs(new float [_nbatch * SAux::maxsize_moves]);
+    unique_ptr<float []> _values(new float [_nbatch]);
+    unique_ptr<float []> _input(new float [_nbatch * NNAux::size_input]);
+    unique_ptr<ushort []> _nnmoves(new ushort [_nbatch * SAux::maxsize_moves]);
+    unique_ptr<uint []> _sizes_nnmove(new uint [_nbatch]);
+    for (uint index = 0; index < _npush; ++index) {
+      const Entry &entry = _data[index];
+      copy_n(entry.input.begin(), NNAux::size_input,
+	     _input.get() + index * NNAux::size_input);
+      copy_n(entry.nnmoves.begin(), SAux::maxsize_moves,
+	     _nnmoves.get() + index * SAux::maxsize_moves);
+      _sizes_nnmove[index] = entry.get_size_nnmove(); }
+
+    uint wait_id = _nnet.push_ff(_npush, _input.get(), _sizes_nnmove.get(),
+				 _nnmoves.get(), _probs.get(), _values.get());
+    TestSet ts{wait_id, _npush, move(_data), move(_probs), move(_values)};
+    unique_lock<mutex> lock(_m);
+    _deque_ts.push_back(move(ts));
+    lock.unlock();
+    _cv.notify_one();
+
+    _data.resize(_nbatch);
+    _npush = 0; }
   
 public:
-  explicit QueueTest() noexcept : _npush(0), _ntest(0) {}
+  explicit QueueTest() noexcept : _npush(0) {}
 
-  void reset(const FName &fname, int device_id, uint nbatch, bool use_half)
+  void start(const FName &fname, int device_id, uint nbatch, bool use_half)
     noexcept {
-    _input.reset(new float [nbatch * NNAux::size_input]);
-    _nnmoves.reset(new ushort [nbatch * SAux::maxsize_moves]);
-    _probs.reset(new float [nbatch * SAux::maxsize_moves]);
-    _values.reset(new float [nbatch]);
-    _sizes_nnmove.reset(new uint [nbatch]);
-    _tbl_nnmove2str.reset(new map<ushort, string> [nbatch]);
-    _policy_answers.reset(new map<string, double> [nbatch]);
-    _value_answers.reset(new double [nbatch]);
+    _data.resize(nbatch);
     _nbatch = nbatch;
     uint version;
     uint64_t digest;
     NNAux::wght_t wght = NNAux::read(fname, version, digest);
+    _th_worker = thread(&QueueTest::worker, this);
+
 #if defined(USE_OPENCL)
     _nnet.reset(nbatch, wght, device_id, use_half);
 #else
@@ -183,38 +268,27 @@ public:
 #endif
     (void)device_id; (void)use_half; }
   
-  void flush() noexcept {
-    if (_npush == 0) return;
-    steady_clock::time_point start = steady_clock::now();
-    _nnet.ff(_npush, _input.get(), _sizes_nnmove.get(), _nnmoves.get(),
-	     _probs.get(), _values.get());
-    steady_clock::time_point end = steady_clock::now();
-    elapsed  += duration_cast<microseconds>(end - start).count();
-    nelapsed += 1U;
-
-    for (uint index = 0; index < _npush; ++index) test(index);
-    for (uint index = 0; index < _npush; ++index) {
-      _ntest += 1U; cout << setw(5) << _ntest; }
-    cout << " OK" << endl;
-    _npush = 0; }
-  
-  void push(const float *input, uint size_nnmove, const ushort *nnmoves,
-	    double value, const map<string, double> &policy_answers,
-	    const map<ushort, string> &nnmove2str) noexcept {
-    copy_n(input, NNAux::size_input,
-	   &( _input[_npush * NNAux::size_input] ));
-    copy_n(nnmoves, SAux::maxsize_moves,
-	   &( _nnmoves[_npush * SAux::maxsize_moves] ));
-    _sizes_nnmove[_npush]   = size_nnmove;
-    _value_answers[_npush]  = value;
-    _policy_answers[_npush] = policy_answers;
-    _tbl_nnmove2str[_npush] = nnmove2str;
+  void push(Entry &entry) noexcept {
+    assert(entry.ok());
+    _data[_npush] = move(entry);
     if (++_npush == _nbatch) flush(); }
+
+  void end() noexcept {
+    flush();
+    TestSet ts;
+    ts.nentry = 0;
+    {
+      lock_guard<mutex> lock(_m);
+      _deque_ts.push_back(move(ts));
+    }
+    _th_worker.join(); }
 };
 
 static QueueTest queue_test;
 
-static void do_test(istream &is) noexcept {
+static vector<Entry> read_entries(istream &is) noexcept {
+  vector<Entry> vec_entry;
+  uint no = 0;
 
   for (uint uline = 0;;) {
     // read position startpos move...
@@ -247,8 +321,8 @@ static void do_test(istream &is) noexcept {
     double di;
     while (ss >> di) input_answer.push_back(di);
 
-    unique_ptr<float []> input(new float [NNAux::size_input]);
-    node.encode_input(input.get());
+    vector<float> input(NNAux::size_input);
+    node.encode_input(input.data());
     if (input_answer.size() != NNAux::size_input)
       die(ERR_INT("bad input size %zu vs %u",
 		  input_answer.size(), NNAux::size_input));
@@ -311,30 +385,57 @@ static void do_test(istream &is) noexcept {
     uline += 1U;
     if (!getline(is, string_line)) die(ERR_INT("bad line %u", uline));
     if (string_line != "END") die(ERR_INT("bad line %u", uline));
-    if (ms.size() == 0) continue;
+    //if (ms.size() == 0) continue;
 
     // push target position
     map<ushort, string> nnmove2str;
-    ushort nnmoves2[SAux::maxsize_moves];
+    vector<ushort> nnmoves2(SAux::maxsize_moves);
     for (uint u = 0; u < ms.size(); ++u) {
       nnmoves2[u] = NNAux::encode_nnmove(ms[u], node.get_turn());
       nnmove2str[nnmoves2[u]] = ms[u].to_str(SAux::usi); }
     
     if (node.get_turn() == white) value_answer = - value_answer;
-    
-    queue_test.push(input.get(), ms.size(), nnmoves2, value_answer,
-		    policy_answer, nnmove2str); } }
+
+    /*
+    for (float f : input) cout << " " << f;
+    cout << "\n";
+    cout << ms.size() << "\n";
+    for (uint u = 0; u < ms.size(); ++u) cout << " " << nnmoves2[u];
+    cout << "\n";
+    cout << value_answer << "\n";
+    for (uint u = 0; u < ms.size(); ++u)
+      cout << " " << policy_answer[nnmove2str[nnmoves2[u]]];
+    cout << "\n";
+    {
+      static uint count = 0;
+      if (++count == 1024) std::terminate(); }
+    */
+
+    vec_entry.emplace_back(++no, ms.size(), value_answer, move(policy_answer),
+			   move(nnmove2str));
+    vec_entry.back().input   = move(input);
+    vec_entry.back().nnmoves = move(nnmoves2); }
+
+  return vec_entry; }
 
 int main(int argc, char **argv) {
   if (get_options(argc, argv) < 0) return 1;
-  queue_test.reset(FName(opt_str_wght.c_str()), opt_device_id, opt_batch_size,
+  queue_test.start(FName(opt_str_wght.c_str()), opt_device_id, opt_batch_size,
 		   opt_use_half);
-  do_test(std::cin);
-  queue_test.flush();
+  cout << "Reading stdin ... ";
+  cout.flush();
+  vector<Entry> vec_entry = read_entries(std::cin);
+  cout << "done" << endl;
+
+  steady_clock::time_point start = steady_clock::now();
+  for (Entry &entry : vec_entry) queue_test.push(entry);
+  queue_test.end();
+  steady_clock::time_point end   = steady_clock::now();
+  elapsed = duration_cast<microseconds>(end - start).count();
 
   if (0 < nelapsed) {
     cout << "Average Time: "
-      << 0.001 * elapsed / static_cast<double>(nelapsed)
+	 << 0.001 * elapsed / static_cast<double>(nelapsed)
 	 << "ms" << endl; }
   
   if (0 < value_n) {

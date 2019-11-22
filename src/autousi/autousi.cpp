@@ -3,6 +3,7 @@
 #include "err.hpp"
 #include "osi.hpp"
 #include "client.hpp"
+#include "param.hpp"
 #include "pipe.hpp"
 #include "option.hpp"
 #include <algorithm>
@@ -144,7 +145,8 @@ static void output() noexcept {
   uint ntot     = Pipe::get().get_ngen_records();
   uint nsend    = Client::get().get_nsend();
   uint ndiscard = Client::get().get_ndiscard();
-  if ( prev_ntot == ntot && prev_nsend == nsend && prev_ndiscard == ndiscard ) return;
+  if (prev_ntot == ntot && prev_nsend == nsend && prev_ndiscard == ndiscard)
+    return;
   prev_ntot     = ntot;
   prev_nsend    = nsend;
   prev_ndiscard = ndiscard;
@@ -160,7 +162,8 @@ static void output() noexcept {
   for (uint u = 0; u < devices.size(); ++u) {
     const int BUF_SIZE = 64;
     char spid[BUF_SIZE] = "  N/A ";
-    if ( ! Pipe::get().is_closed(u) ) snprintf(spid,BUF_SIZE,"%6d",Pipe::get().get_pid(u));
+    if ( ! Pipe::get().is_closed(u) )
+      snprintf(spid,BUF_SIZE,"%6d",Pipe::get().get_pid(u));
     char buf[BUF_SIZE];
     fill_n(buf, sizeof(buf), '#');
     uint len = std::min(Pipe::get().get_nmove(u) / 5,
@@ -182,16 +185,18 @@ static void output() noexcept {
 
   if (is_downloading) puts("NOW DOWNLOADING NEW WEIGHTS\n");
   else                printf("Last Check %s\n", buf_time);
-  auto t = system_clock::to_time_t(time_now) - system_clock::to_time_t(time_start);
+  auto t = (system_clock::to_time_t(time_now)
+	    - system_clock::to_time_t(time_start));
   if ( t==0 ) t = 1;
   double hour = (double)t/3600.0;
   double day  = (double)t/(3600.0*24);
-  printf("- %.1f sent/hour, %.1f sent/day, Running for %.1f hours(%.1f days).\n\n",
-   nsend / hour, nsend / day, hour, day);
+  printf("- %.1f sent/hour, %.1f sent/day, "
+	 "Running for %.1f hours(%.1f days).\n\n",
+	 nsend / hour, nsend / day, hour, day);
 }
 
 int main() {
-  OSI::prevent_multirun(FName("/tmp/autousi.jBQoNA7kEd.lock"));
+  OSI::prevent_multirun(FName(Param::name_autousi));
   sleep_for(seconds(random_device()() % max_sleep));
   set_terminate(on_terminate);
   

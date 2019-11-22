@@ -32,6 +32,10 @@ class NNetCPU {
 public:
   void reset(uint maxsize_batch,
 	     const std::vector<std::pair<uint, row_t>> &wght) noexcept;
+  uint push_ff(uint size_batch, const float *input, const uint *sizes_nnmove,
+	       const ushort *nnmoves, float *probs, float *values) noexcept;
+  void wait_ff(uint) noexcept {};
   void ff(uint size_batch, const float *input, const uint *sizes_nnmove,
-	  const ushort *nnmoves, float *probs, float *values) noexcept;
+	  const ushort *nnmoves, float *probs, float *values) noexcept {
+    push_ff(size_batch, input, sizes_nnmove, nnmoves, probs, values); }
 };

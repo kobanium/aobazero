@@ -69,17 +69,6 @@ static void blas_set_num_thread_all() noexcept {
 #endif
 }
 
-static void softmax(uint n, float *p) noexcept {
-  assert(0 < n && p);
-  float fmax = *std::max_element(p, p + n);
-  float fsum = 0.0f;
-  for (uint u = 0; u < n; ++u) {
-    p[u] = std::exp(p[u] - fmax);
-    fsum += p[u]; }
-  
-  float factor = 1.0f / fsum;
-  for (uint u = 0; u < n; ++u) p[u] *= factor; }
-
 void NNetCPU::reset(uint maxsize_batch,
 		    const vector<pair<uint, row_t>> &wght) noexcept {
   assert(0 < maxsize_batch);
@@ -610,10 +599,11 @@ compute_probs(uint nch, uint size_batch, const uint *sizes_nnmove,
 			      fin + ub * NNAux::size_plane + sq,
 			      size_batch * NNAux::size_plane);
       probs_b[u] += bias[ch]; }
-    softmax(sizes_nnmove[ub], probs_b); } }
+    NNAux::softmax(sizes_nnmove[ub], probs_b); } }
 
-void NNetCPU::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
-		 const ushort *nnmoves, float *probs, float *values) noexcept {
+uint NNetCPU::push_ff(uint size_batch, const float *input,
+		      const uint *sizes_nnmove, const ushort *nnmoves,
+		      float *probs, float *values) noexcept {
   assert(input && sizes_nnmove && nnmoves && probs && values);
   if (size_batch == 0 || _maxsize_batch < size_batch)
     die(ERR_INT("size_batch == 0"));
@@ -703,4 +693,5 @@ void NNetCPU::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
   cblas_sgemv(CblasRowMajor, CblasNoTrans, size_batch, _value3_nin,
 	      1.0f, f2, _value3_nin, _value3_weight.get(), 1, 1.0f, values, 1);
   for (uint ub = 0; ub < size_batch; ++ub) values[ub] = std::tanh(values[ub]);
-}
+
+  return 0; }

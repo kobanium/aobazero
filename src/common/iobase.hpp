@@ -54,6 +54,7 @@ public:
   void add_fmt_fname(const char *fmt, ...) noexcept;
   void cut_fname(uint u) noexcept;
   void reset_fname(const char *p) noexcept { _len = 0; add_fname(p); }
+  void reset_fname(const FName &f) noexcept { _len = 0; add_fname(f._fname); }
   void clear_fname() noexcept { _len = 0; _fname[0] = '\0'; }
   const char *get_fname() const noexcept { return _fname; }
   uint get_len_fname() const noexcept { return _len; }

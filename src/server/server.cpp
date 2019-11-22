@@ -105,7 +105,7 @@ static void on_terminate() {
   abort(); }
 
 int main() {
-  OSI::prevent_multirun(FName("/tmp/server.jBQoNA7kEd.lock"));
+  OSI::prevent_multirun(FName(Param::name_server));
   set_terminate(on_terminate);
   if (remove(fname_quit) < 0 && errno != ENOENT) die(ERR_CLL("remove"));
   init();

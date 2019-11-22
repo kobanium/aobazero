@@ -137,6 +137,19 @@ static void store_plane(float *p, uint uch, float f = 1.0f) noexcept {
   assert(p && uch < NNAux::nch_input);
   fill_n(p + uch * Sq::ok_size, Sq::ok_size, f); };
 
+void NNAux::softmax(uint n, float *p) noexcept {
+  if (n == 0) return;
+  assert(p);
+  float fmax = *std::max_element(p, p + n);
+  float fsum = 0.0f;
+  for (uint u = 0; u < n; ++u) {
+    p[u] = std::exp(p[u] - fmax);
+    fsum += p[u]; }
+  
+  assert(0.0 < fsum);
+  float factor = 1.0f / fsum;
+  for (uint u = 0; u < n; ++u) p[u] *= factor; }
+
 vector<pair<uint, row_t>>
 NNAux::read(const FName &fwght, uint &version, uint64_t &digest) noexcept {
   wght_t ret;

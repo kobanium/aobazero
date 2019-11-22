@@ -16,6 +16,7 @@ namespace NNAux {
   constexpr uint size_input     = size_plane * nch_input;
   constexpr uint nch_out_policy = 139U;
   constexpr uint nmove          = 1024U;
+  void softmax(uint n, float *p) noexcept;
   wght_t read(const FName &fwght, uint &version, uint64_t &digest) noexcept;
   unsigned short encode_nnmove(const Action &a, const Color &turn) noexcept;
 }

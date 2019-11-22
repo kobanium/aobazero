@@ -32,28 +32,38 @@ class OCL::Event_impl {
   cl_event _event;
 public:
   explicit Event_impl() : _event(nullptr) {}
-  ~Event_impl() { if (_event) clReleaseEvent(_event); }
+  ~Event_impl() { if (_event) release(); }
   Event_impl(Event_impl &&e_impl) : _event(e_impl._event) {
     e_impl._event = nullptr; }
   Event_impl &operator=(Event_impl &&e_impl) {
+    if (_event) release();
     _event = e_impl._event;
     e_impl._event = nullptr;
     return *this; }
-  void wait() const {
+  void release() {
+    cl_int ret = clReleaseEvent(_event);
+    if (ret != CL_SUCCESS)
+      throw ERR_INT("clReleaseEvent() failed. Error Code: %d", ret);
+    _event = nullptr; }
+  void wait() {
     cl_int ret = clWaitForEvents(1, &_event);
     if (ret != CL_SUCCESS)
-      throw ERR_INT("clwaitForEvents() failed. Error Code: %d", ret); }
-  cl_event *get_p() { return &_event; }
-  const cl_event *get_p() const { return &_event; }
+      throw ERR_INT("clwaitForEvents() failed. Error Code: %d", ret);
+    release(); }
+  cl_event *get() { return &_event; }
+  bool ok() const { return _event != nullptr; }
+  const cl_event *get() const { return &_event; }
 };
   
 OCL::Event::Event() : _impl(new Event_impl) {}
 OCL::Event::~Event() {}
-OCL::Event::Event(Event &&e) { _impl.swap(e._impl); }
-Event &OCL::Event::operator=(Event &&e) { _impl.swap(e._impl); return *this; }
+OCL::Event::Event(Event &&e) : _impl(move(e._impl)) {}
+Event &OCL::Event::operator=(Event &&e) {
+  assert(e.ok()); _impl = move(e._impl); return *this; }
 Event_impl &OCL::Event::get() { return *_impl; }
-const Event_impl &OCL::Event::get() const { return *_impl; }
 void OCL::Event::wait() const { return _impl->wait(); }
+bool OCL::Event::ok() const { return _impl && _impl->ok(); }
+const Event_impl &OCL::Event::get() const { return *_impl; }
 
 // cl_mem
 class OCL::Memory_impl {
@@ -207,15 +217,17 @@ public:
     if (ret != CL_SUCCESS)
       throw ERR_INT("clCreateContext() failed. Error Code: %d", ret);
 
-    _queue = clCreateCommandQueue(_context, _id, 0, &ret);
+    _queue = clCreateCommandQueue(_context, _id,
+				  //CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE,
+				  0, &ret);
     if (ret != CL_SUCCESS) {
       if (_context) clReleaseContext(_context);
       throw ERR_INT("clCreateContext() failed. Error Code: %d", ret); } }
   ~Queue_impl() {
     if (_queue) clReleaseCommandQueue(_queue);
     if (_context) clReleaseContext(_context); }
-  Queue_impl(Queue_impl &&q_impl) : _id(q_impl._id), _queue(q_impl._queue),
-				    _context(q_impl._context) {
+  Queue_impl(Queue_impl &&q_impl) : _id(q_impl._id), _context(q_impl._context),
+				    _queue(q_impl._queue) {
     q_impl._id      = nullptr;
     q_impl._queue   = nullptr;
     q_impl._context = nullptr; }
@@ -228,12 +240,21 @@ public:
     cl_int ret = clFinish(_queue);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clFinish() failure. Error Code: %d", ret); }
-  void *map(const Memory_impl &m_impl, const cl_map_flags &flags,
-	    size_t size) const {
+  void *push_map(const Memory_impl &m_impl, const cl_map_flags &flags,
+		 size_t size) const {
     assert(m_impl.ok());
     cl_int ret;
-    void *p = clEnqueueMapBuffer(_queue, m_impl.get(), CL_TRUE, flags,
+    void *p = clEnqueueMapBuffer(_queue, m_impl.get(), CL_FALSE, flags,
 				 0, size, 0, nullptr, nullptr, &ret);
+    if (ret != CL_SUCCESS)
+      throw ERR_INT("clEnqueueMapBuffer() failure. Error Code: %d", ret);
+    return p; }
+  void *push_map(const Memory_impl &m_impl, const cl_map_flags &flags,
+		 size_t size, Event_impl &e_impl) const {
+    assert(m_impl.ok());
+    cl_int ret;
+    void *p = clEnqueueMapBuffer(_queue, m_impl.get(), CL_FALSE, flags,
+				 0, size, 0, nullptr, e_impl.get(), &ret);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clEnqueueMapBuffer() failure. Error Code: %d", ret);
     return p; }
@@ -241,6 +262,13 @@ public:
     assert(m_impl.ok() && ptr);
     cl_int ret = clEnqueueUnmapMemObject(_queue, m_impl.get(), ptr, 0, nullptr,
 					 nullptr);
+    if (ret != CL_SUCCESS)
+      throw ERR_INT("clEnqueueUnmapObject() failure. Error Code: %d", ret); }
+  void push_unmap(const Memory_impl &m_impl, void *ptr, Event_impl &e_impl)
+    const {
+    assert(m_impl.ok() && ptr);
+    cl_int ret = clEnqueueUnmapMemObject(_queue, m_impl.get(), ptr, 0, nullptr,
+					 e_impl.get());
     if (ret != CL_SUCCESS)
       throw ERR_INT("clEnqueueUnmapObject() failure. Error Code: %d", ret); }
   void push_write(const Memory_impl &m_impl, size_t size, const void *p)
@@ -257,25 +285,15 @@ public:
 				     p, 0, nullptr, nullptr);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clEnqueueReadBuffer() failed. Error Code: %d", ret); }
-  /*
-  void push_kernel(const Kernel_impl &k_impl, size_t size_global) const {
-    assert(k_impl.ok() && 0 < size_global);
-    cl_int ret;
-    size_t size_local
-      = k_impl.gen_info<size_t>(CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE);
-    size_t off_g = 0;
-    while (true) {
-      size_t size_g = (size_global / size_local) * size_local;
-      if (size_g) {
-	size_global -= size_g;
-	ret = clEnqueueNDRangeKernel(_queue, k_impl.get(), 1U, &off_g, &size_g,
-				     &size_local, 0, nullptr, nullptr);
-	if (ret != CL_SUCCESS)
-	  throw ERR_INT("clEnqueNDRangeKernel() failed. Error Code: %d", ret);
-	if (size_global == 0) return;
-	off_g += size_g; }
-      size_local /= 2U; } }
-  */
+
+  void push_read(const Memory_impl &m_impl, size_t size, void *p,
+		 Event_impl &e_impl) const {
+    assert(m_impl.ok() && p);
+    cl_int ret = clEnqueueReadBuffer(_queue, m_impl.get(), CL_FALSE, 0, size,
+				     p, 0, nullptr, e_impl.get());
+    if (ret != CL_SUCCESS)
+      throw ERR_INT("clEnqueueReadBuffer() failed. Error Code: %d", ret); }
+
   void push_kernel(const Kernel_impl &k_impl, size_t size_global) const {
     assert(k_impl.ok() && 0 < size_global);
     cl_int ret;
@@ -334,17 +352,29 @@ Memory OCL::Queue::gen_mem_drw(size_t size) const {
   return Memory(_impl->gen_memory(CL_MEM_HOST_NO_ACCESS | CL_MEM_READ_WRITE,
 				  size)); }
 void OCL::Queue::finish() const { _impl->finish(); }
-void *OCL::Queue::map_w(const Memory &m, size_t size) const {
-  assert(m.ok()); return _impl->map(m.get(), CL_MAP_WRITE_INVALIDATE_REGION,
-				    size); }
-void *OCL::Queue::map_r(const Memory &m, size_t size) const {
-  assert(m.ok()); return _impl->map(m.get(), CL_MAP_READ, size); }
+void *OCL::Queue::push_map_w(const Memory &m, size_t size) const {
+  assert(m.ok());
+  return _impl->push_map(m.get(), CL_MAP_WRITE_INVALIDATE_REGION, size); }
+void *OCL::Queue::push_map_r(const Memory &m, size_t size) const {
+  assert(m.ok()); return _impl->push_map(m.get(), CL_MAP_READ, size); }
+void *OCL::Queue::push_map_w(const Memory &m, size_t size, Event &e) const {
+  assert(m.ok());
+  return _impl->push_map(m.get(), CL_MAP_WRITE_INVALIDATE_REGION, size,
+			 e.get()); }
+void *OCL::Queue::push_map_r(const Memory &m, size_t size, Event &e) const {
+  assert(m.ok());
+  return _impl->push_map(m.get(), CL_MAP_READ, size, e.get()); }
 void OCL::Queue::push_unmap(const Memory &m, void *ptr) const {
   assert(m.ok() && ptr); _impl->push_unmap(m.get(), ptr); }
+void OCL::Queue::push_unmap(const Memory &m, void *ptr, Event &e) const {
+  assert(m.ok() && ptr); _impl->push_unmap(m.get(), ptr, e.get()); }
 void OCL::Queue::push_write(const Memory &m, size_t size, const void *p)
   const { assert(m.ok() && p); _impl->push_write(m.get(), size, p); }
 void OCL::Queue::push_read(const Memory &m, size_t size, void *p) const {
   assert(m.ok() && p); _impl->push_read(m.get(), size, p); }
+void OCL::Queue::push_read(const Memory &m, size_t size, void *p, Event &e)
+  const {
+  assert(m.ok() && p); _impl->push_read(m.get(), size, p, e.get()); }
 void OCL::Queue::push_kernel(const Kernel &k, size_t size_global) const {
   assert(k.ok()); _impl->push_kernel(k.get(), size_global); }
 void OCL::Queue::push_ndrange_kernel(const Kernel &k, uint dim,

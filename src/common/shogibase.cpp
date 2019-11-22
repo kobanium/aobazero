@@ -733,7 +733,6 @@ void MoveSet<N>::gen_nsg(const Board &board, const Color &turn,
 			 function<BMap(const Sq &, const Color &)> fatk)
   noexcept {
   assert(turn.ok());
-  const Color tx = turn.to_opp();
   BMap bm_from = board.get_bm_sub_mobil(turn, Pc(UPCMobil));
   for (Sq from(bm_from.pop_f()); from.ok(); from = Sq(bm_from.pop_f())) {
     Pc pc      = board.get_pc(from);
@@ -751,7 +750,6 @@ void MoveSet<N>::gen_slider(const Board &board, const Color &turn,
 					  const Sq &)> fatk)
   noexcept {
   assert(turn.ok() && bm_from.ok() && bm_target.ok());
-  const Color tx = turn.to_opp();
   for (Sq from(bm_from.pop_f()); from.ok(); from = Sq(bm_from.pop_f())) {
     Pc pc      = board.get_pc(from);
     BMap bm_to = fatk(board, turn, from) & bm_target;
@@ -821,7 +819,6 @@ void MoveSet<N>::gen_all_evation(Node<N> &node) noexcept {
 template<uint N>
 void MoveSet<N>::gen_all_no_evation(Node<N> &node) noexcept {
   const Color turn        = node.get_turn();
-  const Color xturn       = turn.to_opp();
   Board &board            = node.get_board();
   const BMap  &bm_friends = board.get_bm_color(turn);
   const BMap  bm_target   = ~bm_friends;
