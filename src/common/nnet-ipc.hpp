@@ -2,11 +2,30 @@
 #include "iobase.hpp"
 #include "osi.hpp"
 #include <thread>
+#include <cstdint>
 
 namespace NNAux {
-  constexpr uint maxsize_ipc = 256U;
-  constexpr uint maxnum_nnet =  64U;
+  constexpr unsigned int maxsize_ipc = 256U;
+  constexpr unsigned int maxnum_nnet =  64U;
 }
+
+class SeqPRNService {
+  OSI::MMap _mmap;
+
+public:
+  explicit SeqPRNService() noexcept;
+  ~SeqPRNService() noexcept {_mmap.close(); };
+};
+
+class SeqPRN {
+  OSI::MMap _mmap;
+
+public:
+  explicit SeqPRN() noexcept;
+  ~SeqPRN() noexcept {_mmap.close(); };
+  const uint64_t *get_ptr() const noexcept {
+    return static_cast<uint64_t *>(_mmap()); }
+};
 
 class NNetService {
   using uint = unsigned int;

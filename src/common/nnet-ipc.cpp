@@ -8,6 +8,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <random>
 #include <string>
 #include <utility>
 #include <vector>
@@ -20,6 +21,7 @@ using std::endl;
 using std::fill_n;
 using std::map;
 using std::move;
+using std::mt19937_64;
 using std::string;
 using std::swap;
 using std::thread;
@@ -33,6 +35,20 @@ using NNet = NNetOCL;
 #else
 using NNet = NNetCPU;
 #endif
+
+SeqPRNService::SeqPRNService() noexcept {
+  std::cerr << "Hello 1 " << Param::name_seq_prn << std::endl;
+  _mmap.open(Param::name_seq_prn, true,
+	     sizeof(uint64_t) * Param::len_seq_prn);
+  std::cerr << "Hello 1 end" << std::endl;
+  uint64_t *p = static_cast<uint64_t *>(_mmap());
+  mt19937_64 mt(7);
+  for (uint u = 0; u < Param::len_seq_prn; ++u) p[u] = mt(); }
+
+SeqPRN::SeqPRN() noexcept {
+  _mmap.open(Param::name_seq_prn, false,
+	     sizeof(uint64_t) * Param::len_seq_prn); }
+
 
 struct SharedService {
   uint id_ipc_next;
@@ -108,16 +124,18 @@ public:
 };
 
 void NNetService::worker_push() noexcept {
-  uint version;
-  uint64_t digest;
-  NNAux::wght_t wght = NNAux::read(_fname, version, digest);
   NNet nnet;
+  {
+    uint version;
+    uint64_t digest;
+    NNAux::wght_t wght = NNAux::read(_fname, version, digest);
 #if defined(USE_OPENCL)
-  cout << nnet.reset(_size_batch, wght, _device_id, _use_half, false)
-       << std::flush;
+    cout << nnet.reset(_size_batch, wght, _device_id, _use_half, false)
+	 << std::flush;
 #else
-  nnet.reset(_size_batch, wght);
+    nnet.reset(_size_batch, wght);
 #endif
+  }
 
   SharedService *pservice = static_cast<SharedService *>(_mmap_service());
   SharedIPC *pipc[NNAux::maxsize_ipc];

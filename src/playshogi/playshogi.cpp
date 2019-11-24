@@ -130,13 +130,16 @@ int main(int argc, char **argv) {
   set_terminate(on_terminate);
   if (get_options(argc, argv) < 0) return 1;
   if (flag_b) load_book_file();
+  deque<SeqPRNService> seq_s;
   deque<NNetService> nnets;
   if (num_N == 2) {
+    seq_s.emplace_back();
     nnets.emplace_back(0U, num_T, num_B[0], num_U[0], num_H[0], fname_W[0]);
     nnets.emplace_back(1U, num_T, num_B[1], num_U[1], num_H[1], fname_W[1]); }
-  else if (num_N == 1)
+  else if (num_N == 1) {
+    seq_s.emplace_back();
     nnets.emplace_back(0U, num_T * 2, num_B[0], num_U[0], num_H[0],
-		       fname_W[0]);
+		       fname_W[0]); }
 
   vector<unique_ptr<Game>> games;
   for (uint u = 0; u < static_cast<uint>(num_T); ++u)
