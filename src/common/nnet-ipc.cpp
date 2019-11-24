@@ -37,10 +37,8 @@ using NNet = NNetCPU;
 #endif
 
 SeqPRNService::SeqPRNService() noexcept {
-  std::cerr << "Hello 1 " << Param::name_seq_prn << std::endl;
   _mmap.open(Param::name_seq_prn, true,
 	     sizeof(uint64_t) * Param::len_seq_prn);
-  std::cerr << "Hello 1 end" << std::endl;
   uint64_t *p = static_cast<uint64_t *>(_mmap());
   mt19937_64 mt(7);
   for (uint u = 0; u < Param::len_seq_prn; ++u) p[u] = mt(); }
