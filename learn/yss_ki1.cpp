@@ -1,4 +1,4 @@
-// Copyright (C) 2019 Team AobaZero
+// 2019 Team AobaZero
 // This source code is in the public domain.
 // yss_ki1.cpp 
 #include "yss_ext.h"        /*** load extern ***/
@@ -12,8 +12,10 @@ const char *koma[32] = {
 };
 
 const char *koma_kanji[32] = {
-"  ","Êâ","¹á","·Ë","¶ä","¶â","³Ñ","Èô","¶Ì","¤È","°É","·½","Á´","","ÇÏ","Î¶",
-"  ","ð¿","ðÃ","ðÇ","ðË","ðÏ","ðÓ","ð×","ðÝ","ðÁ","ðÅ","ðÉ","ðÍ","","ðÕ","ðÙ"
+"  ","FU","KY","KE","GI","KI","KA","HI","OU","TO","NY","NK","NG","","UM","RY",
+"  ","fu","ky","ke","gi","ki","ka","hi","ou","to","ny","nk","ng","","um","ry"
+//"  ","Êâ","¹á","·Ë","¶ä","¶â","³Ñ","Èô","¶Ì","¤È","°É","·½","Á´","","ÇÏ","Î¶",
+//"  ","ð¿","ðÃ","ðÇ","ðË","ðÏ","ðÓ","ð×","ðÝ","ðÁ","ðÅ","ðÉ","ðÍ","","ðÕ","ðÙ"
 //   95e0 8d81 8c6a 8be2 8be0 8a70 94f2 8bca 82c6 88c7 8c5c 9153    946e 97b4 ´Á»ú¥³¡¼¥É
 //   f0bf f0c3 f0c7 f0cb f0cf f0d3 f0d7 f0dd f0c1 f0c5 f0c9 f0cd    f0d5 f0d9 ³°»ú¥³¡¼¥É¡ÊÉ¸½à¤Î³°»ú¡Ë
 //"  ","\xf0\xbf","\xf0\xc3","\xf0\xc7","\xf0\xcb","\xf0\xcf","\xf0\xd3","\xf0\xd7","\xf0\xdd","\xf0\xc1","\xf0\xc5","\xf0\xc9","\xf0\xcd","","\xf0\xd5","\xf0\xd9"

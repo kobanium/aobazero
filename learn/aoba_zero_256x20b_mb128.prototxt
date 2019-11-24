@@ -1,13 +1,12 @@
 name: "AobaZero"
 
-
 layer {
   name: "data"
   type: "MemoryData"
   top: "data"
   top: "dummy_label1"
   memory_data_param {
-    batch_size: 64
+    batch_size: 128
     channels: 362
     height: 9
     width: 9
@@ -19,7 +18,7 @@ layer {
   top: "p_label"
   top: "dummy_label2"
   memory_data_param {
-    batch_size: 64
+    batch_size: 128
     channels: 11259
     height: 1
     width: 1
@@ -38,7 +37,7 @@ layer {
   top: "label_value"
   top: "dummy_label3"
   memory_data_param {
-    batch_size: 64
+    batch_size: 128
     channels: 1
     height: 1
     width: 1
@@ -1311,7 +1310,7 @@ layer {
 
 
 layer {
-  name: "cross_entroy_scale" # if same name, Caffe uses *.caffemodel's value.
+  name: "cross_entroy_scale_mb128" # if same name, Caffe uses *.caffemodel's value.
   type: "Scale"
   bottom: "cross_entropy_sum"
   top: "cross_entropy_scale"
@@ -1324,7 +1323,7 @@ layer {
     num_axes: 0
     filler {
       type: "constant"
-      value: 0.015625 # 1 / batch_size. if you change batch_size, you must change layer's "name" too.
+      value: 0.0078125 # 1 / batch_size. if you change batch_size, you must change layer's "name" too.
     }
     bias_term: false
   }

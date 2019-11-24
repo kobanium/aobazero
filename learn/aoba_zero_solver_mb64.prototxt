@@ -1,7 +1,6 @@
 #net: "aoba_zero.prototxt"
 #net: "aoba_zero_256x40b.prototxt"
-#net: "aoba_zero_256x20b.prototxt"
-net: "aoba_zero_256x20b_mb128.prototxt"
+net: "aoba_zero_256x20b.prototxt"
 
 # test_iter specifies how many forward passes the test should carry out.
 # In the case of MNIST, we have test batch size 100 and 100 test iterations,
@@ -18,8 +17,7 @@ weight_decay: 0.0002
 #gamma: 0.0001
 #power: 0.75
 # Display every 100 iterations
-#display: 100
-display: 50
+display: 100
 # snapshot intermediate results
 snapshot: 20000
 snapshot_prefix: "snapshots/"
@@ -28,7 +26,7 @@ solver_mode: GPU
 #solver_mode: CPU
 #solver_type: ADAGRAD # default = SGD=0, NESTEROV=1, ADAGRAD=2
 
-base_lr:    0.0002   # training at a learning rate of 0.01 = 1e-2
+base_lr:    0.001   # training at a learning rate of 0.01 = 1e-2
 
 lr_policy: "step" # learning rate policy: drop the learning rate in "steps"
                   # by a factor of gamma every stepsize iterations
