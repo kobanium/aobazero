@@ -9,6 +9,7 @@
 #include "shogi.h"
 
 #include <string>
+#include <vector>
 #include "yss_var.h"
 #include "yss_dcnn.h"
 

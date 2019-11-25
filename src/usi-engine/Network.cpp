@@ -77,7 +77,6 @@
 namespace x3 = boost::spirit::x3;
 using namespace Utils;
 
-
 #ifndef USE_BLAS
 // Eigen helpers
 template <typename T>
@@ -167,6 +166,7 @@ void process_bn_var(container& weights) {
 template<class container>
 void modify_bn_scale_factor(container& weights) {
 	const float scale_factor = 1.0f / 999.982f;
+//  myprintf("modify_bn_scale_factor. sizeof(weights)=%d\n",weights.size());
     for(auto&& w : weights) {
         w = w * scale_factor;
     }
@@ -911,6 +911,8 @@ Network::Netresult_old Network::get_output_internal(
 
     std::vector<float> policy_data(OUTPUTS_POLICY * width * height);
     std::vector<float> value_data(OUTPUTS_VALUE * width * height);
+
+
 #ifdef USE_OPENCL_SELFCHECK
     if (selfcheck) {
         m_forward_cpu->forward(input_data, policy_data, value_data);
@@ -921,6 +923,7 @@ Network::Netresult_old Network::get_output_internal(
     m_forward->forward(input_data, policy_data, value_data);
     (void) selfcheck;
 #endif
+
 
 	if ( 0 ) { float s=0; for (size_t i=0; i<policy_data.size(); i++) s += policy_data[i]; myprintf("policy_data.size()=%d,sum=%f\n",policy_data.size(),s); }
 	if ( 0 ) { float s=0; for (size_t i=0; i<value_data.size();  i++) s += value_data[i];  myprintf("value_data.size() =%d,sum=%f\n",value_data.size(),s); }

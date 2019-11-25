@@ -1,4 +1,4 @@
-﻿// 2019 Team AobaZero
+// 2019 Team AobaZero
 // This source code is in the public domain.
 #include "../config.h"
 
@@ -46,8 +46,20 @@ std::string default_weights;
 std::vector<int> default_gpus;
 void init_global_objects();	// Leela.cpp
 
+#define NN_PARALLEL
+#ifdef NN_PARALLEL
+#include "../../batched_play/src/common/nnet.hpp"
+#include "../../batched_play/src/common/nnet-ipc.hpp"
+using std::copy_n;
+
+NNetIPC nnet;
+#endif
+
 void init_network()
 {
+#ifdef NN_PARALLEL
+	nnet.start(0);
+#endif
 //	Random::get_Rng().seedrandom(cfg_rng_seed);
 
 //	cfg_weightsfile = "networks/20180122_i362_pro_flood_F64L29_b64_1_half_version_2.txt";
@@ -64,7 +76,7 @@ void init_network()
 
 	init_global_objects();
 
-	PRT("cfg_softmax_temp=%.3f,cfg_random_temp=%.3f,cfg_num_threads=%d,cfg_batch_size=%d\n",cfg_softmax_temp,cfg_random_temp,cfg_num_threads,cfg_batch_size);
+	PRT("cfg_random_temp=%.3f,cfg_num_threads=%d,cfg_batch_size=%d\n",cfg_random_temp,cfg_num_threads,cfg_batch_size);
 
 	// Initialize network
 //	Network::initialize();
@@ -275,8 +287,62 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 //	if ( 1 || ply==1 ) { prt_dcnn_data_table((float(*)[B_SIZE][B_SIZE])data);  }
 //	if ( 1 && ptree->nrep+ply==101+3 ) { int sum=0; int i; for (i=0;i<size;i++) sum = sum*37 + (int)(data[i]*1000.0f); PRT("sum=%08x,ply=%d,nrep=%d\n",sum,ply,ptree->nrep); }
 
+	int move_num = phg->child_num;
+	unsigned int * restrict pmove = ptree->move_last[0];
+	int i;
+	
+#ifdef NN_PARALLEL
+
+	if ( phg->child_num <= 0 || phg->child_num > SHOGI_MOVES_MAX ) { PRT("Err.\n"); debug(); }
+	std::vector<unsigned short> nnmoves(phg->child_num);
+
+	for (i = 0; i < move_num; i++) {
+		int move = pmove[i];
+		int from       = (int)I2From(move);
+		int to         = (int)I2To(move);
+		int drop       = (int)From2Drop(from);
+		int is_promote = (int)I2IsPromote(move);
+		int bz = get_yss_z_from_bona_z(from);
+		int az = get_yss_z_from_bona_z(to);
+		int tk = 0;
+		if ( from >= nsquare ) {
+			bz = 0xff;
+			tk = drop;
+		}
+		int nf = is_promote ? 0x08 : 0x00;
+		if ( sideToMove ) {
+			flip_dccn_move(&bz,&az,&tk,&nf);
+		}
+		int yss_m = pack_te(bz,az,tk,nf);
+		int id = get_id_from_move(yss_m);
+
+		nnmoves[i] = id;
+	}
+
+	copy_n(          data, NNAux::size_input, nnet.get_input()  );
+	copy_n(nnmoves.data(),          move_num, nnet.get_nnmoves());
+	nnet.submit_block(move_num);	// lock. wait result.
+
+    const float *nn_probs = nnet.get_probs();
+    const float nn_value  = nnet.get_value();
+
+	std::vector<std::pair<float, int>> policy_result;
+	const int POLICY_OUT_SIZE = 11259;
+	for (int idx = size_t{0}; idx < POLICY_OUT_SIZE; idx++) {
+		policy_result.emplace_back(0.0f, idx);
+	}
+
+	for (i = 0; i < move_num; i++) {
+		int id = nnmoves[i];
+		policy_result[id].first = nn_probs[i];
+	}
+
+	const std::pair<std::vector<std::pair<float, int>>, float> result = std::make_pair(policy_result, nn_value);
+
+#else
 //	const auto result = Network::get_scored_moves_yss_zero((float(*)[B_SIZE][B_SIZE])data);
 	const auto result = GTP::s_network->get_scored_moves_yss_zero((float(*)[B_SIZE][B_SIZE])data);
+#endif
 
 
 //	float xxx = NAN;
@@ -284,22 +350,15 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
     float raw_v = result.second;
 	if ( is_nan_inf(raw_v) ) raw_v = 0;
 	float v_fix = raw_v;	// (raw_v + 1) / 2;
-	if ( sideToMove==BLACK ) v_fix = -v_fix;	// 手番関係なく先手勝ちが+1
-//	float v = (net_eval + 1.0f) / 2.0;	// 0 <= v <= 1
-//    if ( sideToMove ) {	// DCNNは自分が勝ちなら+1、負けなら-1を返す。探索中は先手は+1～0, 後手は 0～-1を返す。
-//        v = v - 1;
-//    }
-//	float v = f_rnd();
-//	if ( sideToMove==BLACK ) v = -v;
-//	phg->net_value      = v_fix;
+	if ( sideToMove==BLACK ) v_fix = -v_fix;	// ���ִط��ʤ���꾡����+1
 
-//  std::vector<Network::scored_node> nodelist;
 
 //	PRT("result.first.size()=%d\n",result.first.size());
 	auto &node = result.first;
 //	PRT("node.size()=%d\n",node.size());
 //	{ int i; for (i=0;i<60;i++) PRT("%f,%d\n",node[i].first,node[i].second); }
 
+	float err_sum = 0;
     float all_sum = 0.0f;
     for (const auto& node : result.first) {
         auto id = node.second;
@@ -321,17 +380,20 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 		int promotion = nf >> 3;
 		int bona_m = (promotion << 14) | (from <<7) | to;
 		if ( yss_m == 0 ) bona_m = 0;
-		// "piece to move" は moveのみ。dropでは 0
-		
+		// "piece to move" �� move�Τߡ�drop�Ǥ� 0
+
+		if ( 0 ) {
+			float add = node.first;
+			if ( add > 0.98 ) add = 1.0 - add;	// only one escape king move position
+			err_sum += add*add;
+	    }
 	    if ( 0 && ply==1 && id < 100 ) PRT("%4d,%08x(%08x),%f\n",id,yss_m,bona_m, node.first);
 	}
+	if ( 0 ) PRT("ptree->nrep=%3d,ply=%2d:err_sum=%.10f,raw_v=%11.8f\n",ptree->nrep,ply,err_sum,raw_v);
 
 
 	float legal_sum = 0.0f;
 
-	int move_num = phg->child_num;
-	unsigned int * restrict pmove = ptree->move_last[0];
-	int i;
 	for ( i = 0; i < move_num; i++ ) {
 		int move = pmove[i];
 		CHILD *pc = &phg->child[i];
@@ -374,11 +436,11 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 	}
 
 	// sort
-	int j;
 	for ( i = 0; i < move_num-1; i++ ) {
 		CHILD *pc = &phg->child[i];
 		float max_b = pc->bias;
 		int   max_i = i;
+		int j;
 		for ( j = i+1; j < move_num; j++ ) {
 			CHILD *pc = &phg->child[j];
 			if ( max_b > pc->bias ) continue;
@@ -419,6 +481,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 	delete[] data;
 	return v_fix;
 }
+
 
 void get_c_y_x_from_move(int *pc, int *py, int *px, int pack_move)
 {

@@ -5,8 +5,9 @@ PROGRAM = aobaz
 
 default:
 	@echo "Detected OS: ${THE_OS}"
-	$(MAKE) CXXFLAGS='$(CXXFLAGS) -Wall -Wextra -pipe -O2 -march=native -std=c++14 -DNDEBUG'  \
-		LDFLAGS='$(LDFLAGS)' \
+	$(MAKE) CC=gcc CXX=g++ \
+		CXXFLAGS='$(CXXFLAGS) -Wall -Wextra -pipe -O3 -g -march=native -std=c++14 -DNDEBUG'  \
+		LDFLAGS='$(LDFLAGS) -g' \
 		$(PROGRAM)
 
 debug:
@@ -24,9 +25,8 @@ clang:
 		$(PROGRAM)
 
 #DYNAMIC_LIBS = -lboost_program_options -lpthread -lz
-DYNAMIC_LIBS = -lboost_system -lboost_filesystem -lboost_program_options -lpthread -lz
+DYNAMIC_LIBS = -lboost_system -lboost_filesystem -lboost_program_options -lpthread -lz -llzma -lrt
 LIBS =
-
 
 ifeq ($(THE_OS),Linux)
 # for Linux with OpenBLAS
@@ -49,8 +49,11 @@ endif
 #LDFLAGS  += -L/opt/intel/mkl/lib/intel64/
 
 #CXXFLAGS += -I.
-CXXFLAGS += -I. -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING 
+#CXXFLAGS += -I. -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING
 #CXXFLAGS += -I. -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING -DUSE_CPU_ONLY
+#CXXFLAGS += -I. -I../net-test/src/common -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING -DUSE_CPU_ONLY -DUSE_OPENBLAS
+CXXFLAGS += -I. -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING -DUSE_OPENCL
+
 CPPFLAGS += -MD -MP
 
 
@@ -68,8 +71,14 @@ sources = Network.cpp Leela.cpp Utils.cpp Zobrist.cpp GTP.cpp Random.cpp \
       bona/evaldiff.cpp bona/problem.cpp bona/ponder.cpp bona/thread.cpp \
       bona/sckt.cpp bona/debug.cpp bona/mate3.cpp bona/genchk.cpp \
       bona/phash.cpp bona/dfpn.cpp bona/dfpnhash.cpp bona/ysszero.cpp \
-      bona/yss_net.cpp
-
+      bona/yss_net.cpp \
+      ../batched_play/src/common/nnet-ipc.cpp ../batched_play/src/common/osi.cpp \
+      ../batched_play/src/common/err.cpp ../batched_play/src/common/iobase.cpp \
+      ../batched_play/src/common/xzi.cpp ../batched_play/src/common/nnet.cpp \
+      ../batched_play/src/common/nnet-ocl.cpp ../batched_play/src/common/opencl.cpp \
+      ../batched_play/src/common/shogibase.cpp
+#      nnet.cpp net-test.cpp nnet-cpu.cpp nnet-ocl.cpp \
+#      ../net-test/src/common/err.cpp ../net-test/src/common/iobase.cpp ../net-test/src/common/shogibase.cpp ../net-test/src/common/xzi.cpp ../net-test/src/common/osi.cpp ../net-test/src/common/option.cpp ../net-test/src/common/opencl.cpp
 
 
 objects = $(sources:.cpp=.o)

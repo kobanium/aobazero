@@ -15,8 +15,8 @@
 
 namespace SAux {
   using uint = unsigned int;
-  enum class Mode { CSA, USI };
-  constexpr Mode csa = Mode::CSA, usi = Mode::USI;
+  enum class Mode { CSA_MODE, USI_MODE };
+  constexpr Mode csa = Mode::CSA_MODE, usi = Mode::USI_MODE;
   constexpr unsigned int mode_size     = 2U;
   constexpr unsigned int maxsize_moves = 1024U;
   constexpr unsigned int file_size = 9U, rank_size = 9U;
