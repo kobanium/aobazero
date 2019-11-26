@@ -72,11 +72,11 @@ sources = Network.cpp Leela.cpp Utils.cpp Zobrist.cpp GTP.cpp Random.cpp \
       bona/sckt.cpp bona/debug.cpp bona/mate3.cpp bona/genchk.cpp \
       bona/phash.cpp bona/dfpn.cpp bona/dfpnhash.cpp bona/ysszero.cpp \
       bona/yss_net.cpp \
-      ../batched_play/src/common/nnet-ipc.cpp ../batched_play/src/common/osi.cpp \
-      ../batched_play/src/common/err.cpp ../batched_play/src/common/iobase.cpp \
-      ../batched_play/src/common/xzi.cpp ../batched_play/src/common/nnet.cpp \
-      ../batched_play/src/common/nnet-ocl.cpp ../batched_play/src/common/opencl.cpp \
-      ../batched_play/src/common/shogibase.cpp
+      ../common/nnet-ipc.cpp ../common/osi.cpp \
+      ../common/err.cpp ../common/iobase.cpp \
+      ../common/xzi.cpp ../common/nnet.cpp \
+      ../common/nnet-ocl.cpp ../common/opencl.cpp \
+      ../common/shogibase.cpp
 #      nnet.cpp net-test.cpp nnet-cpu.cpp nnet-ocl.cpp \
 #      ../net-test/src/common/err.cpp ../net-test/src/common/iobase.cpp ../net-test/src/common/shogibase.cpp ../net-test/src/common/xzi.cpp ../net-test/src/common/osi.cpp ../net-test/src/common/option.cpp ../net-test/src/common/opencl.cpp
 

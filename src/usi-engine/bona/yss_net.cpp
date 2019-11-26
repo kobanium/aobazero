@@ -1,4 +1,4 @@
-// 2019 Team AobaZero
+ï»¿// 2019 Team AobaZero
 // This source code is in the public domain.
 #include "../config.h"
 
@@ -48,8 +48,8 @@ void init_global_objects();	// Leela.cpp
 
 #define NN_PARALLEL
 #ifdef NN_PARALLEL
-#include "../../batched_play/src/common/nnet.hpp"
-#include "../../batched_play/src/common/nnet-ipc.hpp"
+#include "../../common/nnet.hpp"
+#include "../../common/nnet-ipc.hpp"
 using std::copy_n;
 
 NNetIPC nnet;
@@ -350,8 +350,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
     float raw_v = result.second;
 	if ( is_nan_inf(raw_v) ) raw_v = 0;
 	float v_fix = raw_v;	// (raw_v + 1) / 2;
-	if ( sideToMove==BLACK ) v_fix = -v_fix;	// ¼êÈÖ´Ø·¸¤Ê¤¯Àè¼ê¾¡¤Á¤¬+1
-
+	if ( sideToMove==BLACK ) v_fix = -v_fix;
 
 //	PRT("result.first.size()=%d\n",result.first.size());
 	auto &node = result.first;
@@ -380,7 +379,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 		int promotion = nf >> 3;
 		int bona_m = (promotion << 14) | (from <<7) | to;
 		if ( yss_m == 0 ) bona_m = 0;
-		// "piece to move" ¤Ï move¤Î¤ß¡£drop¤Ç¤Ï 0
+		// "piece to move" ?ï¾ move?Î¤ß¡?drop?Ç¤ï¾ 0
 
 		if ( 0 ) {
 			float add = node.first;

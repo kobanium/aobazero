@@ -724,6 +724,9 @@ struct tree {
   int history_in_check[REP_HIST_LEN];	// 王手がかかっているか
   uint64_t sequence_hash;
   uint64_t keep_sequence_hash[REP_HIST_LEN];
+  int reached_ply;
+  int max_reached_ply;
+  int sum_reached_ply;
 #endif
   uint64_t node_searched;
   unsigned int *move_last[ PLY_MAX ];

@@ -95,7 +95,10 @@ static constexpr auto KOMI = 7.5f;
  * OpenCL drivers - the BLAS version is much faster for those.
  */
 #ifndef USE_CPU_ONLY
-#define USE_OPENCL
+
+  #ifndef USE_OPENCL
+  #define USE_OPENCL
+  #endif
 
 /*
  * USE_HALF: Include the half-precision OpenCL implementation when building.

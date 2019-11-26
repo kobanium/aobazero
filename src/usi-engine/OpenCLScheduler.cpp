@@ -41,6 +41,16 @@
 using Utils::ceilMultiple;
 using Utils::myprintf;
 
+#include <iostream>
+#include <chrono>
+using std::chrono::steady_clock;
+using std::chrono::duration_cast;
+using std::chrono::microseconds;
+static double elapsed_sum = 0.0;
+static uint nelapsed      = 0;
+const int fCalcNetTime = 0;
+
+
 class from_float{
 public:
     from_float(const std::vector<float> & f) : m_f(f) {}
@@ -128,7 +138,7 @@ void OpenCLScheduler<net_t>::initialize(const int channels) {
         }
         gnum++;
     }
-    myprintf("OpenCLScheduler. gnum=%d\n",gnum);
+    myprintf("OpenCLScheduler. gnum=%d, num_worker_threads(per GPU)=%d\n",gnum,num_worker_threads);
 
     // Exit immediately after tuning.  We should exit here because we skipped
     // initializing rest of the kernels due to some NVIDIA drivers crashing.
@@ -392,9 +402,24 @@ void OpenCLScheduler<net_t>::batch_worker(const size_t gnum) {
             index++;
         }
 
+
+        steady_clock::time_point start;
+        if ( fCalcNetTime ) start = steady_clock::now();
+
         // run the NN evaluation
         m_networks[gnum]->forward(
             batch_input, batch_output_pol, batch_output_val, context, count);
+
+		if ( fCalcNetTime ) {
+			steady_clock::time_point end = steady_clock::now();
+			double elapsed = static_cast<double>(duration_cast<microseconds>(end - start).count());
+			elapsed_sum += elapsed;
+			nelapsed    += 1U;
+			if ( 0 == nelapsed % 800 ) {
+				std::cout << std::endl;
+				std::cout << "network calc sum=" << elapsed_sum /(1000.0*1000.0) << "sec, count=" << nelapsed << ", ave mSec=" << (elapsed_sum / static_cast<double>(nelapsed)) / 1000.0 << std::endl;
+			}
+		}
 
         // Get output and copy back
         index = 0;
