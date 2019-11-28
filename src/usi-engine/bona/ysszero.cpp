@@ -898,7 +898,11 @@ void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *p
 //		{ static double va[2]; static int count[2]; va[sideToMove] += v; count[sideToMove]++; PRT("va[]=%10f,%10f\n",va[0]/(count[0]+1),va[1]/(count[1]+1)); }
 //		PRT("f=%10f,tanh()=%10f\n",f,v);
 	} else {
-		v = get_network_policy_value(ptree, sideToMove, ply, phg);
+		if ( move_num == 0 ) {
+			v = -1;
+		} else {
+			v = get_network_policy_value(ptree, sideToMove, ply, phg);
+		}
 	}
 	if ( sideToMove==BLACK ) v = -v;
 

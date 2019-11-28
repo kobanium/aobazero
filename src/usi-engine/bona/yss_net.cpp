@@ -58,7 +58,9 @@ NNetIPC nnet;
 void init_network()
 {
 #ifdef NN_PARALLEL
+	PRT("nnet.start(0)\n");
 	nnet.start(0);
+	PRT("nnet.start(0) end....\n");
 #endif
 //	Random::get_Rng().seedrandom(cfg_rng_seed);
 
@@ -293,7 +295,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 	
 #ifdef NN_PARALLEL
 
-	if ( phg->child_num <= 0 || phg->child_num > SHOGI_MOVES_MAX ) { PRT("Err.\n"); debug(); }
+	if ( phg->child_num <= 0 || phg->child_num > SHOGI_MOVES_MAX ) { PRT("Err. phg->child_num=%d,ply=%d\n",phg->child_num,ply); print_board(ptree); debug(); }
 	std::vector<unsigned short> nnmoves(phg->child_num);
 
 	for (i = 0; i < move_num; i++) {
