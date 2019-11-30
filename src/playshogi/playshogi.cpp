@@ -61,7 +61,7 @@ public:
 };
 
 struct Game {
-  Node<Param::maxlen_play> node;
+  Node<Param::maxlen_play_learn> node;
   USIEngine engine0, engine1;
   string startpos, record;
   uint nplay;
@@ -78,10 +78,10 @@ struct RowResult {
   string record; };
 
 static void procedure_io(USIEngine &myself, USIEngine &opponent,
-			 Node<Param::maxlen_play> &node, string &startpos,
-			 string &record) noexcept;
+			 Node<Param::maxlen_play_learn> &node,
+			 string &startpos, string &record) noexcept;
 static void node_update(USIEngine &myself, USIEngine &opponent,
-			Node<Param::maxlen_play> &node, string &startpos,
+			Node<Param::maxlen_play_learn> &node, string &startpos,
 			string &record, char *line) noexcept;
 static string addup_result(const NodeType &type_term, const Color &turn,
 			   uint len, const Color &turn0,
@@ -105,7 +105,7 @@ static bool flag_u    = false;
 static bool flag_s    = false;
 static bool flag_b    = false;
 static long int num_m = 1;
-static long int num_T = 1;
+static long int num_P = 1;
 static long int num_N = 0;
 static int num_B[2] = { 1,  1};
 static int num_U[2] = {-1, -1};
@@ -117,11 +117,13 @@ static string cmd0, cmd1;
 static vector <string> book;
 static string file_out_name;
 static atomic<int> flag_signal(0);
+static deque<NNetService> nnets;
 
 static void on_terminate() {
   exception_ptr p = current_exception();
   try { if (p) rethrow_exception(p); }
   catch (const exception &e) { cout << e.what() << endl; }
+  try { while (!nnets.empty()) nnets.pop_back(); } catch (...) {}
   abort(); }
 
 static void on_signal(int signum) { flag_signal = signum; }
@@ -131,18 +133,19 @@ int main(int argc, char **argv) {
   if (get_options(argc, argv) < 0) return 1;
   if (flag_b) load_book_file();
   deque<SeqPRNService> seq_s;
-  deque<NNetService> nnets;
   if (num_N == 2) {
     seq_s.emplace_back();
-    nnets.emplace_back(0U, num_T, num_B[0], num_U[0], num_H[0], fname_W[0]);
-    nnets.emplace_back(1U, num_T, num_B[1], num_U[1], num_H[1], fname_W[1]); }
+    nnets.emplace_back(0U, num_P, num_B[0], num_U[0], num_H[0], fname_W[0],
+		       false);
+    nnets.emplace_back(1U, num_P, num_B[1], num_U[1], num_H[1], fname_W[1],
+		       false); }
   else if (num_N == 1) {
     seq_s.emplace_back();
-    nnets.emplace_back(0U, num_T * 2, num_B[0], num_U[0], num_H[0],
-		       fname_W[0]); }
+    nnets.emplace_back(0U, num_P * 2, num_B[0], num_U[0], num_H[0],
+		       fname_W[0], false); }
 
-  vector<unique_ptr<Game>> games;
-  for (uint u = 0; u < static_cast<uint>(num_T); ++u)
+  static vector<unique_ptr<Game>> games;
+  for (uint u = 0; u < static_cast<uint>(num_P); ++u)
     games.emplace_back(new Game(u, cmd0, cmd1));
 
   //bool is_first = true;
@@ -178,10 +181,10 @@ int main(int argc, char **argv) {
       row_results[ptr->nplay] = { ptr->node.get_type(), ptr->node.get_turn(),
 				  ptr->node.get_len_path(), ptr->turn0,
 				  ptr->record };
-      while (true) {
+      while (latest < num_m) {
 	auto it = row_results.find(latest);
 	if (it == row_results.end()) break;
-
+	
 	cout << "'Count result #" << latest << endl;
 	string str = addup_result(it->second.type_term,
 				  it->second.turn, it->second.len,
@@ -198,11 +201,12 @@ int main(int argc, char **argv) {
       if (! flag_f) turn0 = turn0.to_opp(); } }
 
   if (flag_signal) { cout << "cought signal " << flag_signal << endl; }
-
+  for (auto &nnet : nnets) nnet.flush_on();
   for (auto &ptr : games) {
-    child_out(ptr->engine0, "quit"); close_flush(ptr->engine0);
-    child_out(ptr->engine1, "quit"); close_flush(ptr->engine1); }
+    close_flush(ptr->engine0);
+    close_flush(ptr->engine1); }
 
+  while (!nnets.empty()) nnets.pop_back();
   return 0; }
 
 enum { win = 0, draw = 1, lose = 2 };
@@ -214,10 +218,8 @@ int sum_result(Color turn, uint result[][NodeType::ok_size][3], int abso ) {
     n = result[turn.to_u()][SAux::resigned.to_u()    ][abso]
       + result[turn.to_u()][SAux::windclrd.to_u()    ][abso]
       + result[turn.to_u()][SAux::illegal_bwin.to_u()][abso]
-      + result[turn.to_u()][SAux::illegal_wwin.to_u()][abso];
-  }
-  return n;
-}
+      + result[turn.to_u()][SAux::illegal_wwin.to_u()][abso]; }
+  return n; }
 
 static string addup_result(const NodeType &type_term, const Color &turn,
 			   uint len, const Color &turn0,
@@ -357,11 +359,12 @@ static string result_out(Color turn, uint result[][NodeType::ok_size][3],
   return ss.str(); }
 
 static void procedure_io(USIEngine &myself, USIEngine &opponent,
-			 Node<Param::maxlen_play> &node, string &startpos,
-			 string &record) noexcept {
+			 Node<Param::maxlen_play_learn> &node,
+			 string &startpos, string &record) noexcept {
   assert(myself.ok() && opponent.ok() && node.ok());
   bool eof = false;
   char line[65536];
+
   if (myself.has_line_err()) {
     uint ret = myself.getline_err(line, sizeof(line));
     if (ret == 0) eof = true;
@@ -374,15 +377,13 @@ static void procedure_io(USIEngine &myself, USIEngine &opponent,
       log_out(myself, "%s", line);
       node_update(myself, opponent, node, startpos, record, line); } }
 
-  if (eof) {
-    close_flush(myself);
-    close_flush(opponent);
+  if (eof)
     die(ERR_INT("Player %u of game %u terminates.\n%s",
 		myself.get_player_id(), myself.get_game_id(),
-		static_cast<const char *>(node.to_str()))); } }
+		static_cast<const char *>(node.to_str()))); }
 
 static void node_update(USIEngine &myself, USIEngine &opponent,
-			Node<Param::maxlen_play> &node, string &startpos,
+			Node<Param::maxlen_play_learn> &node, string &startpos,
 			string &record, char *line) noexcept {
   assert(myself.ok() && opponent.ok() && node.ok() && line);
   
@@ -392,12 +393,10 @@ static void node_update(USIEngine &myself, USIEngine &opponent,
   token = strtok(nullptr, " ,\t");
 
   Action action = node.action_interpret(token, SAux::usi);
-  if (!action.ok()) {
-    close_flush(myself);
-    close_flush(opponent);
+  if (!action.ok())
     die(ERR_INT("Bad move %s (Player %u of game %u)\n%s", token,
 		myself.get_player_id(), myself.get_game_id(),
-		static_cast<const char *>(node.to_str()))); }
+		static_cast<const char *>(node.to_str())));
 
   if (action.is_move()) {
     if ((node.get_len_path() % 8U) == 0) record += "\n";
@@ -421,6 +420,7 @@ static void start_newgame(Game &game, uint nplay, const Color &turn0)
   noexcept {
   cout << "'Play #" << nplay << " starts from player"
        << (turn0 == SAux::black ? "0." : "1.") << endl;
+
   game.record  = "";
   game.record += "N+player" + string(turn0 == SAux::black ? "0\n" : "1\n");
   game.record += "N-player" + string(turn0 == SAux::black ? "1\n" : "0\n");
@@ -429,6 +429,7 @@ static void start_newgame(Game &game, uint nplay, const Color &turn0)
   game.nplay = nplay;
   game.turn0 = turn0;
   game.node.clear();
+
   child_out(game.engine0, "usinewgame");
   child_out(game.engine1, "usinewgame");
   if (flag_f || ! flag_b) game.startpos = "position startpos moves";
@@ -469,44 +470,48 @@ static void start_engine(USIEngine &c) noexcept {
   child_out(c, "usi");
   while (true) {
     uint ret = c.getline_in(line, sizeof(line));
-    if (ret == 0) {
-      close_flush(c);
+    if (ret == 0)
       die(ERR_INT("Player %u of game %u terminates.",
-		  c.get_player_id(), c.get_game_id())); }
+		  c.get_player_id(), c.get_game_id()));
     log_out(c, "%s", line);
     if (strcmp(line, "usiok") == 0) break; }
 
   child_out(c, "isready");
   while (true) {
     uint ret = c.getline_in(line, sizeof(line));
-    if (ret == 0) {
-      close_flush(c);
+    if (ret == 0)
       die(ERR_INT("Player %u of game %u terminates.",
-		  c.get_player_id(), c.get_game_id())); }
+		  c.get_player_id(), c.get_game_id()));
     log_out(c, "%s", line);
     if (strcmp(line, "readyok") == 0) break; } }
 
 static void child_out(USIEngine &c, const char *fmt, ...) noexcept {
   assert(c.ok() && fmt);
+  bool flag_error = false;
   char buf[65536];
   va_list list;
   
   va_start(list, fmt);
   int nb = vsnprintf(buf, sizeof(buf), fmt, list);
   va_end(list);
-  if (sizeof(buf) <= static_cast<size_t>(nb) + 1) {
-    close_flush(c);
-    die(ERR_INT("buffer overrun (player %u of game %u)",
-		c.get_player_id(), c.get_game_id())); }
-  buf[nb]     = '\n';
-  buf[nb + 1] = '\0';
+  if (sizeof(buf) <= static_cast<size_t>(nb) + 1U) {
+    flag_error = true;
+    buf[sizeof(buf) - 3U] = '=';
+    buf[sizeof(buf) - 2U] = '\n';
+    buf[sizeof(buf) - 1U] = '\0'; }
+  else {
+    buf[nb]     = '\n';
+    buf[nb + 1] = '\0'; }
   
   if (flag_u)
     cout << "OUT (" << c.get_game_id() << "-" << c.get_player_id()
 	 << "): " <<  buf << flush;
 
+  if (flag_error)
+    die(ERR_INT("buffer overrun (player %u of game %u)",
+		c.get_player_id(), c.get_game_id()));
+
   if (!c.write(buf, strlen(buf))) {
-    close_flush(c);
     if (errno == EPIPE) die(ERR_INT("Player %u of game %u terminates.",
 				    c.get_player_id(), c.get_game_id()));
     die(ERR_CLL("write")); } }
@@ -514,36 +519,44 @@ static void child_out(USIEngine &c, const char *fmt, ...) noexcept {
 static void log_out(USIEngine &c, const char *fmt, ...) noexcept {
   assert(c.ok() && fmt);
   if (!flag_u) return;
+  bool flag_error = false;
   char buf[65536];
   va_list list;
   
   va_start(list, fmt);
   int nb = vsnprintf(buf, sizeof(buf), fmt, list);
   va_end(list);
-  if (sizeof(buf) <= static_cast<size_t>(nb) + 1) {
-    close_flush(c);
+  if (sizeof(buf) <= static_cast<size_t>(nb) + 1U) {
+    flag_error = true;
+    buf[sizeof(buf) - 3U] = '=';
+    buf[sizeof(buf) - 2U] = '\n';
+    buf[sizeof(buf) - 1U] = '\0'; }
+  else {
+    buf[nb]     = '\n';
+    buf[nb + 1] = '\0'; }
+
+  cout << "IN (" << c.get_game_id() << "-" << c.get_player_id() << "): "
+       << buf << flush;
+  
+  if (flag_error)
     die(ERR_INT("buffer overrun (player %u of game %u)",
 		c.get_player_id(), c.get_game_id())); }
-  buf[nb]     = '\n';
-  buf[nb + 1] = '\0';
-  cout << "IN (" << c.get_game_id() << "-" << c.get_player_id() << "): "
-       << buf << flush; }
 
 static void close_flush(USIEngine &c) noexcept {
   assert(c.ok());
   char line[65536];
-  c.close_write();
+
+  child_out(c, "quit");
   while (true) {
     uint ret = c.getline_err(line, sizeof(line));
     if (ret == 0) break;
-    if (flag_u) cout << line << "\n"; }
+    log_out(c, "%s", line); }
     
   while (true) {
     uint ret = c.getline_in(line, sizeof(line));
     if (ret == 0) break;
-    if (flag_u) cout << line << "\n"; }
+    log_out(c, "%s", line); }
 
-  cout << flush;
   c.close(); }
 
 static void file_out(const char *fmt, ...) noexcept {
@@ -567,7 +580,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
   uint num;
 
   while (! flag_err) {
-    int opt = Opt::get(argc, argv, "0:1:c:m:T:B:U:H:W:frsub");
+    int opt = Opt::get(argc, argv, "0:1:c:m:P:B:U:H:W:frsub");
     if (opt < 0) break;
     
     switch (opt) {
@@ -584,10 +597,10 @@ static int get_options(int argc, const char * const *argv) noexcept {
       if (endptr == Opt::arg || *endptr != '\0'
 	  || num_m == LONG_MAX || num_m < 1) flag_err = true;
       break;
-    case 'T':
-      num_T = strtol(Opt::arg, &endptr, 10);
+    case 'P':
+      num_P = strtol(Opt::arg, &endptr, 10);
       if (endptr == Opt::arg || *endptr != '\0'
-	  || num_T == LONG_MAX || num_T < 1) flag_err = true;
+	  || num_P == LONG_MAX || num_P < 1) flag_err = true;
       break;
     case 'W':
       strncpy(buf, Opt::arg, sizeof(buf));
@@ -636,7 +649,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
     cout << "'Fix color?  " << (flag_f ? "Yes\n" : "No\n");
     cout << "'Out USI?    " << (flag_u ? "Yes\n" : "No\n");
     cout << "'Book?       " << (flag_b ? "Yes\n" : "No\n");
-    cout << "'Threads:    " << num_T << "\n";
+    cout << "'Parallel:    " << num_P << "\n";
     for (int i = 0; i < num_N; ++i) {
       cout << "'NNet" << i << ":\n";
       cout << "'- Weight:      " << fname_W[i].get_fname() << "\n";
@@ -683,7 +696,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
     "           collection of 24 moves from the no-handicap initial\n"
     "           position).\n"
     "  -c SHELL Use SHELL, e.g., /bin/csh, instead of /bin/sh.\n\n"
-    "  -T NUM   Generate NUM gameplays simultaneously. The default is 1.\n"
+    "  -P NUM   Generate NUM gameplays simultaneously. The default is 1.\n"
     "  -U STR   Specifies device IDs of nnet daemon.  STR can contain two\n"
     "           IDs separated by ':'. Each ID must be different from the\n"
     "           other.\n"

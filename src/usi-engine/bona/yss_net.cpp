@@ -323,7 +323,8 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 
 	copy_n(          data, NNAux::size_input, nnet.get_input()  );
 	copy_n(nnmoves.data(),          move_num, nnet.get_nnmoves());
-	nnet.submit_block(move_num);	// lock. wait result.
+	if (nnet.submit_block(move_num) < 0) { // lock. wait result.
+	  PRT("Nnet died.\n"); debug(); }
 
     const float *nn_probs = nnet.get_probs();
     const float nn_value  = nnet.get_value();

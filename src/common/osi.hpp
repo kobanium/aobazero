@@ -13,6 +13,7 @@ namespace OSI {
   void prevent_multirun(const FName &fname) noexcept;
   char *strtok(char *str, const char *delim, char **saveptr) noexcept;
   void binary2text(char *msg, uint &len, char &ch_last) noexcept;
+  bool has_parent() noexcept;
 
   class Semaphore {
     std::unique_ptr<class sem_impl> _impl;
@@ -23,6 +24,7 @@ namespace OSI {
     void close() noexcept;
     void inc() noexcept;
     void dec_wait() noexcept;
+    int dec_wait_timeout(uint timeout) noexcept;
     bool ok() const noexcept;
   };
 

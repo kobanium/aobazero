@@ -4,6 +4,7 @@
 #if defined(USE_OPENCL)
 #include "nnet.hpp"
 #include "opencl.hpp"
+#include <chrono>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -288,11 +289,11 @@ class NNetOCL {
   std::unique_ptr<uint []> _slots_sizes_nnmove[NNAux::nslot];
   float *_slots_probs[NNAux::nslot];
   float *_slots_values[NNAux::nslot];
-
   uint _maxsize_batch, _maxsize_out, _resnet_nout, _nres_block;
   uint _head1_nout, _policy1_nout, _value1_nout, _policy2_nin;
   uint _value2_nin, _value2_nout, _value3_nin, _value3_nout, _index_block;
   row_t _value3_bias;
+  bool _do_sleep;
   void load(bool use_half, const std::vector<std::pair<uint, row_t>> &wght)
     noexcept;
 
@@ -300,8 +301,8 @@ public:
   ~NNetOCL() noexcept;
   std::string reset(uint maxsize_batch,
 		    const std::vector<std::pair<uint, row_t>> &wght,
-		    int device_id, bool use_half = true, bool flag_out = true)
-    noexcept;
+		    int device_id, bool use_half = true, bool flag_out = true,
+		    bool do_sleep = false) noexcept;
   void ff(uint size_batch, const float *input, const uint *sizes_nnmove,
 	  const ushort *nnmoves, float *probs, float *values) noexcept;
   uint push_ff(uint size_batch, const float *input, const uint *sizes_nnmove,

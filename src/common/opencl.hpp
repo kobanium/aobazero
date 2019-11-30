@@ -7,6 +7,7 @@
 #include <vector>
 #include <cstdint>
 
+
 namespace OCL {
   using uint = unsigned int;
   class Platform;

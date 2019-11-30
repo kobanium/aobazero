@@ -109,7 +109,6 @@ void Reader::worker() noexcept {
 
     _len_line = 0; } }
 
-
 void Reader::reset(OSI::ReadHandle &&rh, int index) noexcept {
   assert(!_rh.ok() && rh.ok());
   if (0 <= _index) die(ERR_INT("Internal Error"));

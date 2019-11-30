@@ -81,7 +81,9 @@ public:
       die(ERR_INT("CloseHandle() failed: %s", LastErr().get())); }
 
   void sem_inc() noexcept { ReleaseSemaphore(_h, 1, nullptr); }
-  void sem_dec_wait() noexcept { WaitForSingleObject(_h, INFINITE); }
+  int sem_dec_wait() noexcept {
+    WaitForSingleObject(_h, INFINITE);
+    return 0; }
   bool ok() const noexcept { return _h != nullptr; }
 };
 
@@ -499,6 +501,7 @@ static_assert(BUFSIZ <= UINT32_MAX, "BUFSIZ too large");
 #  include <dirent.h>
 #  include <fcntl.h>
 #  include <semaphore.h>
+#  include <time.h>
 #  include <unistd.h>
 #  include <arpa/inet.h>
 #  include <netinet/in.h>
@@ -511,7 +514,25 @@ static_assert(BUFSIZ <= UINT32_MAX, "BUFSIZ too large");
 #  define MAXIMUM_WAIT_OBJECTS 64
 using std::max;
 
-void OSI::binary2text(char *msg, uint &len, char &ch_last) noexcept {}
+void OSI::binary2text(char *, uint &, char &) noexcept {}
+
+bool OSI::has_parent() noexcept { return 1 < getppid(); }
+
+void OSI::handle_signal(handler_t h) noexcept {
+  if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) die(ERR_CLL("signal"));
+  if (signal(SIGHUP,  h) == SIG_ERR) die(ERR_CLL("signal"));
+  if (signal(SIGTERM, h) == SIG_ERR) die(ERR_CLL("signal"));
+  if (signal(SIGINT,  h) == SIG_ERR) die(ERR_CLL("signal")); }
+
+void OSI::prevent_multirun(const FName &fname) noexcept {
+  int fd = open(fname.get_fname(), O_CREAT | O_RDWR, 0666);
+  if (flock(fd, LOCK_EX | LOCK_NB) < 0 && errno == EWOULDBLOCK)
+    die(ERR_INT("another instance is running")); }
+
+char *OSI::strtok(char *str, const char *delim, char **saveptr) noexcept {
+  assert(delim && saveptr);
+  return strtok_r(str, delim, saveptr); }
+
 
 class OSI::sem_impl {
   FName _fname;
@@ -531,9 +552,17 @@ public:
     if (sem_close(_psem) < 0) die(ERR_CLL("sem_close"));
     if (_flag_create && sem_unlink(_fname.get_fname()) < 0)
       die(ERR_CLL("sem_unlink")); }
-  void inc() noexcept { sem_post(_psem); }
+  void inc() noexcept { if (sem_post(_psem) < 0) die(ERR_CLL("sem_post")); }
   void dec_wait() noexcept {
     if (sem_wait(_psem) < 0) die(ERR_CLL("sem_wait")); }
+  int dec_wait_timeout(uint timeout) noexcept {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_REALTIME, &ts) < -1)
+      die(ERR_CLL("clock_gettime"));
+    ts.tv_sec += timeout;
+    if (0 <= sem_timedwait(_psem, &ts)) return 0;
+    if (errno != ETIMEDOUT) die(ERR_CLL("sem_timedwait"));
+    return -1; }
   bool ok() const noexcept { return _psem != SEM_FAILED; }
 };
 
@@ -590,46 +619,40 @@ public:
     assert(path && argv[0]);
     enum { index_read = 0, index_write = 1 };
     int perr_c2p[2], pipe_c2p[2], pipe_p2c[2];
-    if (pipe(perr_c2p) < 0) die(ERR_CLL("pipe"));
-    if (pipe(pipe_c2p) < 0) die(ERR_CLL("pipe"));
-    if (pipe(pipe_p2c) < 0) die(ERR_CLL("pipe"));
+    if (pipe(perr_c2p) < 0
+	|| pipe(pipe_c2p) < 0
+	|| pipe(pipe_p2c) < 0) die(ERR_CLL("pipe"));
 
     _pid = fork();
     if (_pid < 0) die(ERR_CLL("fork"));
     if (_pid == 0) {
-      ::close(pipe_p2c[index_write]);
-      ::close(pipe_c2p[index_read]);
-      ::close(perr_c2p[index_read]);
-      dup2(pipe_p2c[index_read], 0);
-      dup2(pipe_c2p[index_write], 1);
-      dup2(perr_c2p[index_write], 2);
-      ::close(pipe_p2c[index_read]);
-      ::close(pipe_c2p[index_write]);
-      ::close(perr_c2p[index_write]);
+      if (close(pipe_p2c[index_write]) < 0
+	  || close(pipe_c2p[index_read]) < 0
+	  || close(perr_c2p[index_read]) < 0) die(ERR_CLL("close"));
+      if (dup2(pipe_p2c[index_read], 0) < 0
+	  || dup2(pipe_c2p[index_write], 1) < 0
+	  || dup2(perr_c2p[index_write], 2) < 0) die(ERR_CLL("dup2"));
+      if (close(pipe_p2c[index_read]) < 0
+	  || close(pipe_c2p[index_write]) < 0
+	  || close(perr_c2p[index_write]) < 0) die(ERR_CLL("close"));
       if (execv(path, argv) < 0) die(ERR_CLL("execv")); }
     
-    ::close(pipe_p2c[index_read]);
-    ::close(pipe_c2p[index_write]);
-    ::close(perr_c2p[index_write]);
+    if (close(pipe_p2c[index_read]) < 0
+	|| close(pipe_c2p[index_write]) < 0
+	|| close(perr_c2p[index_write]) < 0) die(ERR_CLL("close"));
     _pipe_p2c = pipe_p2c[index_write];
     _pipe_c2p = pipe_c2p[index_read];
     _perr_c2p = perr_c2p[index_read]; }
   
   ~cp_impl() noexcept {
-    close_write();
-    char buf[BUFSIZ];
-    ssize_t ret;
-    do {
-      ret = ::read(_pipe_c2p, buf, sizeof(buf));
-      if (ret < 0) die(ERR_CLL("read")); } while (ret);
-    do {
-      ret = ::read(_perr_c2p, buf, sizeof(buf));
-      if (ret < 0) die(ERR_CLL("read")); } while (ret);
+    if (0 <= _pipe_p2c && close(_pipe_p2c) < 0) die(ERR_CLL("close"));
+    if (0 <= _pipe_c2p && close(_pipe_c2p) < 0) die(ERR_CLL("close"));
+    if (0 <= _perr_c2p && close(_perr_c2p) < 0) die(ERR_CLL("close"));
     if (waitpid(_pid, nullptr, 0) < 0) die(ERR_CLL("waitpid")); }
 
   void close_write() noexcept {
     if (_pipe_p2c < 0) return;
-    if (::close(_pipe_p2c) < 0) die(ERR_CLL("close"));
+    if (close(_pipe_p2c) < 0) die(ERR_CLL("close"));
     _pipe_p2c = -1; }
 
   bool ok() const noexcept { return (0 <= _pid
@@ -775,17 +798,6 @@ public:
     if (errno) die(ERR_CLL("readdir"));
     return nullptr; } };
 
-void OSI::handle_signal(handler_t h) noexcept {
-  if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) die(ERR_CLL("signal"));
-  if (signal(SIGHUP,  h) == SIG_ERR) die(ERR_CLL("signal"));
-  if (signal(SIGTERM, h) == SIG_ERR) die(ERR_CLL("signal"));
-  if (signal(SIGINT,  h) == SIG_ERR) die(ERR_CLL("signal")); }
-
-void OSI::prevent_multirun(const FName &fname) noexcept {
-  int fd = open(fname.get_fname(), O_CREAT | O_RDWR, 0666);
-  if (flock(fd, LOCK_EX | LOCK_NB) < 0 && errno == EWOULDBLOCK)
-    die(ERR_INT("another instance is running")); }
-
 class OSI::Selector_impl {
   const Pipe *_pipes[MAXIMUM_WAIT_OBJECTS / 2U];
   uint _npipe;
@@ -850,10 +862,6 @@ public:
   
   bool try_getline_in(const Pipe &pipe, char **pmsg) const noexcept;
   bool try_getline_err(const Pipe &pipe, char **pmsg) const noexcept; };
-
-char *OSI::strtok(char *str, const char *delim, char **saveptr) noexcept {
-  assert(delim && saveptr);
-  return strtok_r(str, delim, saveptr); }
 
 class OSI::Conn_impl {
   sockaddr_in _s_addr;
@@ -926,8 +934,10 @@ void OSI::Semaphore::open(const char *name, bool flag_create, uint value)
   assert(name && name[0] == '/');
   _impl.reset(new sem_impl(name, flag_create, value)); }
 void OSI::Semaphore::close() noexcept { _impl.reset(nullptr); }
-void OSI::Semaphore::inc() noexcept { return _impl->inc(); }
-void OSI::Semaphore::dec_wait() noexcept { return _impl->dec_wait(); }
+void OSI::Semaphore::inc() noexcept { _impl->inc(); }
+void OSI::Semaphore::dec_wait() noexcept { _impl->dec_wait(); }
+int OSI::Semaphore::dec_wait_timeout(uint timeout) noexcept {
+  return _impl->dec_wait_timeout(timeout); }
 bool OSI::Semaphore::ok() const noexcept { return _impl && _impl->ok(); }
 
 OSI::MMap::MMap() noexcept : _impl(nullptr) {}
@@ -937,7 +947,8 @@ void OSI::MMap::open(const char *name, bool flag_create, size_t size)
   assert(name && name[0] == '/');
   _impl.reset(new mmap_impl(name, flag_create, size)); }
 void OSI::MMap::close() noexcept { _impl.reset(nullptr); }
-void *OSI::MMap::operator()() const noexcept { return _impl->get(); }
+void *OSI::MMap::operator()() const noexcept {
+  assert(ok()); return _impl->get(); }
 bool OSI::MMap::ok() const noexcept { return _impl && _impl->ok(); }
 
 OSI::ChildProcess::ChildProcess() noexcept : _impl(nullptr) {}

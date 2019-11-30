@@ -30,6 +30,7 @@ constexpr char options[] = "-Werror -cl-std=CL1.2";
 // cl_event
 class OCL::Event_impl {
   cl_event _event;
+
 public:
   explicit Event_impl() : _event(nullptr) {}
   ~Event_impl() { if (_event) release(); }

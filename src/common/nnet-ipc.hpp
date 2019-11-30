@@ -1,6 +1,10 @@
+// 2019 Team AobaZero
+// This source code is in the public domain.
 #pragma once
 #include "iobase.hpp"
 #include "osi.hpp"
+#include <condition_variable>
+#include <mutex>
 #include <thread>
 #include <cstdint>
 
@@ -35,14 +39,20 @@ class NNetService {
   OSI::MMap _mmap_service;
   OSI::MMap _mmap_ipc[NNAux::maxsize_ipc];
   std::thread _th_worker_push;
+  std::condition_variable _cv_flush;
+  std::mutex _m_flush;
+  bool _flag_cv_flush;
   uint _nnet_id, _nipc, _size_batch, _device_id, _use_half;
   FName _fname;
   void worker_push() noexcept;
 
 public:
   NNetService(uint nnet_id, uint nipc, uint size_batch, uint device_id,
-	      uint use_half, const FName &fname) noexcept;
+	      uint use_half, const FName &fname,
+	      bool flag_dispatch = true) noexcept;
   ~NNetService() noexcept;
+  void flush_on() noexcept;
+  void flush_off() noexcept;
 };
 
 class NNetIPC {
@@ -56,15 +66,17 @@ class NNetIPC {
   class SharedService *_pservice;
   class SharedIPC *_pipc;
   int _id;
+  bool _flag_dispatch;
 
 public:
   NNetIPC() noexcept : _id(-1) {}
   void start(uint nnet_id) noexcept;
   void end() noexcept;
+  int get_id() const noexcept;
   float *get_input() const noexcept;
   ushort *get_nnmoves() const noexcept;
   const float *get_probs() const noexcept;
   float get_value() const noexcept;
-  void submit_block(uint size_nnmove) noexcept;
+  int submit_block(uint size_nnmove) noexcept;
   bool ok() const noexcept { return 0 <= _id; }
 };

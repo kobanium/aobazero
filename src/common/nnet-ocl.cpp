@@ -21,8 +21,10 @@
 #define WMMA_ACCUMU16 0
 
 using std::chrono::steady_clock;
+using std::chrono::duration;
 using std::chrono::duration_cast;
 using std::chrono::microseconds;
+using std::chrono::seconds;
 using std::this_thread::sleep_for;
 using std::copy_n;
 using std::cout;
@@ -1453,7 +1455,8 @@ void ManageRecv::push(const OCL::Queue &queue, void *p, size_t size,
     _ptr_out[uslot] = p;
     _size[uslot]    = size; } }
 
-void ManageRecv::wait(const OCL::Queue &queue, uint uslot) noexcept {
+void ManageRecv::wait(const OCL::Queue &queue, uint uslot)
+  noexcept {
   assert(queue.ok() && uslot < NNAux::nslot);
   if (_method == global_memory) _event[uslot].wait();
   else if (_method == pinned_memory) {
@@ -2086,8 +2089,9 @@ NNetOCL::~NNetOCL() noexcept { _mng_send.end(_queue); }
 
 string NNetOCL::reset(uint maxsize_batch,
 		      const vector<pair<uint, row_t>> &wght, int device_id,
-		      bool use_half, bool flag_out) noexcept {
+		      bool use_half, bool flag_out, bool do_sleep) noexcept {
   assert(0 < maxsize_batch);
+  _do_sleep = do_sleep;
   stringstream lines;
 
   for (uint uslot = 0; uslot < NNAux::nslot; ++uslot)
@@ -2498,7 +2502,17 @@ uint NNetOCL::push_ff(uint size_batch, const float *input,
 
 void NNetOCL::wait_ff(uint uslot) noexcept {
   assert(uslot < NNAux::nslot);
-  _mng_recv.wait(_queue, uslot);
+  if (_do_sleep) {
+    static double elapsed_ave = 0.0;
+    steady_clock::time_point start = steady_clock::now();
+    sleep_for(duration<double, std::ratio<7, 10000000>>(elapsed_ave));
+    _mng_recv.wait(_queue, uslot);
+    steady_clock::time_point end = steady_clock::now();
+    double elapsed
+      = static_cast<double>(duration_cast<microseconds>(end - start).count());
+    elapsed_ave = 0.95 * elapsed_ave + 0.05 * elapsed; }
+  else _mng_recv.wait(_queue, uslot);
+
   compute_probs(_slots_size_batch[uslot], _slots_sizes_nnmove[uslot].get(),
 		_ptr_result[uslot].get() + _maxsize_batch,
 		_slots_probs[uslot]);

@@ -50,49 +50,50 @@ else ifeq ($(BLAS), OpenBLAS)
 endif
 
 CXXFLAGS += -std=c++11 -Wextra -Ofast -march=native -mtune=native
-CPPFLAGS += -MMD -MP -Isrc/common -DUSE_SSE4
+CPPFLAGS += -MD -MP -Isrc/common -DUSE_SSE4
 LDFLAGS  += -llzma -lpthread -lrt
 
-TARGETS        += bin/aobaz bin/autousi bin/server bin/playshogi bin/crc64 bin/extract bin/net-test bin/gencode
-AUTOUSI_OBJS   := src/autousi/autousi.o src/autousi/client.o src/autousi/pipe.o src/common/iobase.o src/common/option.o src/common/jqueue.o src/common/xzi.o src/common/err.o src/common/shogibase.o src/common/osi.o
-SERVER_OBJS    := src/server/server.o src/server/listen.o src/server/datakeep.o src/common/iobase.o src/common/xzi.o src/common/jqueue.o src/common/err.o src/common/option.o src/server/logging.o src/common/shogibase.o src/common/osi.o
-GENCODE_OBJS   := src/gencode/gencode.o
-PLAYSHOGI_OBJS := src/playshogi/playshogi.o src/common/option.o src/common/err.o src/common/iobase.o src/common/xzi.o src/common/shogibase.o src/common/osi.o src/common/child.o src/common/nnet.o src/common/nnet-cpu.o src/common/nnet-ocl.o src/common/nnet-ipc.o src/common/opencl.o
-CRC64_OBJS     := src/crc64/crc64.o src/common/xzi.o src/common/err.o src/common/iobase.o src/common/osi.o
-EXTRACT_OBJS   := src/extract/extract.o src/common/xzi.o src/common/err.o src/common/iobase.o src/common/osi.o
-OCLDEVS_OBJS   := src/ocldevs/ocldevs.o src/common/err.o src/common/opencl.o
-NET_TEST_OBJS  := src/net-test/net-test.o src/common/nnet.o src/common/nnet-cpu.o src/common/nnet-ocl.o src/common/jqueue.o src/common/err.o src/common/iobase.o src/common/shogibase.o src/common/xzi.o src/common/osi.o src/common/option.o src/common/opencl.o
-OBJS           := $(AUTOUSI_OBJS) $(SERVER_OBJS) $(GENCODE_OBJS) $(PLAYSHOGI_OBJS) $(CRC64_OBJS) $(EXTRACT_OBJS) $(OCLDEVS_OBJS) $(NET_TEST_OBJS)
-INC_OUT        := src/common/tbl_zkey.inc src/common/tbl_board.inc src/common/tbl_sq.inc src/common/tbl_bmap.inc
+TARGETS         := $(addprefix bin/, aobaz autousi server playshogi crc64 extract net-test gencode ocldevs)
+AUTOUSI_BASES   := $(addprefix src/autousi/, autousi client pipe) $(addprefix src/common/, iobase option jqueue xzi err shogibase osi)
+SERVER_BASES    := $(addprefix src/server/, server listen datakeep logging) $(addprefix src/common/, iobase xzi jqueue err option shogibase osi)
+GENCODE_BASES   := src/gencode/gencode
+PLAYSHOGI_BASES := src/playshogi/playshogi $(addprefix src/common/, option err iobase xzi shogibase osi child nnet nnet-cpu nnet-ocl nnet-ipc opencl)
+CRC64_BASES     := src/crc64/crc64 $(addprefix src/common/, xzi err iobase osi)
+EXTRACT_BASES   := src/extract/extract $(addprefix src/common/, xzi err iobase osi)
+OCLDEVS_BASES   := src/ocldevs/ocldevs src/common/err src/common/opencl
+NET_TEST_BASES  := src/net-test/net-test $(addprefix src/common/, nnet nnet-cpu nnet-ocl jqueue err iobase shogibase xzi osi option opencl)
+BASES           := $(AUTOUSI_BASES) $(SERVER_BASES) $(GENCODE_BASES) $(PLAYSHOGI_BASES) $(CRC64_BASES) $(EXTRACT_BASES) $(OCLDEVS_BASES) $(NET_TEST_BASES)
+OBJS            := $(addsuffix .o, $(BASES))
+INC_OUT         := $(addprefix src/common/, tbl_zkey.inc tbl_board.inc tbl_sq.inc tbl_bmap.inc)
 
 all: $(TARGETS)
 
 bin/aobaz: src/usi-engine/aobaz
 	cp $^ $@
 
-bin/autousi: $(AUTOUSI_OBJS)
+bin/autousi: $(addsuffix .o, $(AUTOUSI_BASES))
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-bin/server: $(SERVER_OBJS)
+bin/server: $(addsuffix .o, $(SERVER_BASES))
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-bin/gencode: $(GENCODE_OBJS)
+bin/gencode: $(addsuffix .o, $(GENCODE_BASES))
 	$(CXX) -o $@ $^ $(LDFLAGS)
 	./bin/gencode
 
-bin/playshogi: $(PLAYSHOGI_OBJS)
+bin/playshogi: $(addsuffix .o, $(PLAYSHOGI_BASES))
 	$(CXX) -o $@ $^ $(LDFLAGS) $(LIB_BLAS) $(LIB_OpenCL)
 
-bin/crc64: $(CRC64_OBJS)
+bin/crc64: $(addsuffix .o, $(CRC64_BASES))
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-bin/extract: $(EXTRACT_OBJS)
+bin/extract: $(addsuffix .o, $(EXTRACT_BASES))
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
-bin/ocldevs: $(OCLDEVS_OBJS)
+bin/ocldevs: $(addsuffix .o, $(OCLDEVS_BASES))
 	$(CXX) -o $@ $^ $(LDFLAGS) $(LIB_OpenCL)
 
-bin/net-test: $(NET_TEST_OBJS)
+bin/net-test: $(addsuffix .o, $(NET_TEST_BASES))
 	$(CXX) -o $@ $^ $(LDFLAGS) $(LIB_BLAS) $(LIB_OpenCL)
 
 .cpp.o:
@@ -102,13 +103,13 @@ clean:
 	-$(RM) $(TARGETS) $(OBJS) $(OBJS:.o=.d) $(INC_OUT) Makefile~ build_vs.bat~
 	cd src/usi-engine; $(MAKE) clean
 
-src/usi-engine/aobaz: FORCE
+src/usi-engine/aobaz: FORCE bin/gencode
 	cd src/usi-engine; $(MAKE)
 
-$(AUTOUSI_OBJS:.o=.cpp) : bin/gencode
-$(SERVER_OBJS:.o=.cpp) : bin/gencode
-$(PLAYSHOGI_OBJS:.o=.cpp) : bin/gencode
-$(NET_TEST_OBJS:.o=.cpp) : bin/gencode
+$(addsuffix .cpp, $(AUTOUSI_BASES))   : bin/gencode
+$(addsuffix .cpp, $(SERVER_BASES))    : bin/gencode
+$(addsuffix .cpp, $(PLAYSHOGI_BASES)) : bin/gencode
+$(addsuffix .cpp, $(NET_TEST_BASES))  : bin/gencode
 
 -include $(OBJS:.o=.d)
 FORCE:

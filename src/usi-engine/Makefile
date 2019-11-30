@@ -56,37 +56,20 @@ CXXFLAGS += -I. -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING -DUSE_OP
 
 CPPFLAGS += -MD -MP
 
+bases  = Network Leela Utils Zobrist GTP Random SMP OpenCL OpenCLScheduler NNCache Tuner CPUPipe
+bases += nnet-ipc osi err iobase xzi nnet nnet-ocl opencl shogibase
+bases += $(addprefix bona/, data main io proce utility ini attack book makemove unmake time csa valid bitop iterate searchr search quiesrch evaluate swap hash root next movgenex genevasn gencap gennocap gendrop mate1ply rand learn1 learn2 evaldiff problem ponder thread sckt debug mate3 genchk phash dfpn dfpnhash ysszero yss_net)
 
-sources = Network.cpp Leela.cpp Utils.cpp Zobrist.cpp GTP.cpp Random.cpp \
-	  SMP.cpp \
-	  OpenCL.cpp OpenCLScheduler.cpp NNCache.cpp Tuner.cpp CPUPipe.cpp \
-      bona/data.cpp bona/main.cpp bona/io.cpp bona/proce.cpp \
-      bona/utility.cpp bona/ini.cpp bona/attack.cpp bona/book.cpp \
-      bona/makemove.cpp bona/unmake.cpp bona/time.cpp bona/csa.cpp \
-      bona/valid.cpp bona/bitop.cpp bona/iterate.cpp bona/searchr.cpp \
-      bona/search.cpp bona/quiesrch.cpp bona/evaluate.cpp bona/swap.cpp \
-      bona/hash.cpp bona/root.cpp bona/next.cpp bona/movgenex.cpp \
-      bona/genevasn.cpp bona/gencap.cpp bona/gennocap.cpp bona/gendrop.cpp \
-      bona/mate1ply.cpp bona/rand.cpp bona/learn1.cpp bona/learn2.cpp \
-      bona/evaldiff.cpp bona/problem.cpp bona/ponder.cpp bona/thread.cpp \
-      bona/sckt.cpp bona/debug.cpp bona/mate3.cpp bona/genchk.cpp \
-      bona/phash.cpp bona/dfpn.cpp bona/dfpnhash.cpp bona/ysszero.cpp \
-      bona/yss_net.cpp \
-      ../common/nnet-ipc.cpp ../common/osi.cpp \
-      ../common/err.cpp ../common/iobase.cpp \
-      ../common/xzi.cpp ../common/nnet.cpp \
-      ../common/nnet-ocl.cpp ../common/opencl.cpp \
-      ../common/shogibase.cpp
-#      nnet.cpp net-test.cpp nnet-cpu.cpp nnet-ocl.cpp \
-#      ../net-test/src/common/err.cpp ../net-test/src/common/iobase.cpp ../net-test/src/common/shogibase.cpp ../net-test/src/common/xzi.cpp ../net-test/src/common/osi.cpp ../net-test/src/common/option.cpp ../net-test/src/common/opencl.cpp
-
-
-objects = $(sources:.cpp=.o)
-deps = $(sources:%.cpp=%.d)
+sources = $(addsuffix .cpp, $(bases))
+objects = $(addsuffix .o,   $(bases))
+deps    = $(addsuffix .d,   $(bases))
 
 -include $(deps)
 
-%.o: %.cpp
+%.o : %.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c -o $@ $<
+
+%.o : ../common/%.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c -o $@ $<
 
 $(PROGRAM): $(objects)
