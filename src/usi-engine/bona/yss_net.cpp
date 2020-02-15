@@ -40,6 +40,7 @@
 #include "lock.h"
 #include "yss_var.h"
 #include "yss_dcnn.h"
+#include "process_batch.h"
 
 //using namespace Utils;
 std::string default_weights;
@@ -48,19 +49,39 @@ void init_global_objects();	// Leela.cpp
 
 #define NN_PARALLEL
 #ifdef NN_PARALLEL
-#include "../../common/nnet.hpp"
-#include "../../common/nnet-ipc.hpp"
+#include "../common/nnet.hpp"
+#include "../common/nnet-ipc.hpp"
 using std::copy_n;
 
 NNetIPC nnet;
+int nNNetServiceNumber = -1;
+int nNNetID = -1;
 #endif
+
+bool is_process_batch()
+{
+#ifdef NN_PARALLEL
+	if ( nNNetServiceNumber >= 0 ) return true;
+#endif
+	return false;
+}
+
+bool is_load_weight()
+{
+#ifdef NN_PARALLEL
+	if ( nNNetID != 0 ) return false;
+#endif
+	return true;
+}
 
 void init_network()
 {
 #ifdef NN_PARALLEL
-	PRT("nnet.start(0)\n");
-	nnet.start(0);
-	PRT("nnet.start(0) end....\n");
+	if ( is_process_batch() ) {
+		nnet.start(nNNetServiceNumber);
+		nNNetID = nnet.get_id();
+		PRT("nnet.start(%d), nNNetID=%d\n",nNNetServiceNumber,nNNetID);
+	}
 #endif
 //	Random::get_Rng().seedrandom(cfg_rng_seed);
 
@@ -295,7 +316,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 	
 #ifdef NN_PARALLEL
 
-	if ( phg->child_num <= 0 || phg->child_num > SHOGI_MOVES_MAX ) { PRT("Err. phg->child_num=%d,ply=%d\n",phg->child_num,ply); print_board(ptree); debug(); }
+	if ( phg->child_num <= 0 || phg->child_num > SHOGI_MOVES_MAX ) { PRT("Err. phg->child_num=%d\n",phg->child_num); debug(); }
 	std::vector<unsigned short> nnmoves(phg->child_num);
 
 	for (i = 0; i < move_num; i++) {
@@ -323,8 +344,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 
 	copy_n(          data, NNAux::size_input, nnet.get_input()  );
 	copy_n(nnmoves.data(),          move_num, nnet.get_nnmoves());
-	if (nnet.submit_block(move_num) < 0) { // lock. wait result.
-	  PRT("Nnet died.\n"); debug(); }
+	nnet.submit_block(move_num);	// lock. wait result.
 
     const float *nn_probs = nnet.get_probs();
     const float nn_value  = nnet.get_value();
@@ -340,10 +360,58 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 		policy_result[id].first = nn_probs[i];
 	}
 
-	const std::pair<std::vector<std::pair<float, int>>, float> result = std::make_pair(policy_result, nn_value);
+	std::pair<std::vector<std::pair<float, int>>, float> result = std::make_pair(policy_result, nn_value);
+
+#ifdef USE_OPENCL_SELFCHECK
+	if ( is_load_weight() && (0 || Random::get_Rng().randfix<SELFCHECK_PROBABILITY>() == 0) ) {
+		auto result_ref = GTP::s_network->get_scored_moves_yss_zero((float(*)[B_SIZE][B_SIZE])data);
+		
+		// 可能手でsoftmaxを再計算
+		float available_sum = 0;
+		auto cpu = result_ref.first;
+		for (i = 0; i < move_num; i++) {
+			int id = nnmoves[i];
+			available_sum += cpu[id].first;
+		}
+		std::vector<std::pair<float, int>> cpu_result;
+		for (int idx = size_t{0}; idx < POLICY_OUT_SIZE; idx++) {
+			cpu_result.emplace_back(0.0f, idx);
+		}
+		float mul = 1.0f;
+		if ( available_sum > 0 ) mul = 1.0f / available_sum;
+		for (i = 0; i < move_num; i++) {
+			int id = nnmoves[i];
+			cpu_result[id].first = cpu[id].first * mul;
+		}
+		
+//		int ret = GTP::s_network->compare_net_outputs(result.first, result_ref.first);
+		int ret = GTP::s_network->compare_net_outputs(result.first, cpu_result);
+		static int count = 0;
+		count++;
+		int per_bigs = 0;
+		float r0_sum=0,r1_sum=0;
+		for (i = 0; i < POLICY_OUT_SIZE; i++) {
+			auto bat = result.first, cpu = cpu_result; //result_ref.first;
+			float r0 = bat[i].first, r1 = cpu[i].first;
+			float diff = fabs(r0 - r1);
+			float per = 0;
+			if ( r0 != 0 ) per = 100.0 * diff / r0;
+			r0_sum += r0;
+			r1_sum += r1;
+			if ( r0 != 0 && per > 1.0 ) {
+				per_bigs++;
+				PRT("%d:idx=%5d:batch=%9f,cpu=%9f,diff=%9f, %4.2f %%\n",count,i,r0,r1,diff, per);
+			}
+		}
+		if ( ret || per_bigs ) {
+			PRT("ptree->nrep=%3d,ply=%2d,sideToMove=%d, batch_sum=%f, cpu_sum=%f,move_num=%d,per_bigs=%d,available_sum=%f\n",ptree->nrep,ply,sideToMove,r0_sum,r1_sum,move_num,per_bigs,available_sum);
+			PRT_path(ptree, sideToMove, ply);
+			if ( ret ) throw std::runtime_error("OpenCL self-check mismatch.");
+		}
+	}
+#endif
 
 #else
-//	const auto result = Network::get_scored_moves_yss_zero((float(*)[B_SIZE][B_SIZE])data);
 	const auto result = GTP::s_network->get_scored_moves_yss_zero((float(*)[B_SIZE][B_SIZE])data);
 #endif
 
@@ -353,7 +421,8 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
     float raw_v = result.second;
 	if ( is_nan_inf(raw_v) ) raw_v = 0;
 	float v_fix = raw_v;	// (raw_v + 1) / 2;
-	if ( sideToMove==BLACK ) v_fix = -v_fix;
+	if ( sideToMove==BLACK ) v_fix = -v_fix;	// 手番関係なく先手勝ちが+1
+
 
 //	PRT("result.first.size()=%d\n",result.first.size());
 	auto &node = result.first;
@@ -382,7 +451,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 		int promotion = nf >> 3;
 		int bona_m = (promotion << 14) | (from <<7) | to;
 		if ( yss_m == 0 ) bona_m = 0;
-		// "piece to move" ?ﾏ move?Τߡ?drop?Ǥﾏ 0
+		// "piece to move" は moveのみ。dropでは 0
 
 		if ( 0 ) {
 			float add = node.first;
@@ -483,7 +552,6 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 	delete[] data;
 	return v_fix;
 }
-
 
 void get_c_y_x_from_move(int *pc, int *py, int *px, int pack_move)
 {

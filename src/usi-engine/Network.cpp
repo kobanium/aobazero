@@ -74,6 +74,9 @@
 #include "Timing.h"
 #include "Utils.h"
 
+#include "bona/process_batch.h"
+
+
 namespace x3 = boost::spirit::x3;
 using namespace Utils;
 
@@ -616,9 +619,13 @@ void Network::initialize(int /*playouts*/, const std::string & weightsfile) {
         // Select the precision to use at runtime.
         select_precision(channels);
 #else
-        myprintf("Initializing OpenCL (single precision).\n");
-        m_forward = init_net(channels,
-                             std::make_unique<OpenCLScheduler<float>>());
+        if ( is_process_batch() ) {
+            myprintf("Skip Initializing OpenCL (single precision).\n");
+        } else {
+            myprintf("Initializing OpenCL (single precision).\n");
+            m_forward = init_net(channels,
+                                std::make_unique<OpenCLScheduler<float>>());
+        }
 #endif
     }
 
@@ -747,21 +754,25 @@ T relative_difference(T a, T b) {
 
 //void compare_net_outputs(std::vector<float>& data,
 //                         std::vector<float>& ref) {
-void Network::compare_net_outputs(std::vector<scored_node>& data,
+int Network::compare_net_outputs(std::vector<scored_node>& data,
                                   std::vector<scored_node>& ref) {
     // We accept an error up to 5%, but output values
     // smaller than 1/1000th are "rounded up" for the comparison.
-    constexpr float relative_error = 5e-2f;
+    constexpr float relative_error =  5e-2f;	//  5%
+//  constexpr float relative_error = 15e-2f;	// 15%
     for (auto idx = size_t{0}; idx < data.size(); ++idx) {
         auto err = relative_difference(data[idx].first, ref[idx].first);
+       if ( data[idx].first == 0 ) continue;   // process batch only returns available moves.
         if (err > relative_error) {
-            printf("Error in OpenCL calculation: expected %f got %f "
-                   "(error=%f%%)\n", ref[idx].first, data[idx].first, err * 100.0);
-            printf("Update your GPU drivers or reduce the amount of games "
+            myprintf("Error in OpenCL calculation: idx=%d/%d, expected %f got %f "
+                   "(error=%f%%)\n", (int)idx, (int)data.size(), ref[idx].first, data[idx].first, err * 100.0);
+            for (auto i=idx; i<idx+10 && i<data.size(); i++) if ( data[idx].first != 0 ) myprintf("%d: %f, %f\n", (int)i, ref[i].first, data[i].first);
+            myprintf("Update your GPU drivers or reduce the amount of games "
                    "played simultaneously.\n");
-            throw std::runtime_error("OpenCL self-check mismatch.");
+            return 1;
         }
     }
+    return 0;
 }
 #endif
 
@@ -864,7 +875,9 @@ Network::Netresult_old Network::get_output(
             && (force_selfcheck || Random::get_Rng().randfix<SELFCHECK_PROBABILITY>() == 0)
         ) {
             auto result_ref = get_output_internal(planes, true);
-            compare_net_outputs(result.first, result_ref.first);
+            if ( compare_net_outputs(result.first, result_ref.first) ) {
+                throw std::runtime_error("OpenCL self-check mismatch.");
+            }
         }
 #else
         (void)force_selfcheck;
@@ -1172,7 +1185,11 @@ Network::Netresult_old Network::get_scored_moves_yss_zero(float data[][B_SIZE][B
     NNPlanes planes;
     gather_features_yss_zero(planes, data);
 
-	result = get_output( planes );
+	if ( is_process_batch() ) {
+        result = get_output_internal(planes, true);
+	} else {
+		result = get_output( planes );
+	}
 //    result = get_scored_moves_internal(NULL, planes, 0);
 /*
 	auto net_eval = result.second;

@@ -46,6 +46,8 @@ extern int fAddNoise;
 extern int fVisitCount;
 extern int fUSIMoveCount;
 extern int fPrtNetworkRawPath;
+extern int nNNetServiceNumber;
+extern int nNNetID;
 
 extern std::string default_weights;
 #ifdef USE_OPENCL

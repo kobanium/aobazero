@@ -68,12 +68,29 @@ int usi_go_count = 0;		// bestmoveを送った直後にstopが来るのを防ぐ
 int usi_bestmove_count = 0;
 
 void debug() { exit(0); }
+
+void PRT_sub(const char *fmt, va_list arg)
+{
+	va_list arg2;
+	va_copy(arg2, arg);
+	vfprintf(stderr, fmt, arg);
+
+	if ( 0 ) {
+		FILE *fp = fopen("aoba_log.txt","a");
+		if ( fp ) {
+			vfprintf( fp, fmt, arg2);
+			fclose(fp);
+		}
+	}
+	va_end(arg2);
+}
+
 void PRT(const char *fmt, ...)
 {
 	if ( fVerbose == 0 ) return;
 	va_list arg;
 	va_start( arg, fmt );
-	vfprintf( stderr, fmt, arg );
+	PRT_sub(fmt, arg);
 	va_end( arg );
 }
 
@@ -1285,6 +1302,11 @@ int getCmdLineParam(int argc, char *argv[])
 			if ( nf <= 0 ) nf = 0;
 			PRT("dLimitSec=%.3f\n",nf);
 			dLimitSec = nf;
+		}
+		if ( strstr(p,"-e") ) {
+			PRT("nNNetServiceNumber=%d\n",n);
+			if ( n < 0 ) DEBUG_PRT("Err.  nNNetServiceNumber.\n");
+			nNNetServiceNumber = n;
 		}
 		
 		if ( strstr(p,"-w") ) {
