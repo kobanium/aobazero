@@ -11,7 +11,8 @@ namespace Param {
   using uint = unsigned int;
   constexpr uint maxlen_play_learn    = 513U;
   constexpr uint maxlen_play          = 4096U;
-  constexpr uint len_seq_prn          = 65536U * 1024U;
+//constexpr uint len_seq_prn          = 65536U * 1024U;
+  constexpr uint len_seq_prn          = 7008768U;	// 81*81*2 + (81*7) = 13122 + 567 = 13689 * 512 = 7008768
   constexpr char name_autousi[]       = "/tmp/autousi.jBQoNA7kEd";
   constexpr char name_server[]        = "/tmp/server.jBQoNA7kEd";
   constexpr char name_sem_nnet[]      = "/sem-nnet.jBQoNA7kEd";

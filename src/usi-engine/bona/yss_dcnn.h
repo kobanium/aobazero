@@ -21,21 +21,24 @@ typedef struct child {
 	float bias;			// policy
 } CHILD;
 
+#define CHILD_VEC
+
 typedef struct hash_shogi {
 	lock_yss_t entry_lock;		// lock for SMP
 	uint64 hashcode64;			// sequence hash
 	uint64 hash64pos;			// position hash, we check both hash key.
 	int deleted;	//
 	int games_sum;	// sum of children selected
-	int sort_done;	//
-//	int used;		// 
 	int col;		// color 1 or 2
 	int age;		//
 	float net_value;		// winrate from value network
-//	int   has_net_value;
 
 	int child_num;
+#ifdef CHILD_VEC
+	std::vector <CHILD> child;
+#else
 	CHILD child[SHOGI_MOVES_MAX];
+#endif
 } HASH_SHOGI;
 
 enum {

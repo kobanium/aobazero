@@ -26,6 +26,7 @@
 #include "lock.h"
 #include "yss_var.h"
 #include "yss_dcnn.h"
+#include "process_batch.h"
 
 #include "../GTP.h"
 
@@ -45,7 +46,7 @@ int fUsiInfo = 0;
 int nLimitUctLoop = 100;
 double dLimitSec = 0;
 
-HASH_SHOGI *hash_shogi_table = NULL;
+std::vector <HASH_SHOGI> hash_shogi_table;
 const int HASH_SHOGI_TABLE_SIZE_MIN = 1024*4*4;
 int Hash_Shogi_Table_Size = HASH_SHOGI_TABLE_SIZE_MIN;
 int Hash_Shogi_Mask;
@@ -60,9 +61,10 @@ int rehash[REHASH_MAX-1];	// バケットが衝突した際の再ハッシュ用
 int rehash_flag[REHASH_MAX];	// 最初に作成するために
 
 // 81*81*2 + (81*7) = 13122 + 567 = 13689 * 512 = 7008768.  7MB * 8 = 56MB
-//const int SEQUENCE_HASH_SIZE = 512;	// 2^n.   別手順できた同一局面を区別するため
-uint64_t sequence_hash_from_to[SEQUENCE_HASH_SIZE][81][81][2];	// [from][to][promote]
-uint64_t sequence_hash_drop[SEQUENCE_HASH_SIZE][81][7];
+//uint64_t sequence_hash_from_to[SEQUENCE_HASH_SIZE][81][81][2];	// [from][to][promote]
+//uint64_t sequence_hash_drop[SEQUENCE_HASH_SIZE][81][7];
+uint64_t (*sequence_hash_from_to)[81][81][2];
+uint64_t (*sequence_hash_drop)[81][7];
 
 int usi_go_count = 0;		// bestmoveを送った直後にstopが来るのを防ぐため
 int usi_bestmove_count = 0;
@@ -391,6 +393,11 @@ void init_seqence_hash()
 	static int fDone = 0;
 	if ( fDone ) return;
 	fDone = 1;
+
+	sequence_hash_from_to = (uint64_t(*)[81][81][2])malloc( SEQUENCE_HASH_SIZE*81*81*2 * sizeof(uint64_t) );
+	sequence_hash_drop    = (uint64_t(*)[81][7])    malloc( SEQUENCE_HASH_SIZE*81*7    * sizeof(uint64_t) );
+	if ( sequence_hash_from_to == NULL || sequence_hash_drop == NULL ) { PRT("Fail sequence_hash malloc()\n"); debug(); }
+
 	int m,i,j,k;
 	for (m=0;m<SEQUENCE_HASH_SIZE;m++) {
 		for (i=0;i<81;i++) {
@@ -408,6 +415,29 @@ void init_seqence_hash()
 	}
 }
 
+uint64_t get_sequence_hash_from_to(int moves, int from, int to, int promote)
+{
+	uint64_t ret = 0;
+	if ( moves < 0 || moves >= SEQUENCE_HASH_SIZE || from < 0 || from >= 81 || to < 0 || to >= 81 || promote < 0 || promote >= 2 ) { PRT("Err. sequence move\n"); debug(); }
+	if ( is_process_batch() ) {
+		ret = get_process_mem(moves * (81*81*2) + from * (81*2) + to * (2) + promote);
+	} else {
+		ret = sequence_hash_from_to[moves][from][to][promote];
+	}
+//	PRT("moves=%3d(%3d),from=%2d,to=%2d,prom=%d,%016" PRIx64 "\n",moves,moves & (SEQUENCE_HASH_SIZE-1),from,to,promote,ret);
+	return ret;
+}
+uint64_t get_sequence_hash_drop(int moves, int to, int piece)
+{
+	if ( moves < 0 || moves >= SEQUENCE_HASH_SIZE || to < 0 || to >= 81 || piece < 0 || piece >= 7 ) { PRT("Err. sequence drop\n"); debug(); }
+	if ( is_process_batch() ) {
+		return get_process_mem(moves * (81*7) + to * (7) + piece + (SEQUENCE_HASH_SIZE*81*81*2));
+	} else {
+		return sequence_hash_drop[moves][to][piece];
+	}
+}
+
+
 void set_Hash_Shogi_Table_Size(int playouts)
 {
 	int n = playouts * 3;
@@ -421,11 +451,15 @@ void set_Hash_Shogi_Table_Size(int playouts)
 
 void hash_shogi_table_reset()
 {
-	HASH_ALLOC_SIZE size = sizeof(HASH_SHOGI) * Hash_Shogi_Table_Size;
-	memset(hash_shogi_table,0,size);
+//	HASH_ALLOC_SIZE size = sizeof(HASH_SHOGI) * Hash_Shogi_Table_Size;
+//	memset(hash_shogi_table,0,size);
 	for (int i=0;i<Hash_Shogi_Table_Size;i++) {
-		hash_shogi_table[i].deleted = 1;
-		LockInit(hash_shogi_table[i].entry_lock);
+		HASH_SHOGI *pt = &hash_shogi_table[i];
+		pt->deleted = 1;
+		LockInit(pt->entry_lock);
+#ifdef CHILD_VEC
+		std::vector<CHILD>().swap(pt->child);	// memory free hack for vector. 
+#endif
 	}
 	hash_shogi_use = 0;
 }
@@ -434,8 +468,9 @@ void hash_shogi_table_clear()
 {
 	Hash_Shogi_Mask       = Hash_Shogi_Table_Size - 1;
 	HASH_ALLOC_SIZE size = sizeof(HASH_SHOGI) * Hash_Shogi_Table_Size;
-	if ( hash_shogi_table == NULL ) hash_shogi_table = (HASH_SHOGI*)malloc( size );
-	if ( hash_shogi_table == NULL ) { PRT("Fail malloc hash_shogi\n"); debug(); }
+//	if ( hash_shogi_table == NULL ) hash_shogi_table = (HASH_SHOGI*)malloc( size );
+//	if ( hash_shogi_table == NULL ) { PRT("Fail malloc hash_shogi\n"); debug(); }
+	hash_shogi_table.resize(Hash_Shogi_Table_Size);	// reserve()だと全要素のコンストラクタが走らないのでダメ
 	PRT("HashShogi=%7d(%3dMB),sizeof(HASH_SHOGI)=%d,Hash_SHOGI_Mask=%d\n",Hash_Shogi_Table_Size,(int)(size/(1024*1024)),sizeof(HASH_SHOGI),Hash_Shogi_Mask);
 	hash_shogi_table_reset();
 }
@@ -503,7 +538,11 @@ void hash_half_del(tree_t * restrict ptree, int sideToMove)
 				del = 1;
 			}
 			if ( del ) {
-				memset(pt,0,sizeof(HASH_SHOGI));
+#ifdef CHILD_VEC
+				std::vector<CHILD>().swap(pt->child);	// memory free hack for vector. 
+#else
+//				memset(pt,0,sizeof(HASH_SHOGI));
+#endif
 				pt->deleted = 1;
 				hash_shogi_use--;
 				del_sum++;
@@ -514,14 +553,6 @@ void hash_half_del(tree_t * restrict ptree, int sideToMove)
 		PRT("hash del=%d,age=%d,minus=%d, %.0f%%(%d/%d)\n",del_sum,thinking_age,age_minus,occupy,hash_shogi_use,Hash_Shogi_Table_Size);
 		if ( hash_shogi_use < limit_use ) break;
 		if ( age_minus==0 ) { PRT("age_minus=0\n"); debug(); }
-	}
-}
-
-void free_hash_shogi_table()
-{
-	if ( hash_shogi_table != NULL ) {
-		free(hash_shogi_table);
-		hash_shogi_table = NULL;
 	}
 }
 
@@ -538,11 +569,10 @@ research_empty_block:
 	first_n = n;
 	const int TRY_MAX = 8;
 
-	HASH_SHOGI *pt_base = hash_shogi_table;
 	HASH_SHOGI *pt_first = NULL;
 
 	for (;;) {
-		HASH_SHOGI *pt = &pt_base[n];
+		HASH_SHOGI *pt = &hash_shogi_table[n];
 		Lock(pt->entry_lock);		// Lockをかけっぱなしにするように
 		if ( pt->deleted == 0 ) {
 			if ( hashcode64 == pt->hashcode64 && hash64pos == pt->hash64pos ) {
@@ -867,6 +897,10 @@ void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *p
 
 	int move_num = generate_all_move( ptree, sideToMove, ply );
 
+#ifdef CHILD_VEC
+	phg->child.reserve(move_num);
+#endif
+
 	unsigned int * restrict pmove = ptree->move_last[0];
 	int i;
 	for ( i = 0; i < move_num; i++ ) {
@@ -953,7 +987,7 @@ double uct_tree(tree_t * restrict ptree, int sideToMove, int ply)
 		create_node(ptree, sideToMove, ply, phg);
 	}
 
-	if ( phg->col != sideToMove ) { PRT("hash col Err. phg->col=%d,col=%d,age=%d(%d),ply=%d,nrep=%d,child_num=%d,games_sum=%d,sort=%d,phg->hash=%" PRIx64 "\n",phg->col,sideToMove,phg->age,thinking_age,ply,ptree->nrep,phg->child_num,phg->games_sum,phg->sort_done,phg->hashcode64); debug(); }
+	if ( phg->col != sideToMove ) { PRT("hash col Err. phg->col=%d,col=%d,age=%d(%d),ply=%d,nrep=%d,child_num=%d,games_sum=%d,phg->hash=%" PRIx64 "\n",phg->col,sideToMove,phg->age,thinking_age,ply,ptree->nrep,phg->child_num,phg->games_sum,phg->hashcode64); debug(); }
 
 	int child_num = phg->child_num;
 
@@ -1186,6 +1220,9 @@ void init_yss_zero()
 	static int fDone = 0;
 	if ( fDone ) return;
 	fDone = 1;
+
+	if ( is_process_batch() == false ) init_seqence_hash();
+
 	std::random_device rd;
 	init_rnd521( (int)time(NULL)+getpid_YSS() + rd() );		// 起動ごとに異なる乱数列を生成
 	inti_rehash();
@@ -1291,6 +1328,11 @@ int getCmdLineParam(int argc, char *argv[])
 			cfg_batch_size = n;
 			PRT("cfg_batch_size=%d\n",n);
 		}
+		if ( strstr(p,"-e") ) {
+			PRT("nNNetServiceNumber=%d\n",n);
+			if ( n < 0 ) DEBUG_PRT("Err.  nNNetServiceNumber.\n");
+			nNNetServiceNumber = n;
+		}
 #endif
 		if ( strstr(p,"-t") ) {
 			if ( n < 1            ) n = 1;
@@ -1302,11 +1344,6 @@ int getCmdLineParam(int argc, char *argv[])
 			if ( nf <= 0 ) nf = 0;
 			PRT("dLimitSec=%.3f\n",nf);
 			dLimitSec = nf;
-		}
-		if ( strstr(p,"-e") ) {
-			PRT("nNNetServiceNumber=%d\n",n);
-			if ( n < 0 ) DEBUG_PRT("Err.  nNNetServiceNumber.\n");
-			nNNetServiceNumber = n;
 		}
 		
 		if ( strstr(p,"-w") ) {

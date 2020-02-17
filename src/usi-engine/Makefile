@@ -48,16 +48,27 @@ endif
 #CXXFLAGS += -I/opt/intel/mkl/include
 #LDFLAGS  += -L/opt/intel/mkl/lib/intel64/
 
+# CPU_ONLY = 1 for cpu version.
+CPU_ONLY = 0
+
 #CXXFLAGS += -I.
 #CXXFLAGS += -I. -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING
 #CXXFLAGS += -I. -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING -DUSE_CPU_ONLY
-#CXXFLAGS += -I. -I../net-test/src/common -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING -DUSE_CPU_ONLY -DUSE_OPENBLAS
+#CXXFLAGS += -I. -I../batched_play/src/common -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING -DUSE_CPU_ONLY -DUSE_OPENBLAS
+
+ifeq ($(CPU_ONLY), 1)
+CXXFLAGS += -I. -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING -DUSE_CPU_ONLY
+else
 CXXFLAGS += -I. -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING -DUSE_OPENCL
+endif
+
 
 CPPFLAGS += -MD -MP
 
 bases  = Network Leela Utils Zobrist GTP Random SMP OpenCL OpenCLScheduler NNCache Tuner CPUPipe
+ifneq ($(CPU_ONLY), 1)
 bases += nnet-ipc osi err iobase xzi nnet nnet-ocl opencl shogibase
+endif
 bases += $(addprefix bona/, data main io proce utility ini attack book makemove unmake time csa valid bitop iterate searchr search quiesrch evaluate swap hash root next movgenex genevasn gencap gennocap gendrop mate1ply rand learn1 learn2 evaldiff problem ponder thread sckt debug mate3 genchk phash dfpn dfpnhash ysszero yss_net)
 
 sources = $(addsuffix .cpp, $(bases))
