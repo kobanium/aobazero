@@ -290,7 +290,8 @@ static string addup_result(const NodeType &type_term, const Color &turn,
     double wr = ((static_cast<double>(nwin) + static_cast<double>(ndraw) / 2.0)
 		 / static_cast<double>(ntot));
     double elo = 0.0;
-    if (1e-5 < wr) elo = -400.0 * log10(1.0 / wr - 1.0);
+    if ( wr != 0 && wr != 1.0 ) elo = -400.0 * log10(1.0 / wr - 1.0);
+//  if (1e-5 < wr) elo = -400.0 * log10(1.0 / wr - 1.0);
 
     // 95% confidence interval
     // double ci = 1.96*sqrt(wr*(1.0 - wr)/static_cast<double>(ntot));
