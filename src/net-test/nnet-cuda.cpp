@@ -151,23 +151,23 @@ void NNetCUDA::reset(const uint maxsize_batch, const std::vector<std::pair<uint,
 	|| wght[index + 6U].first != _resnet_nout
 	|| wght[index + 7U].first != _resnet_nout) {
       ErrAux::die(ERR_INT(msg_bad_wght_dim));
-
-      ResParameter res_param;
-
-      res_param.conv1_weight = wght[index].second.get();
-      res_param.bn1_scale = bn_scale;
-      res_param.bn1_bias = bn_bias;
-      res_param.bn1_mean = wght[index + 2U].second.get();
-      res_param.bn1_variance = wght[index + 3U].second.get();
-      res_param.conv2_weight = wght[index + 4U].second.get();
-      res_param.bn2_scale = bn_scale;
-      res_param.bn2_bias = bn_bias;
-      res_param.bn2_mean = wght[index + 6U].second.get();
-      res_param.bn2_variance = wght[index + 7U].second.get();
-      
-      res_blocks[u].reset(new ResBlock(cuda_handles, hidden_descriptor, res_param, _resnet_nout));
-      index += 8U;
     }
+
+    ResParameter res_param;
+    
+    res_param.conv1_weight = wght[index].second.get();
+    res_param.bn1_scale = bn_scale;
+    res_param.bn1_bias = bn_bias;
+    res_param.bn1_mean = wght[index + 2U].second.get();
+    res_param.bn1_variance = wght[index + 3U].second.get();
+    res_param.conv2_weight = wght[index + 4U].second.get();
+    res_param.bn2_scale = bn_scale;
+    res_param.bn2_bias = bn_bias;
+    res_param.bn2_mean = wght[index + 6U].second.get();
+    res_param.bn2_variance = wght[index + 7U].second.get();
+      
+    res_blocks[u].reset(new ResBlock(cuda_handles, hidden_descriptor, res_param, _resnet_nout));
+    index += 8U;
   }
 
   // Policy head
@@ -243,8 +243,27 @@ void NNetCUDA::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
   float policy[size_batch * NNAux::nch_out_policy * NNAux::size_plane];
   
   // Get Values
-  CheckCudaErrors(cudaMemcpy(value_ptr, values, sizeof(float) * size_batch, cudaMemcpyDeviceToHost));
-  CheckCudaErrors(cudaMemcpy(policy_ptr, policy, sizeof(float) * size_batch * NNAux::nch_out_policy * NNAux::size_plane, cudaMemcpyDeviceToHost));
+  CheckCudaErrors(cudaMemcpy(values, value_ptr, sizeof(float) * size_batch, cudaMemcpyDeviceToHost));
+  CheckCudaErrors(cudaMemcpy(policy, policy_ptr, sizeof(float) * size_batch * NNAux::nch_out_policy * NNAux::size_plane, cudaMemcpyDeviceToHost));
+
+  for (uint ub = 0; ub < size_batch; ub++) {
+    const ushort *m = nnmoves + ub * NNAux::nmove;
+    float *probs_b  = probs   + ub * NNAux::nmove;
+    double sum = 0.0;
+    for (uint u = 0; u < sizes_nnmove[ub]; u++) {
+      assert(m[u] < NNAux::nch_out_policy * NNAux::size_plane);
+      sum += policy[m[u]];
+    }
+
+    const double inv_sum = 1.0 / sum;
+    
+    for (uint u = 0; u < sizes_nnmove[ub]; u++) {
+      probs[u] = policy[m[u]] * inv_sum;
+    }
+    
+  }
+
+  
 }
 
 
