@@ -201,7 +201,7 @@ void NNetCUDA::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
 		  const ushort *nnmoves, float *probs, float *values) noexcept {
 
   // Send input planes.
-  CheckCudaErrors(cudaMemcpy(input_ptr, input, sizeof(float) * size_batch * NNAux::size_plane, cudaMemcpyHostToDevice));
+  CheckCudaErrors(cudaMemcpy(input_ptr, input, sizeof(float) * size_batch * NNAux::size_input, cudaMemcpyHostToDevice));
 
   conv->Forward(cuda_handles.cudnn, input_descriptor, hidden_descriptor, input_ptr, h1_ptr);
   bn->Forward(cuda_handles.cudnn, hidden_descriptor, h1_ptr, h1_ptr);
