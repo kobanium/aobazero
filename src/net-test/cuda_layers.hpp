@@ -477,12 +477,12 @@ public:
                 const int batch_size )
   {
     conv1->Forward(cuda_handles.cudnn, res_descriptor, res_descriptor, input_ptr, hidden_ptr);
-    bn1->Forward(cuda_handles.cudnn, res_descriptor, hidden_ptr, res_ptr);
-    relu->Forward(cuda_handles.cudnn, res_descriptor, res_ptr);
-    conv2->Forward(cuda_handles.cudnn, res_descriptor, res_descriptor, res_ptr, hidden_ptr);
-    bn2->Forward(cuda_handles.cudnn, res_descriptor, hidden_ptr, res_ptr);
-    relu->Forward(cuda_handles.cudnn, res_descriptor, res_ptr);      
+    bn1->Forward(cuda_handles.cudnn, res_descriptor, hidden_ptr, hidden_ptr);
+    relu->Forward(cuda_handles.cudnn, res_descriptor, hidden_ptr);
+    conv2->Forward(cuda_handles.cudnn, res_descriptor, res_descriptor, hidden_ptr, res_ptr);
+    bn2->Forward(cuda_handles.cudnn, res_descriptor, res_ptr, res_ptr);
     add->Forward(cuda_handles.cudnn, res_descriptor, res_ptr, output_ptr);    
+    relu->Forward(cuda_handles.cudnn, res_descriptor, output_ptr);
   }
 };
 
