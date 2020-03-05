@@ -50,7 +50,6 @@ extern int fVisitCount;
 extern int fUSIMoveCount;
 extern int fPrtNetworkRawPath;
 extern int nNNetServiceNumber;
-extern int nNNetID;
 
 extern std::string default_weights;
 #ifdef USE_OPENCL
@@ -71,13 +70,16 @@ void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *p
 double uct_tree(tree_t * restrict ptree, int sideToMove, int ply);
 int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf_move_count);
 void print_all_min_posi(tree_t * restrict ptree, int ply);
-int check_enter_input();
+//int check_enter_input();
+int check_stop_input();
 int is_ignore_stop();
 void send_latest_bestmove();
 void set_latest_bestmove(char *str);
 int is_send_usi_info(int nodes);
 void send_usi_info(tree_t * restrict ptree, int sideToMove, int ply, int nodes, int nps);
 void usi_newgame();
+int is_declare_win(tree_t * restrict ptree, int sideToMove);
+int is_declare_win_root(tree_t * restrict ptree, int sideToMove);
 
 // yss_net.cpp
 void init_network();

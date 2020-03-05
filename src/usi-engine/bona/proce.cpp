@@ -6,10 +6,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "shogi.h"
 
 #include <string>
 #include <vector>
+#include "shogi.h"
+
 #include "yss_var.h"
 #include "yss_dcnn.h"
 
@@ -415,6 +416,13 @@ static int CONV proce_usi( tree_t * restrict ptree )
   char *lasts;
   int iret;
 
+  if (0) {
+    FILE  *fp = file_open("c:\\junk\\out.txt", "a");
+    if ( fp == NULL ) debug();
+    fprintf(fp, "%s\n", str_cmdline);
+    file_close(fp);
+  }
+
   token = strtok_r( str_cmdline, str_delimiters, &lasts );
   if ( token == NULL ) { return 1; }
 
@@ -607,6 +615,137 @@ usi_go( tree_t * restrict ptree, char **lasts )
   return 1;
 }
 
+#if defined(YSS_ZERO)
+int sfen_current_move_number = 0;
+
+// shogiGUI uses sfen in analyze
+// position sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1             ... initial position
+// position sfen lnsg1gsnl/1r3k1b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1 moves 3c3d 5g5f 8c8d
+// position sfen lnsgkgsnl/1r7/pppppp1pp/6p2/9/2P4P1/PP1PPPP1P/1S5R1/LN1GKGSNL w Bb 1
+// position sfen lnsg5/3kl1+R2/p1ppppn1p/9/8+R/2P6/PPNPPPP1P/2G2S3/+b+pS1K2G1 w BSL3Pgnl 1   ... toyoshima-YSS, 14kin
+// position sfen 8R/kSS1S1K2/4B4/9/9/9/9/9/3L1L1L1 b PLNSGBR17p3n3g 1                        ... max available moves 593
+// position sfen l2S2s1l/5k1g1/pBngppnpp/6p2/2P6/P3PP3/6P1P/3NK3R/7+rL b 3PLS2GB3pns 91 moves L*4d N*5a S*5b 4b3b 5b5a 4c4d N*4c L*4a 6a5b 4a4c
+// these 3 are same positions. up tp 100 moves. from 91 and 86.
+// position startpos moves 2g2f 8c8d 2f2e 8d8e 6i7h 4a3b 2e2d 2c2d 2h2d P*2c 2d2h 5a5b 3i3h 7a7b 9g9f 8e8f 8g8f 8b8f P*8g 8f8d 7g7f 7c7d 4g4f 7d7e 7f7e 3c3d 3h4g 7b7c 7h7g 7c6d 7g8f 8a7c 4i5h 2b8h+ 7i8h 6a7b 5i6h B*3c B*7g 6d6e 7g3c+ 2a3c 8i7g B*4d 6g6f 6e6f 4g5f P*7f 8f7f 6f7g+ 7f7g N*7f 7g7f 4d8h+ 8g8f S*8g 5h6g 8g7f+ 6g7f 8h8g S*7g G*7h 6h6g 7h7g 7f7g 8g8f 7g8f 8d8f P*6d G*6f 6g5h 8f8h+ N*6h 6f5f 5g5f S*6i 5h6i 8h9i 6i5h 9i3i 2h1h 3i2i 6d6c+ 7b6c S*7b L*6a B*8c 3b2b 7b6a 5b4b L*4d N*5a S*5b 4b3b 5b5a 4c4d N*4c L*4a 6a5b 4a4c
+// position sfen l2S2s1l/5k1g1/pBngppnpp/6p2/2P6/P3PP3/6P1P/3NK3R/7+rL b 3PLS2GB3pns 91 moves L*4d N*5a S*5b 4b3b 5b5a 4c4d N*4c L*4a 6a5b 4a4c
+// position sfen l5s1l/2S1k1g2/p1ngppnpp/6p2/2P6/P3PP3/6P1P/3NK3R/7+rL w 3PS2G2B3plns 86 moves L*6a B*8c 3b2b 7b6a 5b4b L*4d N*5a S*5b 4b3b 5b5a 4c4d N*4c L*4a 6a5b 4a4c
+static int CONV
+usi_posi_sfen( tree_t * restrict ptree, char **lasts )
+{
+	static char usi_koma[] = " PLNSGBRK";
+
+	min_posi_t min_posi;
+	min_posi_t *p = &min_posi;
+
+	p->hand_black = 0;
+	p->hand_white = 0;
+	p->turn_to_move = 0;
+	memset( &p->asquare, empty, nsquare );
+
+	const char *token = strtok_r( NULL, str_delimiters, lasts );
+    if ( token == NULL ) { PRT("sfen no board\n"); return -1; }
+	const char *str = token;
+
+	int x = 1;
+	int y = 1;
+	int nf = 0;
+	for (;;) {
+		char c = *str++;
+//		PRT("c=%c,x=%d,y=%d\n",c,x,y);
+		if ( c==0 ) break;
+		if ( c >= '1' && c <= '9' ) {
+			int n = c - '1' + 1;
+			int i;
+			for (i=0;i<n;i++) {
+				int z = (y-1)*9+(x-1);
+				if ( x > 9 || y > 9 ) { PRT("sfen x=%d,y=%d, Err1. c=%c,%s\n",x,y,c,str); debug(); }
+				p->asquare[z] = empty;
+				x++;
+			}
+		} else if ( c == '/' ) {
+			y++;
+			x = 1;
+		} else if ( c == ' ' ) {
+			if ( y != 9 || x != 10 ) { PRT("sfen x=%d,y=%d, Err2. c=%c,%s\n",x,y,c,str); debug(); }
+			break;
+		} else if ( c == '+' ) {
+			nf = 0x08;
+		} else {
+			int k = 0;
+			int i;
+			for (i=1;i<=8;i++) {
+				if ( c == usi_koma[i] ) {
+					k = +(i + nf);
+					break;
+				} else if ( c == usi_koma[i]+32 ) {
+					k = -(i + nf);
+					break;
+				}
+			}
+			if ( i==9 ) { PRT("sfen Err. c=%c,%s\n",c,str); debug(); }
+			int z = (y-1)*9+(x-1);
+			if ( x > 9 || y > 9 ) { PRT("sfen x=%d,y=%d, Err3. c=%c,%s\n",x,y,c,str); debug(); }
+			p->asquare[z] = k;
+			x++;
+			nf = 0x00;
+		}
+	}
+
+	token = strtok_r( NULL, str_delimiters, lasts );
+	char c = *token;
+	int turn = -1;
+	if ( c=='b' ) {
+		turn = black;	// sente
+	}
+	if ( c=='w' ) {
+		turn = white;
+	}
+	if ( turn < 0 ) { PRT("sfen turn Err. %s\n",str); debug(); }
+	p->turn_to_move = turn;
+	
+	token = strtok_r( NULL, str_delimiters, lasts );
+	str = token;
+	for (;;) {
+		char c = *str++;
+		if ( c == '-' || c == 0 ) break;
+		int n = 1;
+		if ( c >= '1' && c <= '9' ) {
+			n = c - '1' + 1;
+			if ( c == '1' ) {
+				char cc = *str++;
+				if ( cc >= '0' && cc <= '9' ) {
+					int nn = cc - '0';
+					n = 10 + nn;
+				} else { PRT("sfen mo Err. %s\n",str); debug(); }
+			}
+			c = *str++;
+		}
+
+		const unsigned int hand_tbl[8] = {
+		  0,                flag_hand_pawn, flag_hand_lance,  flag_hand_knight,
+		  flag_hand_silver, flag_hand_gold, flag_hand_bishop, flag_hand_rook  };
+		int i;
+		for (i=1;i<=7;i++) {
+			if ( c == usi_koma[i] ) {
+				const unsigned int handv = hand_tbl[i];
+				p->hand_black += handv*n;
+				break;
+			} else if ( c == usi_koma[i]+32 ) {
+				const unsigned int handv = hand_tbl[i];
+				p->hand_white += handv*n;
+				break;
+			}
+		}
+		if ( i==8 ) { PRT("sfen mo Err. %s\n",str); debug(); }
+	}
+
+	token = strtok_r( NULL, str_delimiters, lasts );
+	sfen_current_move_number = atoi(token) - 1;
+	if ( sfen_current_move_number < 0 ) { PRT("sfen_current_move_number Err. %s\n",token); debug(); }
+
+	return ini_game( ptree, &min_posi, flag_history, NULL, NULL );
+}
+#endif
 
 static int CONV
 usi_posi( tree_t * restrict ptree, char **lasts )
@@ -618,25 +757,29 @@ usi_posi( tree_t * restrict ptree, char **lasts )
   AbortDifficultCommand;
     
   moves_ignore[0] = MOVE_NA;
+  sfen_current_move_number = 0;
 
+  bool sfen = false;
   token = strtok_r( NULL, str_delimiters, lasts );
-  if ( strcmp( token, "startpos" ) )
-    {
+  if ( strcmp( token, "sfen" )==0 ) {
+    sfen = true;
+    if ( usi_posi_sfen(ptree, lasts) < 0 ) return -1;
+  } else if ( strcmp( token, "startpos" )==0 ) {
+    if ( ini_game( ptree, &min_posi_no_handicap,
+		 flag_history, NULL, NULL ) < 0 ) { return -1; }
+  } else {
       str_error = str_bad_cmdline;
       return -1;
-    }
-    
-  if ( ini_game( ptree, &min_posi_no_handicap,
-		 flag_history, NULL, NULL ) < 0 ) { return -1; }
-    
+  }
+
   token = strtok_r( NULL, str_delimiters, lasts );
   if ( token == NULL ) { return 1; }
 
-  if ( strcmp( token, "moves" ) )
-    {
-      str_error = str_bad_cmdline;
-      return -1;
-    }
+  if ( strcmp( token, "moves" ) ) {	 // no moves
+    if ( sfen ) return 1;
+    str_error = str_bad_cmdline;
+    return -1;
+  }
     
   for ( ;; )  {
 

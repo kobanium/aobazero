@@ -52,12 +52,8 @@ void init_global_objects();	// Leela.cpp
 #endif
 
 #ifdef NN_PARALLEL
-//#include "../../batched_play/src/common/nnet.hpp"
-//#include "../../batched_play/src/common/nnet-ipc.hpp"
 #include "../common/nnet.hpp"
 #include "../common/nnet-ipc.hpp"
-//#include "nnet.hpp"
-//#include "nnet-ipc.hpp"
 using std::copy_n;
 
 NNetIPC *p_nnet;
@@ -162,12 +158,13 @@ void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *
 	int add_base = 0;
 	int x,y;
  	const int t = ptree->nrep + ply - 1;	// 手数。棋譜の手数+探索深さ。ply は1から始まるので1引く。
-	int flip = (t&1);	// 後手の時は全部ひっくり返す
+//	int flip = (t&1);	// 後手の時は全部ひっくり返す
+	int flip = sideToMove;	// 後手の時は全部ひっくり返す
 	int loop;
 	const int T_STEP = 8;
 	const int STANDARDIZATION = 1;
 
-	if ( sideToMove != (t&1) ) { PRT("sideToMove Err\n"); debug(); }
+//	if ( sideToMove != (t&1) ) { PRT("sideToMove Err\n"); debug(); }
 	if ( ply < 1 ) DEBUG_PRT("ply=%d Err.\n",ply);
 	
 	for (loop=0; loop<T_STEP; loop++) {
@@ -260,7 +257,7 @@ void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *
 //			set_dcnn_data( data, base+1, y,x, t);
 			float div = 1.0f;
 			if ( STANDARDIZATION ) div = 512.0f;
-			set_dcnn_data( data, base+1, y,x, (float)t/div);
+			set_dcnn_data( data, base+1, y,x, (float)(t+sfen_current_move_number)/div);
 //			set_dcnn_data( data, base+1, y,x, 0);
 		}
 		add_base = 2;
@@ -429,6 +426,10 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 					PRT("%d:idx=%5d:batch=%9f,cpu=%9f,diff=%9f, %4.2f %%\n",count,i,r0,r1,diff, per);
 				}
 			}
+			static double v_diff_sum = 0;
+			double v_diff = fabs(result.second - result_ref.second);
+			v_diff_sum += v_diff;
+			PRT("ID=%2d:v_diff_ave=%.15f, count=%d\n",nNNetID, v_diff_sum / count, count);
 			if ( ret || per_bigs ) {
 				PRT("ptree->nrep=%3d,ply=%2d,sideToMove=%d, batch_sum=%f, cpu_sum=%f,move_num=%d,per_bigs=%d,available_sum=%f\n",ptree->nrep,ply,sideToMove,r0_sum,r1_sum,move_num,per_bigs,available_sum);
 				PRT_path(ptree, sideToMove, ply);
@@ -481,7 +482,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 
 		if ( 0 ) {
 			float add = node.first;
-			if ( add > 0.98 ) add = 1.0 - add;	// only one escape king move position
+			if ( add > 0.98f ) add = 1.0f - add;	// only one escape king move position
 			err_sum += add*add;
 	    }
 	    if ( 0 && ply==1 && id < 100 ) PRT("%4d,%08x(%08x),%f\n",id,yss_m,bona_m, node.first);

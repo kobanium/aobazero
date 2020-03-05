@@ -76,7 +76,8 @@ extern unsigned char ailast_one[512];
   #define DBG_EASY
 */
 
-#if defined(CSASHOGI)
+//#if defined(CSASHOGI)
+#if defined(CSASHOGI) || (defined(_WIN32) && defined(YSS_ZERO))
 #  define NO_STDOUT
 #  if ! defined(WIN32_PIPE)
 #    define WIN32_PIPE
@@ -1456,6 +1457,7 @@ void PRT(const char *fmt, ...);
 void print_board(const tree_t * restrict ptree);
 void init_yss_zero();
 void init_state( const tree_t * restrict parent, tree_t * restrict child );
+extern int sfen_current_move_number;
 #endif
 
 #endif /* SHOGI_H */

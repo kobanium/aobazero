@@ -105,7 +105,7 @@ public:
         headroom within the native type.
     */
     static constexpr auto UNLIMITED_PLAYOUTS =
-        std::numeric_limits<int>::max() / 2;
+        (std::numeric_limits<int>::max)() / 2;
 
     UCTSearch(GameState& g, Network & network);
     int think(int color, passflag_t passflag = NORMAL);
