@@ -226,6 +226,7 @@ void NNetCUDA::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
   bn_policy->Forward(cuda_handles.cudnn, conv_policy_descriptor, conv_policy_ptr, conv_policy_ptr);
   relu->Forward(cuda_handles.cudnn, conv_policy_descriptor, conv_policy_ptr);
   conv_policy2->Forward(cuda_handles.cudnn, conv_policy_descriptor, policy_descriptor, conv_policy_ptr, policy_ptr);
+  bias_conv_policy2->Forward(cuda_handles.cudnn, policy_descriptor, policy_ptr);
   softmax->Forward(cuda_handles.cudnn, policy_descriptor, policy_ptr);
 
   // Value head
