@@ -1101,10 +1101,14 @@ select_again:
 		int i,sum = 0;
 		uint64 key  = HASH_KEY;
 //		uint64 hand = Flip(sideToMove) ? HAND_B : HAND_W;
+		const int SUM_MAX = 3;		// 過去に3回同じ局面。つまり同一局面4回
 		for (i=np-1; i>=0; i-=2) {
-			if ( ptree->rep_board_list[i] == key && ptree->rep_hand_list[i] == HAND_B ) { sum++; break; }
+			if ( ptree->rep_board_list[i] == key && ptree->rep_hand_list[i] == HAND_B ) {
+				sum++;
+				if ( sum == SUM_MAX ) break;
+			}
 		}
-		if ( sum > 0 ) {
+		if ( sum == SUM_MAX ) {
 //			PRT("sennnitite=%d,i=%d(%d),nrep=%d,ply=%d,%s\n",sum,i,np-i,ptree->nrep,ply,str_CSA_move(pc->move));
 			flag_sennitite = SENNITITE_DRAW;
 
@@ -1154,7 +1158,7 @@ select_again:
 
 #if 1
 	// 入玉宣言判定
-	if ( skip_search == 0 && now_in_check == 0 && fUsiInfo ) {
+	if ( skip_search == 0 && now_in_check == 0 ) {
 		if ( is_declare_win(ptree, sideToMove) ) {
 			win = 1;
 			skip_search = 1;
@@ -1504,6 +1508,7 @@ void send_usi_info(tree_t * restrict ptree, int sideToMove, int ply, int nodes, 
 	char *pv_str = prt_pv_from_hash(ptree, ply, sideToMove, PV_USI);
 //	char *pv_str = prt_pv_from_hash(ptree, ply, sideToMove, PV_CSA);
 	int depth = (int)(1.0+log(nodes+1.0));
+	depth = (1 + (int)strlen(pv_str)) / 5; // 2019.12.7 改造48
 	char str[TMP_BUF_LEN];
 	sprintf(str,"info depth %d score cp %d nodes %d nps %d pv %s",depth,score,nodes,nps,pv_str);
 	strcat(str,"\n");	// info depth 2 score cp 33 nodes 148 pv 7g7f 8c8d
