@@ -1,4 +1,4 @@
-// Copyright (C) 2019 Team AobaZero
+// 2019 Team AobaZero
 // This source code is in the public domain.
 // yss_prot.h
 // 関数の中で、外部で呼ばれるもののみを書いている・・・つもり '95/11/19

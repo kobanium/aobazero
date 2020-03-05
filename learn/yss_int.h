@@ -1,4 +1,4 @@
-// Copyright (C) 2019 Team AobaZero
+// 2019 Team AobaZero
 // This source code is in the public domain.
 // yss_int.h
 	 			//  ou   fu   ky   ke   gi   ki   ka   hi

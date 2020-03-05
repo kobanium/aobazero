@@ -18,8 +18,7 @@ weight_decay: 0.0002
 #gamma: 0.0001
 #power: 0.75
 # Display every 100 iterations
-#display: 100
-display: 50
+display: 2
 # snapshot intermediate results
 snapshot: 20000
 snapshot_prefix: "snapshots/"
@@ -28,7 +27,7 @@ solver_mode: GPU
 #solver_mode: CPU
 #solver_type: ADAGRAD # default = SGD=0, NESTEROV=1, ADAGRAD=2
 
-base_lr:    0.0002   # training at a learning rate of 0.01 = 1e-2
+base_lr:    0.02   # training at a learning rate of 0.01 = 1e-2
 
 lr_policy: "step" # learning rate policy: drop the learning rate in "steps"
                   # by a factor of gamma every stepsize iterations
@@ -36,7 +35,7 @@ lr_policy: "step" # learning rate policy: drop the learning rate in "steps"
 gamma: 0.5        # drop the learning rate by a factor of 10
                   # (i.e., multiply it by a factor of gamma = 0.1)
 
-#iter_size: 32    # batch_size: 128 with iter_size: 32 and batch_size: 4096 with iter_size: 1 are equivalent. except batch normalization.
+iter_size: 32
 
 stepsize:   10000000  # drop the learning rate every 100K iterations
 

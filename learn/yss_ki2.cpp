@@ -1,4 +1,4 @@
-// Copyright (C) 2019 Team AobaZero
+// 2019 Team AobaZero
 // This source code is in the public domain.
 /* Yamashita Shogi System */
 #include "yss_ext.h"     /*** load extern ***/

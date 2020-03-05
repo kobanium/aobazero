@@ -1,4 +1,4 @@
-// Copyright (C) 2019 Team AobaZero
+// 2019 Team AobaZero
 // This source code is in the public domain.
 /***************************************************************************/
 /*                    YSS 13  (Yamashita Shogi System)                     */
@@ -129,7 +129,7 @@ void shogi::initialize_yss()
 	make_unique_from_to();
 	make_move_id_c_y_x();
 
-	hyouji();
+//	hyouji();
 	PRT("size(shogi)=%d,hash=%d,int=%d,long=%d,float=%d,double=%d\n",sizeof(shogi),sizeof(HASH),sizeof(int),sizeof(long),sizeof(float),sizeof(double));
 	PRT("kb_c[][]=%d,kb_c[]=%d,kb_c[][]=%d\n",sizeof(kb_c),sizeof(kb_c[0]),sizeof(kb_c[0][0]) );
 }
@@ -992,7 +992,8 @@ int shogi::LoadCSA()
 					} else {
 						if ( (count&1)== 0 ) {
 							if ( b0==0 && b1==0 ) debug();
-							int v = atoi(str); 
+							int v = atoi(str);
+							if ( v > 0xffff ) v = 0xffff;
 							sum_visit += v;
 							unsigned short m = (((unsigned char)b0) << 8) | ((unsigned char)b1); 
 							int move_visit = (m << 16) | v;
