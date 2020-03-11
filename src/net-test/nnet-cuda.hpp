@@ -25,7 +25,6 @@ private:
   cudnnTensorDescriptor_t conv_policy_descriptor;
   cudnnTensorDescriptor_t policy_descriptor;
   cudnnTensorDescriptor_t value_descriptor;
-  cudnnOpTensorDescriptor_t op_tensor_descriptor;
 
   float *input_ptr;
   float *h1_ptr;
@@ -69,6 +68,8 @@ private:
   // Residual Blocks
   std::unique_ptr<ResBlock> res_blocks[19];
 
+  // Maximum batch size
+  uint max_batch_size;
 
 public:
 

@@ -41,7 +41,7 @@ public:
     const unsigned int data_size = number_of_filters * number_of_input_planes * filter_height * filter_width;
     const unsigned int required_memory_size = data_size * sizeof(float);
 
-    std::cerr << "Filter Size : " << required_memory_size << " bytes" << std::endl;
+    std::cerr << "Filter Size : " << required_memory_size << " bytes (" << data_size << ")" << std::endl;
 
     // Preparation for filters
     const int pad = (filter_size - 1) / 2;
@@ -132,7 +132,7 @@ public:
     const unsigned int data_size = in_size * out_size;
     const unsigned int required_memory_size = data_size * sizeof(float);
 
-    std::cerr << "Weight Size : " << required_memory_size << " bytes" << std::endl;
+    std::cerr << "Weight Size : " << required_memory_size << " bytes (" << data_size << ")" << std::endl;
 
     CheckCudaErrors(cudaMalloc((void**)&weight_data_gpu, required_memory_size));
     CheckCudaErrors(cudaMemcpy(weight_data_gpu, weight_param, required_memory_size, cudaMemcpyHostToDevice));
@@ -196,6 +196,13 @@ public:
   {
     const unsigned int required_memory_size = sizeof(float) * data_size;
 
+    float variance[data_size], mean[data_size];
+
+    for (int i = 0; i < data_size; i++) {
+      variance[i] = variance_param[i] / 999.982;
+      mean[i] = mean_param[i] / 999.982;
+    }
+
     CheckCudnnErrors(cudnnCreateTensorDescriptor(&batchnorm_descriptor));
   
     CheckCudaErrors(cudaMalloc((void**)&scale_data_gpu, required_memory_size));
@@ -205,8 +212,8 @@ public:
 
     CheckCudaErrors(cudaMemcpy(scale_data_gpu, scale_param, required_memory_size, cudaMemcpyHostToDevice));
     CheckCudaErrors(cudaMemcpy(bias_data_gpu, bias_param, required_memory_size, cudaMemcpyHostToDevice));
-    CheckCudaErrors(cudaMemcpy(mean_data_gpu, mean_param, required_memory_size, cudaMemcpyHostToDevice));
-    CheckCudaErrors(cudaMemcpy(variance_data_gpu, variance_param, required_memory_size, cudaMemcpyHostToDevice));
+    CheckCudaErrors(cudaMemcpy(mean_data_gpu, mean, required_memory_size, cudaMemcpyHostToDevice));
+    CheckCudaErrors(cudaMemcpy(variance_data_gpu, variance, required_memory_size, cudaMemcpyHostToDevice));
   }
   
   ~BatchNormalization()
@@ -361,15 +368,16 @@ public:
   {
     const float alpha = 1.0f;
     const float beta = 0.0f;
+    
     CheckCudnnErrors(cudnnSoftmaxForward(cudnn_handle,
-                                   CUDNN_SOFTMAX_ACCURATE,
-                                   CUDNN_SOFTMAX_MODE_CHANNEL,
-                                   &alpha,
-                                   tensor_descriptor,
-                                   tensor_ptr,
-                                   &beta,
-                                   tensor_descriptor,
-                                   tensor_ptr));
+                                         CUDNN_SOFTMAX_ACCURATE,
+                                         CUDNN_SOFTMAX_MODE_INSTANCE,
+                                         &alpha,
+                                         tensor_descriptor,
+                                         tensor_ptr,
+                                         &beta,
+                                         tensor_descriptor,
+                                         tensor_ptr));
   }
 };
 
@@ -413,6 +421,7 @@ public:
 class Add {
 public:
   void
+  // y = x + y
   Forward( cudnnHandle_t &cudnn_handle,
            cudnnTensorDescriptor_t &tensor_descriptor,
            float *x,
@@ -481,8 +490,8 @@ public:
     relu->Forward(cuda_handles.cudnn, res_descriptor, hidden_ptr);
     conv2->Forward(cuda_handles.cudnn, res_descriptor, res_descriptor, hidden_ptr, res_ptr);
     bn2->Forward(cuda_handles.cudnn, res_descriptor, res_ptr, res_ptr);
-    add->Forward(cuda_handles.cudnn, res_descriptor, res_ptr, output_ptr);    
-    relu->Forward(cuda_handles.cudnn, res_descriptor, output_ptr);
+    add->Forward(cuda_handles.cudnn, res_descriptor, res_ptr, input_ptr);
+    relu->Forward(cuda_handles.cudnn, res_descriptor, input_ptr);
   }
 };
 
