@@ -401,7 +401,7 @@ static void node_update(USIEngine &myself, USIEngine &opponent,
 
   if (action.is_move()) {
     if ((node.get_len_path() % 8U) == 0) record += "\n";
-    else record += ", ";
+    else record += ",";
     record += node.get_turn().to_str();
     record += action.to_str(SAux::csa); }
   node.take_action(action);
@@ -425,7 +425,7 @@ static void start_newgame(Game &game, uint nplay, const Color &turn0)
   game.record  = "";
   game.record += "N+player" + string(turn0 == SAux::black ? "0\n" : "1\n");
   game.record += "N-player" + string(turn0 == SAux::black ? "1\n" : "0\n");
-  game.record += "PI, +";
+  game.record += "PI\n+";
 
   game.nplay = nplay;
   game.turn0 = turn0;
@@ -446,7 +446,7 @@ static void start_newgame(Game &game, uint nplay, const Color &turn0)
 
       if (action.is_move()) {
 	if ((game.node.get_len_path() % 8U) == 0) game.record += "\n";
-	else game.record += ", ";
+	else game.record += ",";
 	game.record += game.node.get_turn().to_str();
 	game.record += action.to_str(SAux::csa); }
       game.node.take_action(action); } }
