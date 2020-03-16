@@ -4,32 +4,39 @@
 #include "osi.hpp"
 #include "client.hpp"
 #include "param.hpp"
-#include "pipe.hpp"
+#include "play.hpp"
 #include "option.hpp"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <exception>
+#include <fstream>
 #include <iostream>
 #include <iomanip>
 #include <map>
+#include <memory>
 #include <random>
 #include <string>
-#include <fstream>
+#include <utility>
 #include <vector>
+#include <cassert>
 #include <cinttypes>
 #include <cstdio>
 using std::atomic;
 using std::cerr;
 using std::cout;
 using std::current_exception;
+using std::deque;
 using std::endl;
 using std::exception;
 using std::exception_ptr;
 using std::fill_n;
 using std::ifstream;
+using std::ios;
 using std::map;
 using std::min;
+using std::move;
+using std::ofstream;
 using std::random_device;
 using std::rethrow_exception;
 using std::string;
@@ -45,11 +52,14 @@ using ErrAux::die;
 using uint   = unsigned int;
 using ushort = unsigned short int;
 
-constexpr uint max_sleep = 3U; // in sec
+constexpr uint max_sleep     = 3U; // in sec
+constexpr char fmt_csa_scn[] = "rec%16[^.].csa";
+constexpr char fmt_csa[]     = "rec%012" PRIi64 ".csa";
 atomic<int> flag_signal(0);
 static uint print_status, print_csa;
-static vector<int> devices;
 static time_point<system_clock> time_start;
+static FName opt_dname_csa;
+static uint opt_max_csa;
 
 static bool is_posi(uint u) { return 0 < u; }
 
@@ -68,11 +78,12 @@ static void on_terminate() {
 static void on_signal(int signum) { flag_signal = signum; }
 
 static void init() noexcept {
+  vector<string> devices;
   map<string, string> m = {{"WeightSave",    "./weight_save"},
 			   {"CmdPath",       "./autousi"},
 			   {"DirLog",        "./log"},
 			   {"DirCSA",        "./csa"},
-			   {"Device",        "-1"},
+			   {"Device",        "S-1:3:7"},
 			   {"SizeSendQueue", "64"},
 			   {"RecvTO",        "3"},
 			   {"SendTO",        "3"},
@@ -98,18 +109,19 @@ static void init() noexcept {
   uint recv_bufsiz  = Config::get<uint>  (m, "RecvBufSiz",    is_posi);
   uint send_bufsiz  = Config::get<uint>  (m, "SendBufSiz",    is_posi);
   uint max_retry    = Config::get<uint>  (m, "MaxRetry",      is_posi);
-  uint max_csa      = Config::get<uint>  (m, "MaxCSA");
+  opt_max_csa       = Config::get<uint>  (m, "MaxCSA");
   uint keep_wght    = Config::get<uint>  (m, "KeepWeight");
   uint verbose_eng  = Config::get<uint>  (m, "VerboseEngine");
   uint port         = Config::get<ushort>(m, "Port");
-  devices           = Config::getv<int>  (m, "Device");
+  devices           = Config::get_vecstr (m, "Device");
   print_status      = Config::get<uint>  (m, "PrintStatus");
   print_csa         = Config::get<uint>  (m, "PrintCSA");
+
+  opt_dname_csa.reset_fname(cstr_csa);
   Client::get().start(cstr_dwght, cstr_addr, port, recvTO, recv_bufsiz, sendTO,
 		      send_bufsiz, max_retry, size_queue, keep_wght);
   OSI::handle_signal(on_signal);
-  Pipe::get().start(cstr_cname, cstr_dlog, devices, cstr_csa, max_csa,
-		    verbose_eng);
+  PlayManager::get().start(cstr_cname, cstr_dlog, move(devices), verbose_eng);
   time_start = system_clock::now();
   cout << "self-play start" << endl; }
 
@@ -121,7 +133,7 @@ static void output() noexcept {
 
   // print moves of child id #0
   string s;
-  while (Pipe::get().get_moves_id0(s)) {
+  while (PlayManager::get().get_moves_id0(s)) {
     if (print_csa == 0) continue;
     if (print_csa_do_nl) { print_csa_do_nl = false; puts(""); }
     else if (!first) fputs(", ", stdout);
@@ -142,7 +154,7 @@ static void output() noexcept {
   static uint prev_ntot     = 0;
   static uint prev_nsend    = 0;
   static uint prev_ndiscard = 0;
-  uint ntot     = Pipe::get().get_ngen_records();
+  uint ntot     = PlayManager::get().get_ngen_records();
   uint nsend    = Client::get().get_nsend();
   uint ndiscard = Client::get().get_ndiscard();
   if (prev_ntot == ntot && prev_nsend == nsend && prev_ndiscard == ndiscard)
@@ -159,6 +171,7 @@ static void output() noexcept {
   puts("+------+-----+--------+---< Aobaz Status >------------------------+");
   puts("|  PID | Dev | Average|               Moves                       |");
   puts("+------+-----+--------+-------------------------------------------+");
+  /*
   for (uint u = 0; u < devices.size(); ++u) {
     const int BUF_SIZE = 64;
     char spid[BUF_SIZE] = "  N/A ";
@@ -172,13 +185,13 @@ static void output() noexcept {
     printf("|%s|%4d |%6.0fms|%3d:%-39s|\n",
 	   spid, devices[u],
 	   Pipe::get().get_speed_average(u),
-	   Pipe::get().get_nmove(u), buf); }
+	   Pipe::get().get_nmove(u), buf); } */
   puts("+------+-----+--------+-------------------------------------------+");
 
   printf("- Send Status: Sent %d, Lost %d, Waiting %d\n",
 	 nsend, ndiscard, ntot - nsend - ndiscard);
 
-  int64_t wght_id        = Client::get().get_wght_id();
+  int64_t wght_id        = Client::get().get_wght()->get_id();
   bool    is_downloading = Client::get().is_downloading();
   const char *buf_time   = Client::get().get_buf_wght_time();
   printf("- Recv Status: Weights' ID %" PRIi64 ", ", wght_id);
@@ -195,18 +208,47 @@ static void output() noexcept {
 	 nsend / hour, nsend / day, hour, day);
 }
 
+static void write_record(const char *prec, size_t len, const char *dname,
+			 uint max_csa) noexcept {
+  if (max_csa == 0) return;
+  assert(prec && dname);
+  FNameID fname = grab_max_file(dname, fmt_csa_scn);
+  int64_t id = fname.get_id() + 1;
+  if (static_cast<int64_t>(max_csa) < id) return;
+  fname.clear_fname();
+  fname.add_fname(dname);
+  fname.add_fmt_fname(fmt_csa, id);
+  ofstream ofs(fname.get_fname(), ios::binary | ios::trunc);
+  ofs.write(prec, len);
+  if (!ofs) die(ERR_INT("cannot write %s", fname.get_fname())); }
+
 int main() {
   OSI::prevent_multirun(FName(Param::name_autousi));
   sleep_for(seconds(random_device()() % max_sleep));
   set_terminate(on_terminate);
   
   init();
+  std::shared_ptr<const WghtFile> wght = Client::get().get_wght();
+  PlayManager::get().engine_start(wght->get_fname(), wght->get_crc64());
+
   while (!flag_signal) {
-    output();
-    Pipe::get().wait(); }
+    deque<string> recs
+      = PlayManager::get().manage_play(Client::get().has_conn());
+    for (const string &rec : recs) {
+      Client::get().add_rec(rec.c_str(), rec.size());
+      write_record(rec.c_str(), rec.size(),
+		   opt_dname_csa.get_fname(), opt_max_csa); }
+
+    //write_record(rec.c_str(), rec.size());
+    /*
+    if (wght->get_id() == Client::get().get_wght()->get_id()) continue;
+    wght = Client::get().get_wght();
+    PlayManager::get().engine_start(wght->get_fname(), wght->get_crc64());
+    */
+  }
   
   cout << "\nsignal " << flag_signal << " caught" << endl;
   Client::get().end();
-  Pipe::get().end();
+  PlayManager::get().end();
   return 0;
 }

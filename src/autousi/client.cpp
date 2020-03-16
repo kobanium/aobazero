@@ -116,9 +116,9 @@ static uint16_t receive_header(const OSI::Conn &conn, uint TO, uint bufsiz) {
   
   return bytes_to_int<uint16_t>(buf + 2); }
 
-Client::Client() noexcept : _quit(false), _has_conn(false),
-			    _downloading(false), _nsend(0), _ndiscard(0),
-			    _wght_id(-1), _ver_engine(-1) {
+Client::Client() noexcept
+: _quit(false), _has_conn(false), _downloading(false), _nsend(0), _ndiscard(0),
+  _wght_id(-1), _ver_engine(-1) {
   _buf_wght_time[0] = '\0'; }
 
 Client::~Client() noexcept {}
@@ -234,8 +234,8 @@ void Client::get_new_wght() {
     if (remove(it->get_fname()) < 0) die(ERR_CLL("remove"));
 
   _wght_id = no_wght;
-  
-  lock_guard<mutex> lock(_m);
+
+  lock_guard<mutex> lock(_m_wght);
   _wght = make_shared<const WghtFile>(fwght, _keep_wght); }
 
 void Client::reader() noexcept {
@@ -367,5 +367,5 @@ void Client::add_rec(const char *p, size_t len) noexcept {
   _pJQueue->push_free(); }
 
 shared_ptr<const WghtFile> Client::get_wght() noexcept {
-  lock_guard<mutex> lock(_m);
+  lock_guard<mutex> lock(_m_wght);
   return _wght; }

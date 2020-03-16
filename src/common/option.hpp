@@ -16,6 +16,9 @@ namespace Config {
   template<typename T>
   std::vector<T> getv(const std::map<std::string, std::string> &m,
 		      const char *p, bool (*ok)(T) = [](T){ return true; });
+
+  std::vector<std::string>
+  get_vecstr(const std::map<std::string, std::string> &m, const char *p);
 }
 
 namespace Opt {

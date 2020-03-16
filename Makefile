@@ -54,7 +54,7 @@ CPPFLAGS += -MD -MP -Isrc/common -DUSE_SSE4
 LDFLAGS  += -llzma -lpthread -lrt
 
 TARGETS         := $(addprefix bin/, aobaz autousi server playshogi crc64 extract net-test gencode ocldevs)
-AUTOUSI_BASES   := $(addprefix src/autousi/, autousi client pipe) $(addprefix src/common/, iobase option jqueue xzi err shogibase osi)
+AUTOUSI_BASES   := $(addprefix src/autousi/, autousi client play) $(addprefix src/common/, iobase option jqueue xzi err shogibase osi child nnet nnet-cpu nnet-ocl nnet-ipc opencl)
 SERVER_BASES    := $(addprefix src/server/, server listen datakeep logging) $(addprefix src/common/, iobase xzi jqueue err option shogibase osi)
 GENCODE_BASES   := src/gencode/gencode
 PLAYSHOGI_BASES := src/playshogi/playshogi $(addprefix src/common/, option err iobase xzi shogibase osi child nnet nnet-cpu nnet-ocl nnet-ipc opencl)
@@ -72,7 +72,7 @@ bin/aobaz: src/usi-engine/aobaz
 	cp $^ $@
 
 bin/autousi: $(addsuffix .o, $(AUTOUSI_BASES))
-	$(CXX) -o $@ $^ $(LDFLAGS)
+	$(CXX) -o $@ $^ $(LDFLAGS) $(LIB_BLAS) $(LIB_OpenCL)
 
 bin/server: $(addsuffix .o, $(SERVER_BASES))
 	$(CXX) -o $@ $^ $(LDFLAGS)
