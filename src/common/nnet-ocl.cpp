@@ -1146,7 +1146,7 @@ static void get_best_device(OCL::Device &device_best) noexcept {
 
 static double measure_send_global(const OCL::Queue &queue, size_t size) {
   assert(queue.ok() && 0 < size);
-  unique_ptr<uchar> data(new uchar [size]);
+  unique_ptr<uchar []> data(new uchar [size]);
   OCL::Memory mem = queue.gen_mem_hw_dr(size);
   queue.push_write(mem, size, data.get());
   queue.finish();
@@ -1185,7 +1185,7 @@ static double measure_send_pinned(const OCL::Queue &queue, size_t size) {
 /*
 static double measure_send_zcopy(const OCL::Queue &queue, size_t size) {
   assert(queue.ok() && 0 < size);
-  unique_ptr<uchar> data(new uchar [size]);
+  unique_ptr<uchar []> data(new uchar [size]);
   OCL::Event event;
   OCL::Memory mem = queue.gen_mem_map_hw_dr(size);
   sleep_for(microseconds(tune_sleep));
@@ -1327,7 +1327,7 @@ void ManageDecode::push(const OCL::Queue &queue, uint n_one) noexcept {
 
 static double measure_recv_global(const OCL::Queue &queue, size_t size) {
   assert(queue.ok() && 0 < size);
-  unique_ptr<uchar> data(new uchar [size]);
+  unique_ptr<uchar []> data(new uchar [size]);
   OCL::Memory mem = queue.gen_mem_hr_dw(size);
   queue.push_read(mem, size, data.get());
   queue.finish();
@@ -1367,7 +1367,7 @@ static double measure_recv_pinned(const OCL::Queue &queue, size_t size) {
 
 static double measure_recv_zcopy(const OCL::Queue &queue, size_t size) {
   assert(queue.ok() && 0 < size);
-  unique_ptr<uchar> data(new uchar [size]);
+  unique_ptr<uchar []> data(new uchar [size]);
   OCL::Memory mem = queue.gen_mem_map_hr_dw(size);
   OCL::Event event;
   void *ptr = queue.push_map_r(mem, size, event);
