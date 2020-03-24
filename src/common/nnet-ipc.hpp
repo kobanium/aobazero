@@ -3,14 +3,15 @@
 #pragma once
 #include "iobase.hpp"
 #include "osi.hpp"
+#include "param.hpp"
 #include <condition_variable>
 #include <mutex>
 #include <thread>
 #include <cstdint>
 
 namespace NNAux {
-  constexpr unsigned int maxsize_ipc = 256U;
-  constexpr unsigned int maxnum_nnet =  64U;
+  constexpr unsigned int maxnum_nipc = 128U;
+  constexpr unsigned int maxnum_nnet = 64U;
 }
 
 class SeqPRNService {
@@ -35,9 +36,9 @@ class NNetService {
   using uint = unsigned int;
   OSI::Semaphore _sem_service_lock;
   OSI::Semaphore _sem_service;
-  OSI::Semaphore _sem_ipc[NNAux::maxsize_ipc];
+  OSI::Semaphore _sem_ipc[NNAux::maxnum_nipc];
   OSI::MMap _mmap_service;
-  OSI::MMap _mmap_ipc[NNAux::maxsize_ipc];
+  OSI::MMap _mmap_ipc[NNAux::maxnum_nipc];
   std::thread _th_worker_push;
   std::condition_variable _cv_flush;
   std::mutex _m_flush;
@@ -48,8 +49,7 @@ class NNetService {
 
 public:
   NNetService(uint nnet_id, uint nipc, uint size_batch, uint device_id,
-	      uint use_half, const FName &fname,
-	      bool flag_dispatch = true) noexcept;
+	      uint use_half, const FName &fname) noexcept;
   ~NNetService() noexcept;
   void flush_on() noexcept;
   void flush_off() noexcept;
@@ -67,10 +67,11 @@ class NNetIPC {
   class SharedIPC *_pipc;
   int _id;
   bool _flag_dispatch;
+  int sem_wait(OSI::Semaphore &sem) noexcept;
 
 public:
-  NNetIPC() noexcept : _id(-1) {}
-  void start(uint nnet_id) noexcept;
+  NNetIPC(bool flag_dispatch = true) noexcept;
+  int start(uint nnet_id) noexcept;
   void end() noexcept;
   int get_id() const noexcept;
   float *get_input() const noexcept;

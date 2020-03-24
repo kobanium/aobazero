@@ -2,6 +2,7 @@
 // This source code is in the public domain.
 #include "child.hpp"
 #include "err.hpp"
+#include "param.hpp"
 #include <algorithm>
 #include <chrono>
 #include <iostream>
@@ -21,22 +22,20 @@ using uchar = unsigned char;
 using uint  = unsigned int;
 
 struct Status {
-  static constexpr uint maxnum_child = 512U;
   mutex m;
   condition_variable cv;
   uint num_child = 0;
   uint num_ready = 0;
-  bool is_used[maxnum_child];
-  bool is_ready[maxnum_child * 2U];
-  bool is_ready_unlock[maxnum_child * 2U];
+  bool is_used[Param::maxnum_child];
+  bool is_ready[Param::maxnum_child * 2U];
+  bool is_ready_unlock[Param::maxnum_child * 2U];
   Status() {
     num_child = 0;
     num_ready = 0;
-    fill_n(is_used,  maxnum_child, false);
-    fill_n(is_ready, maxnum_child * 2U, false); }
+    fill_n(is_used,  Param::maxnum_child, false);
+    fill_n(is_ready, Param::maxnum_child * 2U, false); }
 };
 
-constexpr uint Status::maxnum_child;
 static Status status;
 
 void Reader::worker() noexcept {
@@ -53,7 +52,7 @@ void Reader::worker() noexcept {
 	{
 	  lock_guard<mutex> lock(status.m);
 	  if (status.is_ready[_index]
-	      || status.num_ready == status.maxnum_child)
+	      || status.num_ready == Param::maxnum_child)
 	    die(ERR_INT("Internal Error"));
 
 	  _is_eof   = true;
@@ -90,7 +89,7 @@ void Reader::worker() noexcept {
 
     {    
       unique_lock<mutex> lock(status.m);
-      if (status.is_ready[_index] || status.num_ready == status.maxnum_child)
+      if (status.is_ready[_index] || status.num_ready == Param::maxnum_child)
 	die(ERR_INT("Internal Error"));
       _is_eof   = false;
       _has_line = true;
@@ -167,7 +166,7 @@ uint Child::wait(uint timeout) noexcept {
   unique_lock<mutex> lock(status.m);
   bool ret = status.cv.wait_for(lock, milliseconds(timeout),
 				[]{ return status.num_ready; });
-  copy_n(status.is_ready, status.maxnum_child * 2, status.is_ready_unlock);
+  copy_n(status.is_ready, Param::maxnum_child * 2, status.is_ready_unlock);
   return status.num_ready; }
 
 bool Child::has_line_in() const noexcept {
@@ -188,12 +187,12 @@ void Child::open(const char *path, char * const argv[]) noexcept {
 
   {
     lock_guard<mutex> lock(status.m);
-    if (status.num_child == Status::maxnum_child)
+    if (status.num_child == Param::maxnum_child)
       die(ERR_INT("Internal Error"));
   
-    for (_index = 0; _index < static_cast<int>(Status::maxnum_child); ++_index)
+    for (_index = 0; _index < static_cast<int>(Param::maxnum_child); ++_index)
       if (! status.is_used[_index]) break;
-    if (_index == static_cast<int>(Status::maxnum_child))
+    if (_index == static_cast<int>(Param::maxnum_child))
       die(ERR_INT("Internal Error"));
   
     status.num_child += 1U;

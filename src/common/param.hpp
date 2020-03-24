@@ -9,6 +9,7 @@ namespace Ver {
 
 namespace Param {
   using uint = unsigned int;
+  constexpr uint maxnum_child         = 1024U;
   constexpr uint maxlen_play_learn    = 513U;
   constexpr uint maxlen_play          = 4096U;
   // 81*81*2 + (81*7) = 13122 + 567 = 13689 * 512 = 7008768

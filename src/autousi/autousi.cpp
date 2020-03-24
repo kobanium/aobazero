@@ -200,7 +200,7 @@ static void output() noexcept {
   double hour = sec / 3600.0;
   double day  = sec /(3600.0*24.0);
   printf("- %.1f sent/hour, %.1f sent/day, "
-	 "Running for %.1f hours(%.1f days).\n\n",
+	 "Running for %.1f hours (%.1f days).\n\n",
 	 nsend / hour, nsend / day, hour, day);
 }
 

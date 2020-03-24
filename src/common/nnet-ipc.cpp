@@ -17,6 +17,7 @@
 #include <vector>
 #include <cassert>
 #include <cstdio>
+#include <cstdlib>
 using std::cerr;
 using std::condition_variable;
 using std::copy_n;
@@ -56,11 +57,10 @@ SeqPRN::SeqPRN() noexcept {
 	     sizeof(uint64_t) * Param::len_seq_prn); }
 
 struct SharedService {
-  bool flag_dispatch;
   uint id_ipc_next;
   FName fn_weights;
   uint njob;
-  struct { uint id; Type type; } jobs[NNAux::maxsize_ipc];
+  struct { uint id; Type type; } jobs[NNAux::maxnum_nipc + 16U];
 };
 
 struct SharedIPC {
@@ -106,7 +106,7 @@ public:
   void add(const float *input, uint size_nnmove, const ushort *nnmoves,
 	   uint id) noexcept {
     assert(_ubatch < _size_batch && !_do_wait && input && nnmoves
-	   && id < NNAux::maxsize_ipc);
+	   && id < NNAux::maxnum_nipc);
     copy_n(input, NNAux::size_input, &(_input[_ubatch * NNAux::size_input]));
     copy_n(nnmoves, size_nnmove, &(_nnmoves[_ubatch * SAux::maxsize_moves]));
     _sizes_nnmove[_ubatch] = size_nnmove;
@@ -119,8 +119,8 @@ public:
 			    _nnmoves.get(), _probs.get(), _values.get());
     _do_wait = true; }
 
-  void wait_ff(NNet &nnet, OSI::Semaphore sem_ipc[NNAux::maxsize_ipc],
-	       SharedIPC *pipc[NNAux::maxsize_ipc]) noexcept {
+  void wait_ff(NNet &nnet, OSI::Semaphore sem_ipc[NNAux::maxnum_nipc],
+	       SharedIPC *pipc[NNAux::maxnum_nipc]) noexcept {
     assert(_do_wait);
     nnet.wait_ff(_wait_id);
     for (uint u = 0; u < _ubatch; ++u) {
@@ -152,7 +152,7 @@ void NNetService::worker_push() noexcept {
   }
 
   SharedService *pservice = static_cast<SharedService *>(_mmap_service());
-  SharedIPC *pipc[NNAux::maxsize_ipc];
+  SharedIPC *pipc[NNAux::maxnum_nipc];
   for (uint u = 0; u < _nipc; ++u)
     pipc[u] = static_cast<SharedIPC *>(_mmap_ipc[u]());
 
@@ -171,7 +171,7 @@ void NNetService::worker_push() noexcept {
     for (uint u = 0; u <  pservice->njob; u += 1U)
       pservice->jobs[u] = pservice->jobs[u + 1U];
     _sem_service_lock.inc();
-    assert(id < _nipc || id == NNAux::maxsize_ipc);
+    assert(id < _nipc || id == NNAux::maxnum_nipc);
 
     if (type == Type::Register) {
       assert(pipc[id] && pipc[id]->nnet_id == _nnet_id && _sem_ipc[id].ok());
@@ -227,8 +227,8 @@ void NNetService::flush_on() noexcept {
   auto p = static_cast<SharedService *>(_mmap_service());
   assert(p && _sem_service.ok() && _sem_service_lock.ok());
   _sem_service_lock.dec_wait();
-  assert(p->njob <= NNAux::maxsize_ipc);
-  p->jobs[p->njob].id   = NNAux::maxsize_ipc;
+  assert(p->njob <= NNAux::maxnum_nipc);
+  p->jobs[p->njob].id   = NNAux::maxnum_nipc;
   p->jobs[p->njob].type = Type::FlushON;
   p->njob += 1U;
   _sem_service_lock.inc();
@@ -244,8 +244,8 @@ void NNetService::flush_off() noexcept {
   auto p = static_cast<SharedService *>(_mmap_service());
   assert(p && _sem_service.ok() && _sem_service_lock.ok());
   _sem_service_lock.dec_wait();
-  assert(p->njob <= NNAux::maxsize_ipc);
-  p->jobs[p->njob].id   = NNAux::maxsize_ipc;
+  assert(p->njob <= NNAux::maxnum_nipc);
+  p->jobs[p->njob].id   = NNAux::maxnum_nipc;
   p->jobs[p->njob].type = Type::FlushOFF;
   p->njob += 1U;
   _sem_service_lock.inc();
@@ -257,12 +257,12 @@ void NNetService::flush_off() noexcept {
   lock.unlock(); }
 
 NNetService::NNetService(uint nnet_id, uint nipc, uint size_batch,
-			 uint device_id, uint use_half, const FName &fname,
-			 bool flag_dispatch)
+			 uint device_id, uint use_half, const FName &fname)
 noexcept : _flag_cv_flush(false), _nnet_id(nnet_id), _nipc(nipc),
   _size_batch(size_batch), _device_id(device_id), _use_half(use_half),
   _fname(fname) {
-  assert(nnet_id < NNAux::maxnum_nnet && nipc < NNAux::maxsize_ipc);
+  if (NNAux::maxnum_nnet <= nnet_id)    die(ERR_INT("too many nnets"));
+  if (NNAux::maxnum_nipc < nipc) die(ERR_INT("too many processes"));
 
   char fn[IOAux::maxlen_path + 256U];
   sprintf(fn, "%s.%03u", Param::name_sem_lock_nnet, nnet_id);
@@ -273,7 +273,6 @@ noexcept : _flag_cv_flush(false), _nnet_id(nnet_id), _nipc(nipc),
   _mmap_service.open(fn, true, sizeof(SharedService));
   auto p = static_cast<SharedService *>(_mmap_service());
   assert(p);
-  p->flag_dispatch = flag_dispatch;
   p->id_ipc_next = 0;
   p->njob = 0;
 
@@ -296,8 +295,18 @@ NNetService::~NNetService() noexcept {
     _sem_ipc[u].close();
     _mmap_ipc[u].close(); } }
 
-void NNetIPC::start(uint nnet_id) noexcept {
-  assert(nnet_id < NNAux::maxnum_nnet);
+int NNetIPC::sem_wait(OSI::Semaphore &sem) noexcept {
+  if (_flag_dispatch) sem.dec_wait();
+  else {
+    while (sem.dec_wait_timeout(1U) < 0)
+      if (! OSI::has_parent()) return -1; }
+  return 0; }
+
+NNetIPC::NNetIPC(bool flag_dispatch) noexcept
+: _id(-1), _flag_dispatch(flag_dispatch) {}
+
+int NNetIPC::start(uint nnet_id) noexcept {
+  assert(nnet_id < NNAux::maxnum_nipc);
   char fn[IOAux::maxlen_path + 256U];
   sprintf(fn, "%s.%03u", Param::name_sem_lock_nnet, nnet_id);
   _sem_service_lock.open(fn, false, 1U);
@@ -307,11 +316,10 @@ void NNetIPC::start(uint nnet_id) noexcept {
   _mmap_service.open(fn, false, sizeof(SharedService));
 
   _pservice = static_cast<SharedService *>(_mmap_service());
-  _sem_service_lock.dec_wait();
-  _flag_dispatch = _pservice->flag_dispatch;
+  if (sem_wait(_sem_service_lock) < 0) return -1;
   _id = _pservice->id_ipc_next++;
   _sem_service_lock.inc();
-  if (NNAux::maxsize_ipc <= static_cast<uint>(_id))
+  if (NNAux::maxnum_nipc <= static_cast<uint>(_id))
     die(ERR_INT("too many processes"));
 
   sprintf(fn, "%s.%03u.%03u", Param::name_sem_nnet, nnet_id, _id);
@@ -321,14 +329,14 @@ void NNetIPC::start(uint nnet_id) noexcept {
   _pipc = static_cast<SharedIPC *>(_mmap_ipc());
   _pipc->nnet_id = nnet_id;
 
-  _sem_service_lock.dec_wait();
-  assert(_pservice->njob <= NNAux::maxsize_ipc);
+  if (sem_wait(_sem_service_lock) < 0) return -1;
+  assert(_pservice->njob <= NNAux::maxnum_nipc);
   _pservice->jobs[_pservice->njob].id   = _id;
   _pservice->jobs[_pservice->njob].type = Type::Register;
   _pservice->njob += 1U;
   _sem_service_lock.inc();
   _sem_service.inc();
-  _sem_ipc.dec_wait(); }
+  return sem_wait(_sem_ipc); }
 
 void NNetIPC::end() noexcept {
   assert(_sem_service_lock.ok() && _sem_service.ok());
@@ -360,17 +368,11 @@ int NNetIPC::submit_block(uint size_nnmove) noexcept {
   _pipc->size_nnmove = size_nnmove;
   
   assert(_sem_service_lock.ok() && _sem_service.ok());
-  _sem_service_lock.dec_wait();
-  assert(_pservice->njob <= NNAux::maxsize_ipc);
+  if (sem_wait(_sem_service_lock) < 0) return -1;
+  assert(_pservice->njob <= NNAux::maxnum_nipc);
   _pservice->jobs[_pservice->njob].id   = _id;
   _pservice->jobs[_pservice->njob].type = Type::FeedForward;
   _pservice->njob += 1U;
   _sem_service_lock.inc();
   _sem_service.inc();
-  
-  if (_flag_dispatch) _sem_ipc.dec_wait();
-  else {
-    while (_sem_ipc.dec_wait_timeout(1U) < 0)
-      if (! OSI::has_parent()) return -1; }
-  
-  return 0; }
+  return sem_wait(_sem_ipc); }

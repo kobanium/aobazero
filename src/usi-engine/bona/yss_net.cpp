@@ -93,9 +93,12 @@ void init_network()
 {
 #ifdef NN_PARALLEL
 	if ( is_process_batch() ) {
-		p_nnet    = new NNetIPC();
+		p_nnet    = new NNetIPC(false);
 		p_seq_prn = new SeqPRN();
-		p_nnet->start(nNNetServiceNumber);
+		if ( p_nnet->start(nNNetServiceNumber) == -1 ) {
+			PRT("Err. submit_block()\n"); debug();
+		}
+
 		nNNetID = p_nnet->get_id();
 		PRT("nnet.start(%d), nNNetID=%d\n",nNNetServiceNumber,nNNetID);
 //		if ( nNNetID==0 ) for (int i=0;i<7008768+10000;i++) if ( (i%10000)==0) PRT("%6d;%016" PRIx64 "\n",i, get_process_mem(i) );

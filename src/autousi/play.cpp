@@ -61,7 +61,7 @@ class Device {
   public:
     DataNNService(uint nnet_id, uint size_parallel, uint size_batch,
 		  uint id, uint use_half, const FName &fname) noexcept
-    : _nnet(nnet_id, size_parallel, size_batch, id, use_half, fname, false),
+    : _nnet(nnet_id, size_parallel, size_batch, id, use_half, fname),
       _size_batch(size_batch) {}
     void flush_on() noexcept { _nnet.flush_on(); }
   };
