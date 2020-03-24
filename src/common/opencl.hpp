@@ -1,7 +1,7 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
 #pragma once
-#if defined(USE_OPENCL)
+#if defined(USE_OPENCL_AOBA)
 #include <memory>
 #include <string>
 #include <vector>

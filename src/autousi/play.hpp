@@ -11,7 +11,7 @@
 
 class PlayManager {
   using uint = unsigned int;
-  std::queue<std::string> _moves_id0;
+  std::queue<std::string> _moves_eid0;
   std::vector<std::string> _devices_str;
   std::vector<class Device> _devices;
   std::vector<std::unique_ptr<class USIEngine>> _engines;
@@ -30,6 +30,11 @@ public:
   void engine_terminate() noexcept;
   std::deque<std::string> manage_play(bool has_conn) noexcept;
   void end() noexcept;
-  bool get_moves_id0(std::string &move) noexcept;
+  bool get_moves_eid0(std::string &move) noexcept;
+  uint get_nengine() const noexcept { return _engines.size(); }
   uint get_ngen_records() const noexcept { return _ngen_records; };
+  uint get_eid(uint u) const noexcept;
+  uint get_nmove(uint u) const noexcept;
+  int get_did(uint u) const noexcept;
+  double get_time_average(uint u) const noexcept;
 };

@@ -1,6 +1,6 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
-#if defined(USE_OPENCL)
+#if defined(USE_OPENCL_AOBA)
 #include "err.hpp"
 #include "iobase.hpp"
 #include "nnet-ocl.hpp"
@@ -1365,6 +1365,7 @@ static double measure_recv_pinned(const OCL::Queue &queue, size_t size) {
   return (static_cast<double>(count)
 	  / static_cast<double>(tune_sample_size)); }
 
+/*
 static double measure_recv_zcopy(const OCL::Queue &queue, size_t size) {
   assert(queue.ok() && 0 < size);
   unique_ptr<uchar []> data(new uchar [size]);
@@ -1389,6 +1390,7 @@ static double measure_recv_zcopy(const OCL::Queue &queue, size_t size) {
 							   - start).count()); }
   return (static_cast<double>(count)
 	  / static_cast<double>(tune_sample_size)); }
+*/
 
 constexpr char ManageRecv::global_memory[];
 constexpr char ManageRecv::pinned_memory[];
@@ -1399,17 +1401,18 @@ void ManageRecv::start(const OCL::Device &dev, const OCL::Queue &queue,
 
   double elapsed_global = DBL_MAX;
   double elapsed_pinned = DBL_MAX;
-  double elapsed_zcopy  = DBL_MAX;
+  //double elapsed_zcopy  = DBL_MAX;
   { size_t ave = read_size_ave * nbatch;
     OCL::Queue qtmp = dev.gen_queue();
     try { elapsed_global = measure_recv_global(qtmp, ave); } catch (...) {}
     try { elapsed_pinned = measure_recv_pinned(qtmp, ave); } catch (...) {}
-    try { elapsed_zcopy  = measure_recv_zcopy (qtmp, ave); } catch (...) {} }
+    //try { elapsed_zcopy  = measure_recv_zcopy (qtmp, ave); } catch (...) {}
+  }
 
-  if (elapsed_zcopy < elapsed_global && elapsed_zcopy < elapsed_pinned) {
+  /*if (elapsed_zcopy < elapsed_global && elapsed_zcopy < elapsed_pinned) {
     _time   = elapsed_zcopy;
     _method = zero_copy; }
-  else if (elapsed_pinned < elapsed_global) {
+    else*/ if (elapsed_pinned < elapsed_global) {
     _time   = elapsed_pinned;
     _method = pinned_memory; }
   else {

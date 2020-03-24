@@ -42,10 +42,10 @@ using std::rethrow_exception;
 using std::string;
 using std::set_terminate;
 using std::vector;
+using std::chrono::steady_clock;
 using std::chrono::duration_cast;
-using std::chrono::time_point;
-using std::chrono::system_clock;
 using std::chrono::seconds;
+using std::chrono::hours;
 using std::this_thread::sleep_for;
 using namespace IOAux;
 using ErrAux::die;
@@ -57,7 +57,7 @@ constexpr char fmt_csa_scn[] = "rec%16[^.].csa";
 constexpr char fmt_csa[]     = "rec%012" PRIi64 ".csa";
 atomic<int> flag_signal(0);
 static uint print_status, print_csa;
-static time_point<system_clock> time_start;
+static steady_clock::time_point time_start;
 static FName opt_dname_csa;
 static uint opt_max_csa;
 
@@ -122,18 +122,17 @@ static void init() noexcept {
 		      send_bufsiz, max_retry, size_queue, keep_wght);
   OSI::handle_signal(on_signal);
   PlayManager::get().start(cstr_cname, cstr_dlog, move(devices), verbose_eng);
-  time_start = system_clock::now();
-  cout << "self-play start" << endl; }
+  time_start = steady_clock::now(); }
 
 static void output() noexcept {
   static bool first = true;
   static bool print_csa_do_nl = false;
   static uint print_csa_num   = 0;
-  static time_point<system_clock> time_last = system_clock::now();
+  static steady_clock::time_point time_last = steady_clock::now();
 
   // print moves of child id #0
   string s;
-  while (PlayManager::get().get_moves_id0(s)) {
+  while (PlayManager::get().get_moves_eid0(s)) {
     if (print_csa == 0) continue;
     if (print_csa_do_nl) { print_csa_do_nl = false; puts(""); }
     else if (!first) fputs(", ", stdout);
@@ -148,7 +147,7 @@ static void output() noexcept {
   // print status
   if (print_status == 0) return;
   
-  time_point<system_clock> time_now = system_clock::now();
+  steady_clock::time_point time_now = steady_clock::now();
   if (time_now < time_last + seconds(print_status)) return;
   
   static uint prev_ntot     = 0;
@@ -169,23 +168,21 @@ static void output() noexcept {
   time_last       = time_now;
   puts("");
   puts("+------+-----+--------+---< Aobaz Status >------------------------+");
-  puts("|  PID | Dev | Average|               Moves                       |");
+  puts("|  ID  | Dev | Average|               Moves                       |");
   puts("+------+-----+--------+-------------------------------------------+");
-  /*
-  for (uint u = 0; u < devices.size(); ++u) {
+  for (uint u = 0; u < PlayManager::get().get_nengine(); ++u) {
     const int BUF_SIZE = 64;
     char spid[BUF_SIZE] = "  N/A ";
-    if ( ! Pipe::get().is_closed(u) )
-      snprintf(spid,BUF_SIZE,"%6d",Pipe::get().get_pid(u));
+    snprintf(spid, BUF_SIZE, "%6u", PlayManager::get().get_eid(u));
     char buf[BUF_SIZE];
     fill_n(buf, sizeof(buf), '#');
-    uint len = std::min(Pipe::get().get_nmove(u) / 5,
+    uint len = std::min(PlayManager::get().get_nmove(u) / 5,
 			static_cast<uint>(sizeof(buf)) - 1U);
     buf[len] = '\0';
     printf("|%s|%4d |%6.0fms|%3d:%-39s|\n",
-	   spid, devices[u],
-	   Pipe::get().get_speed_average(u),
-	   Pipe::get().get_nmove(u), buf); } */
+	   spid, PlayManager::get().get_did(u),
+	   PlayManager::get().get_time_average(u),
+	   PlayManager::get().get_nmove(u), buf); }
   puts("+------+-----+--------+-------------------------------------------+");
 
   printf("- Send Status: Sent %d, Lost %d, Waiting %d\n",
@@ -198,11 +195,10 @@ static void output() noexcept {
 
   if (is_downloading) puts("NOW DOWNLOADING NEW WEIGHTS\n");
   else                printf("Last Check %s\n", buf_time);
-  auto t = (system_clock::to_time_t(time_now)
-	    - system_clock::to_time_t(time_start));
-  if ( t==0 ) t = 1;
-  double hour = (double)t/3600.0;
-  double day  = (double)t/(3600.0*24);
+  auto rep = duration_cast<seconds>(time_now - time_start).count();
+  double sec  = static_cast<double>(rep) + 1e-6;
+  double hour = sec / 3600.0;
+  double day  = sec /(3600.0*24.0);
   printf("- %.1f sent/hour, %.1f sent/day, "
 	 "Running for %.1f hours(%.1f days).\n\n",
 	 nsend / hour, nsend / day, hour, day);
@@ -231,7 +227,10 @@ int main() {
   std::shared_ptr<const WghtFile> wght = Client::get().get_wght();
   PlayManager::get().engine_start(wght->get_fname(), wght->get_crc64());
 
-  while (!flag_signal) {
+  cout << "self-play start" << endl;
+  while (! flag_signal) {
+    output();
+
     deque<string> recs
       = PlayManager::get().manage_play(Client::get().has_conn());
     for (const string &rec : recs) {
@@ -239,15 +238,13 @@ int main() {
       write_record(rec.c_str(), rec.size(),
 		   opt_dname_csa.get_fname(), opt_max_csa); }
 
-    //write_record(rec.c_str(), rec.size());
-    /*
     if (wght->get_id() == Client::get().get_wght()->get_id()) continue;
     wght = Client::get().get_wght();
-    PlayManager::get().engine_start(wght->get_fname(), wght->get_crc64());
-    */
-  }
+    PlayManager::get().engine_terminate();
+    PlayManager::get().engine_start(wght->get_fname(), wght->get_crc64()); }
   
   cout << "\nsignal " << flag_signal << " caught" << endl;
+  PlayManager::get().engine_terminate();
   Client::get().end();
   PlayManager::get().end();
   return 0;

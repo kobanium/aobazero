@@ -38,7 +38,7 @@ using std::vector;
 using ErrAux::die;
 using uint = unsigned int;
 enum class Type : uint { Register, FeedForward, FlushON, FlushOFF };
-#if defined(USE_OPENCL)
+#if defined(USE_OPENCL_AOBA)
 using NNet = NNetOCL;
 #else
 using NNet = NNetCPU;
@@ -143,7 +143,7 @@ void NNetService::worker_push() noexcept {
     uint version;
     uint64_t digest;
     NNAux::wght_t wght = NNAux::read(_fname, version, digest);
-#if defined(USE_OPENCL)
+#if defined(USE_OPENCL_AOBA)
     cout << nnet.reset(_size_batch, wght, _device_id, _use_half, false, true)
 	 << std::flush;
 #else
@@ -166,8 +166,10 @@ void NNetService::worker_push() noexcept {
     _sem_service_lock.dec_wait();
     assert(0 < pservice->njob);
     pservice->njob -= 1U;
-    id   = pservice->jobs[pservice->njob].id;
-    type = pservice->jobs[pservice->njob].type;
+    id   = pservice->jobs[0].id;
+    type = pservice->jobs[0].type;
+    for (uint u = 0; u <  pservice->njob; u += 1U)
+      pservice->jobs[u] = pservice->jobs[u + 1U];
     _sem_service_lock.inc();
     assert(id < _nipc || id == NNAux::maxsize_ipc);
 

@@ -12,9 +12,11 @@
 #include "play.hpp"
 #include "shogibase.hpp"
 #include <chrono>
+#include <queue>
 #include <deque>
 #include <fstream>
 #include <memory>
+#include <mutex>
 #include <utility>
 #include <cassert>
 #include <cctype>
@@ -29,25 +31,27 @@ using std::deque;
 using std::endl;
 using std::flush;
 using std::ios;
+using std::lock_guard;
 using std::move;
+using std::mutex;
 using std::ofstream;
+using std::queue;
 using std::shared_ptr;
 using std::string;
 using std::to_string;
 using std::unique_ptr;
 using std::vector;
+using std::chrono::steady_clock;
 using std::chrono::duration_cast;
-using std::chrono::time_point;
-using std::chrono::system_clock;
 using std::chrono::milliseconds;
 using ErrAux::die;
 using namespace IOAux;
 using uint = unsigned int;
 
-constexpr double speed_update_rate1 = 0.05;
-constexpr double speed_update_rate2 = 0.005;
-constexpr uint speed_th_1to2        = 100U;
-constexpr char fmt_log[]            = "engine%03u-%03u.log";
+constexpr double time_average_rate = 0.99;
+constexpr char fmt_log[]           = "engine%03u-%03u.log";
+static mutex m_seq;
+static deque<SeqPRNService> seq_s;
 
 class Device {
   enum class Type : unsigned char { Aobaz, NNService, Bad };
@@ -57,12 +61,12 @@ class Device {
   public:
     DataNNService(uint nnet_id, uint size_parallel, uint size_batch,
 		  uint id, uint use_half, const FName &fname) noexcept
-    : _nnet(nnet_id, size_parallel, size_parallel, id, use_half, fname, false),
+    : _nnet(nnet_id, size_parallel, size_batch, id, use_half, fname, false),
       _size_batch(size_batch) {}
     void flush_on() noexcept { _nnet.flush_on(); }
   };
   unique_ptr<DataNNService> _data_nnservice;
-  int _nnet_id;
+  int _nnet_id, _device_id;
   uint _size_parallel;
   Type _type;
 
@@ -75,6 +79,9 @@ public:
     if (s.empty()) die(ERR_INT("invalid device %s", s.c_str()));
     char *endptr;
     if (s[0] == 'S' || s[0] == 's') {
+      {
+	lock_guard<mutex> lock(m_seq);
+	if (seq_s.empty()) seq_s.emplace_back(); }
       const char *token = s.c_str() + 1;
       long int device_id = strtol(token, &endptr, 10);
       if (endptr == token || *endptr != ':' || device_id < -1
@@ -92,12 +99,13 @@ public:
 	  || endptr == token || size_parallel < 1 || size_parallel == LONG_MAX)
 	die(ERR_INT("invalid device %s", s.c_str()));
       
-      bool flag_half = false;;
+      bool flag_half = false;
       if (*endptr == '\0') flag_half = false;
       else if ((*endptr == 'H' || *endptr == 'h') && endptr[1] == '\0')
 	flag_half = true;
       else die(ERR_INT("invalid device %s", s.c_str()));
-      
+
+      _device_id     = device_id;
       _nnet_id       = nnet_id;
       _type          = nnservice;
       _size_parallel = size_parallel;
@@ -109,10 +117,12 @@ public:
       _nnet_id = strtol(token, &endptr, 10);
       if (endptr == token || *endptr != '\0' || _nnet_id < -1
 	  || 65535 < _nnet_id) die(ERR_INT("invalid device %s", s.c_str()));
+      _device_id = _nnet_id;
       _type = aobaz; } }
+  int get_device_id() const noexcept { return _device_id; }
   int get_nnet_id() const noexcept { return _nnet_id; }
   char get_id_option_character() const noexcept {
-    return _type == nnservice ? 's' : 'u'; }
+    return _type == nnservice ? 'e' : 'u'; }
   uint get_size_parallel() const noexcept { return _size_parallel; }
   void flush_on() const noexcept {
     if (_type == nnservice) _data_nnservice->flush_on(); }
@@ -124,20 +134,24 @@ constexpr Device::Type Device::bad;
 class USIEngine : public Child {
   using uint = unsigned int;
   Node<Param::maxlen_play_learn> _node;
+  steady_clock::time_point _time_last;
+  double _time_average_nume, _time_average_deno, _time_average;
   FName _logname;
   ofstream _ofs;
   string _startpos, _record, _record_header, _fingerprint, _settings;
-  int _nnet_id, _version;
+  int _device_id, _nnet_id, _version;
   uint _eid, _nmove;
   bool _flag_playing;
 
 public:
-  explicit USIEngine(const FName &cname, char ch, int nnet_id, uint eid,
-		     const FNameID &wfname, uint64_t crc64, uint verbose_eng,
-		     const FName &logname) noexcept
-    : _logname(logname),
+  explicit USIEngine(const FName &cname, char ch, int device_id, int nnet_id,
+		     uint eid, const FNameID &wfname, uint64_t crc64,
+		     uint verbose_eng, const FName &logname) noexcept
+    : _time_average_nume(0.0), _time_average_deno(0.0),
+    _time_average(0.0), _logname(logname),
     _fingerprint(to_string(nnet_id) + string("-") + to_string(eid)),
-    _nnet_id(nnet_id), _version(-1), _eid(eid), _flag_playing(false) {
+    _device_id(device_id), _nnet_id(nnet_id), _version(-1), _eid(eid),
+    _flag_playing(false) {
     assert(cname.ok() && 0 < cname.get_len_fname());
     assert(wfname.ok() && 0 < wfname.get_len_fname());
     assert(isalnum(ch) && -2 < nnet_id && nnet_id < 65536);
@@ -157,14 +171,14 @@ public:
 		     nullptr, nullptr, nullptr, nullptr };
     int argc = 8;
     char opt_q[] = "-q";
+    if (!verbose_eng) argv[argc++] = opt_q;
+
     char opt_u[] = "-u";
     char opt_u_value[256];
     opt_u[1] = ch;
     sprintf(opt_u_value, "%i", nnet_id);
-    if (!verbose_eng) argv[argc++] = opt_q;
-    if (0 <= nnet_id && ch == 's') {
-      argv[argc++] = opt_u;
-      argv[argc++] = opt_u_value; }
+    argv[argc++] = opt_u;
+    argv[argc++] = opt_u_value;
     Child::open(path.get(), argv);
   
     _logname.add_fmt_fname(fmt_log, nnet_id, eid);
@@ -176,10 +190,7 @@ public:
     _record_header  = string("'w ") + to_string(wfname.get_id());
     _record_header += string(" (crc64:") + string(buf);
     _record_header += string("), autousi ") + to_string(Ver::major);
-    _record_header += string(".") + to_string(Ver::minor);
-
-    //c.time_last    = system_clock::now();
-  }
+    _record_header += string(".") + to_string(Ver::minor); }
 
   void set_version(int version) noexcept { _version = version; }
 
@@ -205,9 +216,10 @@ public:
     _startpos     = string("position startpos moves");
     engine_out("usinewgame");
     engine_out("%s", _startpos.c_str());
+    _time_last = steady_clock::now();
     engine_out("go visit"); }
 
-  string update(char *line) noexcept {
+  string update(char *line, queue<string> &moves_eid0) noexcept {
     assert(line);
     char *token, *saveptr;
     token = OSI::strtok(line, " ,", &saveptr);
@@ -229,26 +241,25 @@ public:
 		  static_cast<const char *>(_node.to_str())));
 
     if (actionPlay.is_move()) {
-    //time_point<system_clock> time_now = system_clock::now();
-    //auto rep  = duration_cast<milliseconds>(time_now - c.time_last).count();
-    //double fms = static_cast<double>(rep);
-    //if (speed_th_1to2 < ++c.speed_nmove) c.speed_rate = speed_update_rate2;
-    //c.speed_average += c.speed_rate * (fms - c.speed_average);
-    //c.time_last = time_now;
-
-      _startpos += " ";
-      _startpos += str_move_usi;
-      _record   += _node.get_turn().to_str();
-      /*
-      if (id == 0) {
+      steady_clock::time_point time_now = steady_clock::now();
+      auto rep   = duration_cast<milliseconds>(time_now - _time_last).count();
+      double dms = static_cast<double>(rep);
+      _time_last = time_now;
+      _time_average_nume = _time_average_nume * time_average_rate + dms;
+      _time_average_deno = _time_average_deno * time_average_rate + 1.0;
+      _time_average      = _time_average_nume / _time_average_deno;
+      _startpos         += " ";
+      _startpos         += str_move_usi;
+      _record           += _node.get_turn().to_str();
+      _nmove            += 1U;
+      _record           += actionPlay.to_str(SAux::csa);
+      if (_eid == 0) {
 	char buf[256];
-	sprintf(buf, " (%5.0fms)", fms);
-	string smove = node.get_turn().to_str();
+	sprintf(buf, " (%5.0fms)", _time_average);
+	string smove = _node.get_turn().to_str();
 	smove += actionPlay.to_str(SAux::csa);
 	smove += buf;
-	_moves_id0.push(std::move(smove)); } */
-      _nmove  += 1U;
-      _record += actionPlay.to_str(SAux::csa);
+	moves_eid0.push(std::move(smove)); }
     
       const char *str_count = OSI::strtok(nullptr, " ,", &saveptr);
       if (!str_count) die(ERR_INT("cannot read count (engine %s)", get_fp()));
@@ -303,20 +314,7 @@ public:
       _record += _node.get_type().to_str();
       _record += "\n";
       _flag_playing = false;
-      return move(_record);
-      /*
-	if (c.get_id() == 0) {
-	string s = "%";
-	s += c.node.get_type().to_str();
-	_moves_id0.push(s); }
-      */
-
-      //_ngen_records += 1U;
-      /*
-	Client::get().add_rec(_record.c_str(), _record.size());
-	write_record(_record.c_str(), _record.size(),
-	_dname_csa.get_fname(), _max_csa); */ }
-    // go
+      return move(_record); }
     else {
       engine_out("%s", _startpos.c_str());
       engine_out("go visit"); } }
@@ -341,8 +339,13 @@ public:
       die(ERR_CLL("write")); } }
 
   const char *get_fp() const noexcept { return _fingerprint.c_str(); }
+  
   const string &get_record() const noexcept { return _record; }
   bool is_playing() const noexcept { return _flag_playing; }
+  uint get_eid() const noexcept { return _eid; }
+  uint get_nmove() const noexcept { return _nmove; }
+  int get_did() const noexcept { return _device_id; }
+  double get_time_average() const noexcept { return _time_average; }
 };
 
 /*
@@ -396,15 +399,18 @@ void PlayManager::engine_start(const FNameID &wfname, uint64_t crc64)
   noexcept {
   assert(wfname.ok() && _devices.empty() && _engines.empty());
   int nnet_id = 0;
+  int eid     = 0;
   for (const string &s : _devices_str)
     _devices.emplace_back(s, nnet_id++, wfname);
   for (const Device &d : _devices) {
-    uint size   = d.get_size_parallel();
-    int nnet_id = d.get_nnet_id();
-    char ch     = d.get_id_option_character();
+    uint size     = d.get_size_parallel();
+    int nnet_id   = d.get_nnet_id();
+    int device_id = d.get_device_id();
+    char ch       = d.get_id_option_character();
     for (uint u = 0; u < size; ++u)
-      _engines.emplace_back(new USIEngine(_cname, ch, nnet_id, u, wfname,
-					  crc64, _verbose_eng, _logname)); }
+      _engines.emplace_back(new USIEngine(_cname, ch, device_id, nnet_id,
+					  eid++, wfname, crc64, _verbose_eng,
+					  _logname)); }
   for (auto &e : _engines) e->engine_out("usi");
 
   uint num_done = 0;
@@ -464,8 +470,30 @@ void PlayManager::engine_start(const FNameID &wfname, uint64_t crc64)
     e->start_newgame(); } }
 
 void PlayManager::engine_terminate() noexcept {
+
   for (const Device &d : _devices) d.flush_on();
-  _engines.clear();
+  for (auto &e : _engines) e->engine_out("quit");
+
+  while (!_engines.empty()) {
+    Child::wait(1000U);
+    for (auto it = _engines.begin(); it != _engines.end(); ) {
+      bool flag_err = false;
+      bool flag_in  = false;
+      if ((*it)->has_line_err()) {
+	char line[65536];
+	if ((*it)->getline_err(line, sizeof(line)) == 0) flag_err = true;
+	else (*it)->out_log(line); }
+      
+      if ((*it)->has_line_in()) {
+	char line[65536];
+	if ((*it)->getline_in(line, sizeof(line)) == 0) flag_in = true;
+	else (*it)->out_log(line); }
+      
+      if (flag_err && flag_in) {
+	(*it)->close();
+	it = _engines.erase(it); }
+      else ++it; } }
+  
   _devices.clear(); }
 
 deque<string> PlayManager::manage_play(bool has_conn) noexcept {
@@ -484,28 +512,35 @@ deque<string> PlayManager::manage_play(bool has_conn) noexcept {
       if (e->getline_in(line, sizeof(line)) == 0)
 	die(ERR_INT("An engine (%s) terminates.", e->get_fp()));
       e->out_log(line);
-      string s = e->update(line);
-      if (!s.empty()) recs.push_back(move(s)); }
+      string s = e->update(line, _moves_eid0);
+      if (!s.empty()) {
+	_ngen_records += 1U;
+	recs.push_back(move(s)); } }
 
     if (has_conn && ! e->is_playing()) e->start_newgame(); }
 
   return recs; }
 
-  /*
-  for (uint u = 0; u < _nchild; ++u) {
-      Client::get().add_rec(c.node.record.c_str(), c.node.record.size());
-      _ngen_records += 1U;
-      write_record(c.node.record.c_str(), c.node.record.size(),
-		   _dname_csa.get_fname(), _max_csa);
-      close_flush(c); } }
-  */
+void PlayManager::end() noexcept {}
 
-void PlayManager::end() noexcept {
-}
-
-bool PlayManager::get_moves_id0(string &move) noexcept {
-  if (_moves_id0.empty()) return false;
-  move.swap(_moves_id0.front());
-  _moves_id0.pop();
+bool PlayManager::get_moves_eid0(string &move) noexcept {
+  if (_moves_eid0.empty()) return false;
+  move.swap(_moves_eid0.front());
+  _moves_eid0.pop();
   return true; }
 
+uint PlayManager::get_eid(uint u) const noexcept {
+  assert(u < _engines.size());
+  return _engines[u]->get_eid(); }
+
+int PlayManager::get_did(uint u) const noexcept {
+  assert(u < _engines.size());
+  return _engines[u]->get_did(); }
+
+uint PlayManager::get_nmove(uint u) const noexcept {
+  assert(u < _engines.size());
+  return _engines[u]->get_nmove(); }
+
+double PlayManager::get_time_average(uint u) const noexcept {
+  assert(u < _engines.size());
+  return _engines[u]->get_time_average(); }

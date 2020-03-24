@@ -188,7 +188,7 @@ struct TestSet {
 };
 
 class QueueTest {
-#if defined(USE_OPENCL)
+#if defined(USE_OPENCL_AOBA)
   NNetOCL _nnet;
 #else
   NNetCPU _nnet;
@@ -261,7 +261,7 @@ public:
     NNAux::wght_t wght = NNAux::read(fname, version, digest);
     _th_worker = thread(&QueueTest::worker, this);
 
-#if defined(USE_OPENCL)
+#if defined(USE_OPENCL_AOBA)
     _nnet.reset(nbatch, wght, device_id, use_half);
 #else
     _nnet.reset(nbatch, wght);

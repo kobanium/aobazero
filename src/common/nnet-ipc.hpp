@@ -26,7 +26,7 @@ class SeqPRN {
 
 public:
   explicit SeqPRN() noexcept;
-  ~SeqPRN() noexcept {_mmap.close(); };
+  ~SeqPRN() noexcept { _mmap.close(); };
   const uint64_t *get_ptr() const noexcept {
     return static_cast<uint64_t *>(_mmap()); }
 };

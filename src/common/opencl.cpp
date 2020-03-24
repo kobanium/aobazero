@@ -1,7 +1,8 @@
-#if defined(USE_OPENCL)
+#if defined(USE_OPENCL_AOBA)
 #include "err.hpp"
 #include "opencl.hpp"
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -17,7 +18,9 @@
 #  include <CL/cl.h>
 #endif
 using uint = unsigned int;
+using std::lock_guard;
 using std::move;
+using std::mutex;
 using std::string;
 using std::stringstream;
 using std::unique_ptr;
@@ -474,6 +477,8 @@ string OCL::Platform::gen_extensions() const {
   return _impl->get_info(CL_PLATFORM_EXTENSIONS); }
 
 vector<Platform> OCL::gen_platforms() {
+  static mutex m;
+  lock_guard<mutex> lock(m);
   cl_uint num_platform;
   if (clGetPlatformIDs(0, nullptr, &num_platform) != CL_SUCCESS)
     throw ERR_INT("clGetPlatformIDs() failed.");

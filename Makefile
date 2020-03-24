@@ -1,51 +1,51 @@
 include Makefile.config
 
-ENABLE_GDBINFO ?= 0
-ifeq ($(ENABLE_GDBINFO), 1)
+ENABLE_GDBINFO_AOBA ?= 0
+ifeq ($(ENABLE_GDBINFO_AOBA), 1)
 	CXXFLAGS += -g
 	LDFLAGS  += -g
 endif
 
-ENABLE_ASSERT ?= 0
-ifeq ($(ENABLE_ASSERT), 1)
+ENABLE_ASSERT_AOBA ?= 0
+ifeq ($(ENABLE_ASSERT_AOBA), 1)
 	CPPFLAGS += -DDEBUG
 else
 	CPPFLAGS += -DNDEBUG
 endif
 
-USE_OpenMP ?= 0
-ifeq ($(USE_OpenMP), 1)
+USE_OpenMP_AOBA ?= 0
+ifeq ($(USE_OpenMP_AOBA), 1)
 	CXXFLAGS += -fopenmp
 	LDFLAGS  += -fopenmp
 endif
 
-USE_OpenCL ?= 0
-ifeq ($(USE_OpenCL), 1)
-	CPPFLAGS += -DUSE_OPENCL
+USE_OpenCL_AOBA ?= 0
+ifeq ($(USE_OpenCL_AOBA), 1)
+	CPPFLAGS += -DUSE_OPENCL_AOBA
 	TARGETS  += bin/ocldevs
 	LIB_OpenCL := -lOpenCL
 else
 	LIB_OpenCL :=
 endif
 
-BLAS ?= None
-ifeq ($(BLAS), IntelMKL)
+BLAS_AOBA ?= None
+ifeq ($(BLAS_AOBA), IntelMKL)
 	LIB_BLAS := -lmkl_rt
 	CPPFLAGS += -DUSE_MKL
-	ifdef IntelMKL_INC
-		CPPFLAGS += -I$(IntelMKL_INC)
+	ifdef IntelMKL_INC_AOBA
+		CPPFLAGS += -I$(IntelMKL_INC_AOBA)
 	endif
-	ifdef IntelMKL_LIB
-		LDFLAGS  += -L$(IntelMKL_LIB) -Wl,-rpath,$(IntelMKL_LIB)
+	ifdef IntelMKL_LIB_AOBA
+		LDFLAGS  += -L$(IntelMKL_LIB_AOBA) -Wl,-rpath,$(IntelMKL_LIB_AOBA)
 	endif
-else ifeq ($(BLAS), OpenBLAS)
+else ifeq ($(BLAS_AOBA), OpenBLAS)
 	LIB_BLAS := -lopenblas
 	CPPFLAGS += -DUSE_OPENBLAS
-	ifdef OpenBLAS_INC
-		CPPFLAGS += -I$(OpenBLAS_INC)
+	ifdef OpenBLAS_INC_AOBA
+		CPPFLAGS += -I$(OpenBLAS_INC_AOBA)
 	endif
-	ifdef OpenBLAS_LIB
-		LDFLAGS  += -L$(OpenBLAS_LIB) -Wl,-rpath,$(OpenBLAS_LIB)
+	ifdef OpenBLAS_LIB_AOBA
+		LDFLAGS  += -L$(OpenBLAS_LIB_AOBA) -Wl,-rpath,$(OpenBLAS_LIB_AOBA)
 	endif
 endif
 
