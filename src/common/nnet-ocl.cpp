@@ -2201,8 +2201,8 @@ string NNetOCL::reset(uint maxsize_batch,
   bool use_wmma = false;
   if (use_half) {
     use_wmma = test_wmma(_cl_dev);
-    std::cout << "  Wmma support:         "
-	      << (use_wmma ? "Yes" : "No") << std::endl; }
+    std::cout << "  Wmma support:         " << (use_wmma ? "Yes" : "No")
+	      << "\n"; }
 
   _queue = _cl_dev.gen_queue();
     
