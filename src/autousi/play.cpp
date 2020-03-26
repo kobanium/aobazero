@@ -130,6 +130,8 @@ public:
   uint get_size_parallel() const noexcept { return _size_parallel; }
   void flush_on() const noexcept {
     if (_type == nnservice) _data_nnservice->flush_on(); }
+  void flush_off() const noexcept {
+    if (_type == nnservice) _data_nnservice->flush_off(); }
 };
 constexpr Device::Type Device::aobaz;
 constexpr Device::Type Device::nnservice;
@@ -447,7 +449,6 @@ void PlayManager::engine_start(const FNameID &wfname, uint64_t crc64)
     e->start_newgame(); } }
 
 void PlayManager::engine_terminate() noexcept {
-
   for (const Device &d : _devices) d.flush_on();
   for (auto &e : _engines) e->engine_out("quit");
 
@@ -469,7 +470,9 @@ void PlayManager::engine_terminate() noexcept {
       if (flag_err && flag_in) {
 	(*it)->close();
 	it = _engines.erase(it); }
-      else ++it; } } }
+      else ++it; } }
+
+  for (const Device &d : _devices) d.flush_off(); }
 
 
 deque<string> PlayManager::manage_play(bool has_conn) noexcept {

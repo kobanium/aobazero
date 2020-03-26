@@ -167,9 +167,9 @@ static void output() noexcept {
   print_csa_num   = 0;
   time_last       = time_now;
   puts("");
-  puts("+------+-----+--------+---< Aobaz Status >------------------------+");
-  puts("|  ID  | Dev | Average|               Moves                       |");
-  puts("+------+-----+--------+-------------------------------------------+");
+  puts("+------+-----+--------+---< Aobaz Status >-------------------------+");
+  puts("|  ID  | Dev | Average|               Moves                        |");
+  puts("+------+-----+--------+--------------------------------------------+");
   for (uint u = 0; u < PlayManager::get().get_nengine(); ++u) {
     const int BUF_SIZE = 64;
     char spid[BUF_SIZE] = "  N/A ";
@@ -179,11 +179,11 @@ static void output() noexcept {
     uint len = std::min(PlayManager::get().get_nmove(u) / 5,
 			static_cast<uint>(sizeof(buf)) - 1U);
     buf[len] = '\0';
-    printf("|%s|%4d |%6.0fms|%3d:%-39s|\n",
+    printf("|%s|%4d |%6.0fms|%3d:%-40s|\n",
 	   spid, PlayManager::get().get_did(u),
 	   PlayManager::get().get_time_average(u),
 	   PlayManager::get().get_nmove(u), buf); }
-  puts("+------+-----+--------+-------------------------------------------+");
+  puts("+------+-----+--------+--------------------------------------------+");
 
   printf("- Send Status: Sent %d, Lost %d, Waiting %d\n",
 	 nsend, ndiscard, ntot - nsend - ndiscard);
