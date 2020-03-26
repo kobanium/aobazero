@@ -38,7 +38,7 @@ using std::unique_lock;
 using std::vector;
 using ErrAux::die;
 using uint = unsigned int;
-enum class Type : uint { Register, FeedForward, FlushON, FlushOFF };
+enum class Type : uint { Register, FeedForward, FlushON, FlushOFF, NNReset };
 #if defined(USE_OPENCL_AOBA)
 using NNet = NNetOCL;
 #else
@@ -46,8 +46,7 @@ using NNet = NNetCPU;
 #endif
 
 SeqPRNService::SeqPRNService() noexcept {
-  _mmap.open(Param::name_seq_prn, true,
-	     sizeof(uint64_t) * Param::len_seq_prn);
+  _mmap.open(Param::name_seq_prn, true, sizeof(uint64_t) * Param::len_seq_prn);
   uint64_t *p = static_cast<uint64_t *>(_mmap());
   mt19937_64 mt(7);
   for (uint u = 0; u < Param::len_seq_prn; ++u) p[u] = mt(); }
@@ -138,19 +137,7 @@ public:
 };
 
 void NNetService::worker_push() noexcept {
-  NNet nnet;
-  {
-    uint version;
-    uint64_t digest;
-    NNAux::wght_t wght = NNAux::read(_fname, version, digest);
-#if defined(USE_OPENCL_AOBA)
-    cout << nnet.reset(_size_batch, wght, _device_id, _use_half, false, true)
-	 << std::flush;
-#else
-    nnet.reset(_size_batch, wght);
-#endif
-  }
-
+  unique_ptr<NNet> pnnet;
   SharedService *pservice = static_cast<SharedService *>(_mmap_service());
   SharedIPC *pipc[NNAux::maxnum_nipc];
   for (uint u = 0; u < _nipc; ++u)
@@ -180,20 +167,50 @@ void NNetService::worker_push() noexcept {
 		<< std::endl;
       continue; }
 
+    if (type == Type::NNReset) {
+      FName fn;
+      {
+	lock_guard<mutex> lock(_m_nnreset);
+	_flag_cv_nnreset = true;
+	fn = _fname;
+      }
+      _cv_nnreset.notify_one();
+      
+      _sem_service_lock.dec_wait();
+      if (0 < pservice->njob) die(ERR_INT("INTERNAL ERROR"));
+      pservice->id_ipc_next = 0;
+      _sem_service_lock.inc();
+
+      uint version;
+      uint64_t digest;
+      NNAux::wght_t wght = NNAux::read(fn, version, digest);
+      pnnet.reset(new NNet);
+#if defined(USE_OPENCL_AOBA)
+      cout << "Tuning feed-forward engine of device "
+	   << static_cast<int>(_device_id) << " for " << fn.get_fname()
+	   << std::endl;
+      cout << pnnet->reset(_size_batch, wght, _device_id, _use_half,
+			   false, true)
+	   << std::flush;
+#else
+      pnnet->reset(_size_batch, wght);
+#endif
+      continue; }
+      
     if (type == Type::FeedForward) {
       assert(pipc[id]);
       entry1.add(pipc[id]->input, pipc[id]->size_nnmove, pipc[id]->nnmoves,
 		 id);
       if (do_flush) {
-	entry1.push_ff(nnet);
-	entry1.wait_ff(nnet, _sem_ipc, pipc);
+	entry1.push_ff(*pnnet);
+	entry1.wait_ff(*pnnet, _sem_ipc, pipc);
 	continue; }
 
       if (!entry1.is_full()) continue;
 
-      entry1.push_ff(nnet);
+      entry1.push_ff(*pnnet);
 
-      if (entry0.is_full()) entry0.wait_ff(nnet, _sem_ipc, pipc);
+      if (entry0.is_full()) entry0.wait_ff(*pnnet, _sem_ipc, pipc);
 
       entry1.swap(entry0);
       continue; }
@@ -206,9 +223,9 @@ void NNetService::worker_push() noexcept {
       _cv_flush.notify_one();
       do_flush = true;
 
-      if (!entry1.is_empty()) entry1.push_ff(nnet);
-      if (!entry0.is_empty()) entry0.wait_ff(nnet, _sem_ipc, pipc);
-      if (!entry1.is_empty()) entry1.wait_ff(nnet, _sem_ipc, pipc);
+      if (!entry1.is_empty()) entry1.push_ff(*pnnet);
+      if (!entry0.is_empty()) entry0.wait_ff(*pnnet, _sem_ipc, pipc);
+      if (!entry1.is_empty()) entry1.wait_ff(*pnnet, _sem_ipc, pipc);
       continue; }
 
     if (type == Type::FlushOFF) {
@@ -221,6 +238,25 @@ void NNetService::worker_push() noexcept {
       continue; }
 
     die(ERR_INT("INTERNAL ERROR")); } }
+
+void NNetService::nnreset(const FName &fname) noexcept {
+  assert(_mmap_service.ok() && fname.ok());
+  auto p = static_cast<SharedService *>(_mmap_service());
+  assert(p && _sem_service.ok() && _sem_service_lock.ok());
+
+  unique_lock<mutex> lock(_m_nnreset);
+  _fname = fname;
+  _sem_service_lock.dec_wait();
+  assert(p->njob <= NNAux::maxnum_nipc);
+  p->jobs[p->njob].id   = NNAux::maxnum_nipc;
+  p->jobs[p->njob].type = Type::NNReset;
+  p->njob += 1U;
+  _sem_service_lock.inc();
+  _sem_service.inc();
+
+  _cv_nnreset.wait(lock, [&]{ return _flag_cv_nnreset; });
+  _flag_cv_nnreset = false;
+  lock.unlock(); }
 
 void NNetService::flush_on() noexcept {
   assert(_mmap_service.ok());
@@ -257,12 +293,12 @@ void NNetService::flush_off() noexcept {
   lock.unlock(); }
 
 NNetService::NNetService(uint nnet_id, uint nipc, uint size_batch,
-			 uint device_id, uint use_half, const FName &fname)
-noexcept : _flag_cv_flush(false), _nnet_id(nnet_id), _nipc(nipc),
-  _size_batch(size_batch), _device_id(device_id), _use_half(use_half),
-  _fname(fname) {
-  if (NNAux::maxnum_nnet <= nnet_id)    die(ERR_INT("too many nnets"));
-  if (NNAux::maxnum_nipc < nipc) die(ERR_INT("too many processes"));
+			 uint device_id, uint use_half)
+noexcept : _flag_cv_flush(false), _flag_cv_nnreset(false), _nnet_id(nnet_id),
+		   _nipc(nipc), _size_batch(size_batch), _device_id(device_id),
+		   _use_half(use_half) {
+  if (NNAux::maxnum_nnet <= nnet_id) die(ERR_INT("too many nnets"));
+  if (NNAux::maxnum_nipc < nipc)     die(ERR_INT("too many processes"));
 
   char fn[IOAux::maxlen_path + 256U];
   sprintf(fn, "%s.%03u", Param::name_sem_lock_nnet, nnet_id);
@@ -285,6 +321,11 @@ noexcept : _flag_cv_flush(false), _nnet_id(nnet_id), _nipc(nipc),
   _th_worker_push = thread(&NNetService::worker_push, this);
   _th_worker_push.detach(); }
 
+NNetService::NNetService(uint nnet_id, uint nipc, uint size_batch,
+			 uint device_id, uint use_half, const FName &fname)
+noexcept : NNetService(nnet_id, nipc, size_batch, device_id, use_half) {
+  nnreset(fname); }
+
 NNetService::~NNetService() noexcept {
   _sem_service_lock.close();
   _sem_service.close();
@@ -296,14 +337,14 @@ NNetService::~NNetService() noexcept {
     _mmap_ipc[u].close(); } }
 
 int NNetIPC::sem_wait(OSI::Semaphore &sem) noexcept {
-  if (_flag_dispatch) sem.dec_wait();
+  if (_flag_detach) sem.dec_wait();
   else {
     while (sem.dec_wait_timeout(1U) < 0)
       if (! OSI::has_parent()) return -1; }
   return 0; }
 
-NNetIPC::NNetIPC(bool flag_dispatch) noexcept
-: _id(-1), _flag_dispatch(flag_dispatch) {}
+NNetIPC::NNetIPC(bool flag_detach) noexcept :
+_id(-1), _flag_detach(flag_detach) {}
 
 int NNetIPC::start(uint nnet_id) noexcept {
   assert(nnet_id < NNAux::maxnum_nipc);

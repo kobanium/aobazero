@@ -121,7 +121,7 @@ static void init() noexcept {
   Client::get().start(cstr_dwght, cstr_addr, port, recvTO, recv_bufsiz, sendTO,
 		      send_bufsiz, max_retry, size_queue, keep_wght);
   OSI::handle_signal(on_signal);
-  PlayManager::get().start(cstr_cname, cstr_dlog, move(devices), verbose_eng);
+  PlayManager::get().start(cstr_cname, cstr_dlog, devices, verbose_eng);
   time_start = steady_clock::now(); }
 
 static void output() noexcept {
@@ -244,6 +244,7 @@ int main() {
     PlayManager::get().engine_start(wght->get_fname(), wght->get_crc64()); }
   
   cout << "\nsignal " << flag_signal << " caught" << endl;
+
   PlayManager::get().engine_terminate();
   Client::get().end();
   PlayManager::get().end();

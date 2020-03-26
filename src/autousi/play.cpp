@@ -48,7 +48,7 @@ using ErrAux::die;
 using namespace IOAux;
 using uint = unsigned int;
 
-constexpr double time_average_rate = 0.99;
+constexpr double time_average_rate = 0.999;
 constexpr char fmt_log[]           = "engine%03u-%03u.log";
 static mutex m_seq;
 static deque<SeqPRNService> seq_s;
@@ -57,25 +57,28 @@ class Device {
   enum class Type : unsigned char { Aobaz, NNService, Bad };
   class DataNNService {
     NNetService _nnet;
-    uint _size_batch;
   public:
-    DataNNService(uint nnet_id, uint size_parallel, uint size_batch,
-		  uint id, uint use_half, const FName &fname) noexcept
-    : _nnet(nnet_id, size_parallel, size_batch, id, use_half, fname),
-      _size_batch(size_batch) {}
+    DataNNService(uint nnet_id, uint size_parallel, uint size_batch, uint id,
+		  uint use_half) noexcept
+    : _nnet(nnet_id, size_parallel, size_batch, id, use_half) {}
+    void nnreset(const FName &fname) noexcept { _nnet.nnreset(fname); }
     void flush_on() noexcept { _nnet.flush_on(); }
+    void flush_off() noexcept { _nnet.flush_off(); }
   };
   unique_ptr<DataNNService> _data_nnservice;
   int _nnet_id, _device_id;
   uint _size_parallel;
+  uint _size_batch;
+  bool _flag_half;
   Type _type;
 
 public:
   static constexpr Type aobaz     = Type::Aobaz;
   static constexpr Type nnservice = Type::NNService;
   static constexpr Type bad       = Type::Bad;
-  explicit Device(const std::string &s, int nnet_id, const FName &wfname)
-    noexcept : _nnet_id(-1), _size_parallel(1U), _type(bad) {
+  explicit Device(const string &s, int nnet_id) noexcept
+    : _nnet_id(-1), _size_parallel(1U), _flag_half(false), _type(bad) {
+
     if (s.empty()) die(ERR_INT("invalid device %s", s.c_str()));
     char *endptr;
     if (s[0] == 'S' || s[0] == 's') {
@@ -99,19 +102,18 @@ public:
 	  || endptr == token || size_parallel < 1 || size_parallel == LONG_MAX)
 	die(ERR_INT("invalid device %s", s.c_str()));
       
-      bool flag_half = false;
-      if (*endptr == '\0') flag_half = false;
+      if (*endptr == '\0') _flag_half = false;
       else if ((*endptr == 'H' || *endptr == 'h') && endptr[1] == '\0')
-	flag_half = true;
-      else die(ERR_INT("invalid device %s", s.c_str()));
+	_flag_half = true;
 
       _device_id     = device_id;
       _nnet_id       = nnet_id;
       _type          = nnservice;
       _size_parallel = size_parallel;
-      _data_nnservice.reset(new DataNNService(_nnet_id, size_parallel,
-					      size_batch, device_id, flag_half,
-					      wfname)); }
+      _size_batch    = size_batch;
+      _data_nnservice.reset(new DataNNService(_nnet_id, _size_parallel,
+					      _size_batch, _device_id,
+					      _flag_half)); }
     else {
       const char *token = s.c_str();
       _nnet_id = strtol(token, &endptr, 10);
@@ -119,6 +121,8 @@ public:
 	  || 65535 < _nnet_id) die(ERR_INT("invalid device %s", s.c_str()));
       _device_id = _nnet_id;
       _type = aobaz; } }
+  void nnreset(const FName &wfname) noexcept {
+    if (_type == nnservice) _data_nnservice->nnreset(wfname); }
   int get_device_id() const noexcept { return _device_id; }
   int get_nnet_id() const noexcept { return _nnet_id; }
   char get_id_option_character() const noexcept {
@@ -348,38 +352,6 @@ public:
   double get_time_average() const noexcept { return _time_average; }
 };
 
-/*
-static void close_flush(USIEngine &c) noexcept {
-  c.close_write();
-  while (true) {
-    const char *line = c.getline_err_block();
-    if (!line) break;
-    c.ofs << line << "\n"; }
-  
-  while (true) {
-    const char *line = c.getline_in_block();
-    if (!line) break;
-    c.ofs << line << "\n"; }
-  
-  c.ofs.close();
-  if (!c.ofs) die(ERR_INT("cannot close log"));
-  c.close(); }
-    
-static void write_record(const char *prec, size_t len, const char *dname,
-			 uint max_csa) noexcept {
-  if (max_csa == 0) return;
-  assert(prec && dname);
-  FNameID fname = grab_max_file(dname, fmt_csa_scn);
-  int64_t id = fname.get_id() + 1;
-  if (static_cast<int64_t>(max_csa) < id) return;
-  fname.clear_fname();
-  fname.add_fname(dname);
-  fname.add_fmt_fname(fmt_csa, id);
-  ofstream ofs(fname.get_fname(), ios::binary | ios::trunc);
-  ofs.write(prec, len);
-  if (!ofs) die(ERR_INT("cannot write %s", fname.get_fname())); }
-*/
-
 PlayManager & PlayManager::get() noexcept {
   static PlayManager instance;
   return instance; }
@@ -387,22 +359,27 @@ PlayManager & PlayManager::get() noexcept {
 PlayManager::PlayManager() noexcept : _ngen_records(0) {}
 PlayManager::~PlayManager() noexcept {}
 void PlayManager::start(const char *cname, const char *dlog,
-			vector<string> &&devices, uint verbose_eng) noexcept {
+			const vector<string> &devices_str, uint verbose_eng)
+  noexcept {
   assert(cname && dlog);
-  if (devices.empty()) die(ERR_INT("bad devices"));
+  if (devices_str.empty()) die(ERR_INT("bad devices"));
   _verbose_eng = verbose_eng;
-  _devices_str = move(devices);
   _cname.reset_fname(cname);
-  _logname.reset_fname(dlog); }
+  _logname.reset_fname(dlog);
+  int nnet_id = 0;
+  for (const string &s : devices_str) _devices.emplace_back(s, nnet_id++); }
+
+void PlayManager::end() noexcept { _devices.clear(); }
 
 void PlayManager::engine_start(const FNameID &wfname, uint64_t crc64)
   noexcept {
-  assert(wfname.ok() && _devices.empty() && _engines.empty());
-  int nnet_id = 0;
-  int eid     = 0;
-  for (const string &s : _devices_str)
-    _devices.emplace_back(s, nnet_id++, wfname);
-  for (const Device &d : _devices) {
+  assert(wfname.ok() && _engines.empty());
+  queue<string> e;
+  _moves_eid0.swap(e);
+
+  int eid = 0;
+  for (Device &d : _devices) {
+    d.nnreset(wfname);
     uint size     = d.get_size_parallel();
     int nnet_id   = d.get_nnet_id();
     int device_id = d.get_device_id();
@@ -492,9 +469,8 @@ void PlayManager::engine_terminate() noexcept {
       if (flag_err && flag_in) {
 	(*it)->close();
 	it = _engines.erase(it); }
-      else ++it; } }
-  
-  _devices.clear(); }
+      else ++it; } } }
+
 
 deque<string> PlayManager::manage_play(bool has_conn) noexcept {
   deque<string> recs;
@@ -520,8 +496,6 @@ deque<string> PlayManager::manage_play(bool has_conn) noexcept {
     if (has_conn && ! e->is_playing()) e->start_newgame(); }
 
   return recs; }
-
-void PlayManager::end() noexcept {}
 
 bool PlayManager::get_moves_eid0(string &move) noexcept {
   if (_moves_eid0.empty()) return false;

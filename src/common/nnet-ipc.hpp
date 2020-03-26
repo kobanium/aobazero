@@ -41,16 +41,21 @@ class NNetService {
   OSI::MMap _mmap_ipc[NNAux::maxnum_nipc];
   std::thread _th_worker_push;
   std::condition_variable _cv_flush;
+  std::condition_variable _cv_nnreset;
   std::mutex _m_flush;
-  bool _flag_cv_flush;
+  std::mutex _m_nnreset;
+  bool _flag_cv_flush, _flag_cv_nnreset;
   uint _nnet_id, _nipc, _size_batch, _device_id, _use_half;
   FName _fname;
   void worker_push() noexcept;
 
 public:
   NNetService(uint nnet_id, uint nipc, uint size_batch, uint device_id,
+	      uint use_half) noexcept;
+  NNetService(uint nnet_id, uint nipc, uint size_batch, uint device_id,
 	      uint use_half, const FName &fname) noexcept;
   ~NNetService() noexcept;
+  void nnreset(const FName &fname) noexcept;
   void flush_on() noexcept;
   void flush_off() noexcept;
 };
@@ -66,11 +71,11 @@ class NNetIPC {
   class SharedService *_pservice;
   class SharedIPC *_pipc;
   int _id;
-  bool _flag_dispatch;
+  bool _flag_detach;
   int sem_wait(OSI::Semaphore &sem) noexcept;
 
 public:
-  NNetIPC(bool flag_dispatch = true) noexcept;
+  NNetIPC(bool flag_detach = true) noexcept;
   int start(uint nnet_id) noexcept;
   void end() noexcept;
   int get_id() const noexcept;

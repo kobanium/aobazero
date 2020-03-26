@@ -226,7 +226,7 @@ public:
 				  0, &ret);
     if (ret != CL_SUCCESS) {
       if (_context) clReleaseContext(_context);
-      throw ERR_INT("clCreateContext() failed. Error Code: %d", ret); } }
+      throw ERR_INT("clReleaseContext() failed. Error Code: %d", ret); } }
   ~Queue_impl() {
     if (_queue) clReleaseCommandQueue(_queue);
     if (_context) clReleaseContext(_context); }
