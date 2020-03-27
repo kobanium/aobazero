@@ -147,17 +147,17 @@ class USIEngine : public Child {
   string _startpos, _record, _record_header, _fingerprint, _settings;
   int _device_id, _nnet_id, _version;
   uint _eid, _nmove;
-  bool _flag_playing;
+  bool _flag_playing, _flag_ready;
 
 public:
   explicit USIEngine(const FName &cname, char ch, int device_id, int nnet_id,
 		     uint eid, const FNameID &wfname, uint64_t crc64,
 		     uint verbose_eng, const FName &logname) noexcept
-    : _time_average_nume(0.0), _time_average_deno(0.0),
+    : _time_average_nume(0.0), _time_average_deno(0.0), 
     _time_average(0.0), _logname(logname),
     _fingerprint(to_string(nnet_id) + string("-") + to_string(eid)),
     _device_id(device_id), _nnet_id(nnet_id), _version(-1), _eid(eid),
-    _flag_playing(false) {
+    _flag_playing(false), _flag_ready(false) {
     assert(cname.ok() && 0 < cname.get_len_fname());
     assert(wfname.ok() && 0 < wfname.get_len_fname());
     assert(isalnum(ch) && -2 < nnet_id && nnet_id < 65536);
@@ -198,17 +198,6 @@ public:
     _record_header += string("), autousi ") + to_string(Ver::major);
     _record_header += string(".") + to_string(Ver::minor); }
 
-  void set_version(int version) noexcept { _version = version; }
-
-  void set_settings(const char *p) noexcept { _settings = string(p); }
-
-  void do_header() noexcept {
-    if (_version < 0) die(ERR_INT("No version infomation from engine %s",
-				  get_fp()));
-    _record_header += string(", usi-engine ") + to_string(_version);
-    _record_header += string("\n'") + _settings;
-    _record_header += string("\nPI\n+\n"); }
-
   void out_log(const char *p) noexcept {
     assert(_ofs && p);
     _ofs << p << endl;
@@ -229,6 +218,43 @@ public:
     assert(line);
     char *token, *saveptr;
     token = OSI::strtok(line, " ,", &saveptr);
+
+    if (!_flag_ready && strcmp(line, "usiok") == 0) {
+      _flag_ready = true;
+      if (_version < 0) die(ERR_INT("No version infomation from engine %s",
+				    get_fp()));
+      _record_header += string(", usi-engine ") + to_string(_version);
+      _record_header += string("\n'") + _settings;
+      _record_header += string("\nPI\n+\n");
+      engine_out("isready");
+      return string(""); }
+
+    if (!_flag_ready && strcmp(token, "id") == 0) {
+      token = OSI::strtok(nullptr, " ", &saveptr);
+      if (!token) die(ERR_INT("Bad message from engine (%s).", get_fp()));
+
+      if (strcmp(token, "settings") == 0) {
+	token = OSI::strtok(nullptr, "", &saveptr);
+	if (!token) die(ERR_INT("Bad message from engine (%s).", get_fp()));
+	_settings = string(token); }
+
+      else if (strcmp(token, "name") == 0) {
+	if (! OSI::strtok(nullptr, " ", &saveptr))
+	  die(ERR_INT("Bad message from engine (%s).", get_fp()));
+	  
+	token = OSI::strtok(nullptr, " ", &saveptr);
+	if (!token) die(ERR_INT("Bad message from engine (%s).", get_fp()));
+	  
+	char *endptr;
+	long int ver = strtol(token, &endptr, 10);
+	if (endptr == token || *endptr != '\0' || ver < 0 || 65535 < ver)
+	  die(ERR_INT("Bad message from engine (%s).", get_fp()));
+	_version = ver; }
+
+      return string(""); }
+
+    if (!_flag_ready) die(ERR_INT("Bad message from engine (%s).", get_fp()));
+
     if (strcmp(token, "bestmove") != 0) return string("");
     if (!_flag_playing)
       die(ERR_INT("bad usi message from engine %s", get_fp()));
@@ -348,6 +374,7 @@ public:
   
   const string &get_record() const noexcept { return _record; }
   bool is_playing() const noexcept { return _flag_playing; }
+  bool is_ready() const noexcept { return _flag_ready; }
   uint get_eid() const noexcept { return _eid; }
   uint get_nmove() const noexcept { return _nmove; }
   int get_did() const noexcept { return _device_id; }
@@ -390,63 +417,8 @@ void PlayManager::engine_start(const FNameID &wfname, uint64_t crc64)
       _engines.emplace_back(new USIEngine(_cname, ch, device_id, nnet_id,
 					  eid++, wfname, crc64, _verbose_eng,
 					  _logname)); }
-  for (auto &e : _engines) e->engine_out("usi");
+  for (auto &e : _engines) e->engine_out("usi"); }
 
-  uint num_done = 0;
-  do {
-    if (Child::wait(1000U) == 0) continue;
-      
-    for (auto &e : _engines) {
-      bool has_line = false;
-      char line[65536];
-      if (e->has_line_err()) {
-	if (e->getline_err(line, sizeof(line)) == 0)
-	  die(ERR_INT("An engine (%s) terminates.", e->get_fp()));
-	e->out_log(line); }
-      
-      if (e->has_line_in()) {
-	if (e->getline_in(line, sizeof(line)) == 0)
-	  die(ERR_INT("An engine (%s) terminates.", e->get_fp()));
-	e->out_log(line);
-	has_line = true; }
-
-      if (!has_line) continue;
-
-      if (strcmp(line, "usiok") == 0) {
-	num_done += 1U;
-	continue; }
-	
-      char *token, *saveptr, *endptr;
-      token = OSI::strtok(line, " ", &saveptr);
-      if (!token || strcmp(token, "id") != 0)
-	die(ERR_INT("Bad message from engine (%s).", e->get_fp()));
-      token = OSI::strtok(nullptr, " ", &saveptr);
-      if (!token) die(ERR_INT("Bad message from engine (%s).", e->get_fp()));
-	
-      if (strcmp(token, "settings") == 0) {
-	token = OSI::strtok(nullptr, "", &saveptr);
-	if (!token) die(ERR_INT("Bad message from engine (%s).", e->get_fp()));
-	e->set_settings(token);
-	continue; }
-
-      if (strcmp(token, "name") == 0) {
-	if (! OSI::strtok(nullptr, " ", &saveptr))
-	  die(ERR_INT("Bad message from engine (%s).", e->get_fp()));
-	  
-	token = OSI::strtok(nullptr, " ", &saveptr);
-	if (!token) die(ERR_INT("Bad message from engine (%s).", e->get_fp()));
-	  
-	long int ver = strtol(token, &endptr, 10);
-	if (endptr == token || *endptr != '\0' || ver < 0 || 65535 < ver)
-	  die(ERR_INT("Bad message from engine (%s).", e->get_fp()));
-	e->set_version(ver);
-	continue; } } }
-  while (num_done < _engines.size());
-
-  for (auto &e : _engines) {
-    e->do_header();
-    e->engine_out("isready");
-    e->start_newgame(); } }
 
 void PlayManager::engine_terminate() noexcept {
   for (const Device &d : _devices) d.flush_on();
@@ -496,7 +468,7 @@ deque<string> PlayManager::manage_play(bool has_conn) noexcept {
 	_ngen_records += 1U;
 	recs.push_back(move(s)); } }
 
-    if (has_conn && ! e->is_playing()) e->start_newgame(); }
+    if (has_conn && e->is_ready() && ! e->is_playing()) e->start_newgame(); }
 
   return recs; }
 

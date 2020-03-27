@@ -1083,7 +1083,7 @@ static SgemmParam tune_compute_matM(bool use_wmma, const OCL::Device &dev,
     if (time_max <= it->time) it = params_candi.erase(it);
     else ++it; }
 
-  uint sample_size = static_cast<uint>(100000.0 / time_best);
+  uint sample_size = max(2U, static_cast<uint>(100000.0 / time_best));
   sample_size = min(sample_size, tune_sample_size);
   if (1U < sample_size) {
     time_best = DBL_MAX;
@@ -1602,7 +1602,7 @@ void ManageSgemm::start(const OCL::Device &dev, const OCL::Queue &queue,
     if (time_max <= it->time) it = params_candi.erase(it);
     else ++it; }
   
-  uint sample_size = static_cast<uint>(100000.0 / _time);
+  uint sample_size = max(2U, static_cast<uint>(100000.0 / _time));
   sample_size = min(sample_size, tune_sample_size);
   if (1U < sample_size) {
     qtmp = dev.gen_queue();
@@ -2201,8 +2201,7 @@ string NNetOCL::reset(uint maxsize_batch,
   bool use_wmma = false;
   if (use_half) {
     use_wmma = test_wmma(_cl_dev);
-    std::cout << "  Wmma support:         " << (use_wmma ? "Yes" : "No")
-	      << "\n"; }
+    lines << "  Wmma support:         " << (use_wmma ? "Yes\n" : "No\n"); }
 
   _queue = _cl_dev.gen_queue();
     

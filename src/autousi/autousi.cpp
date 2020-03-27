@@ -120,9 +120,7 @@ static void init() noexcept {
   opt_dname_csa.reset_fname(cstr_csa);
   Client::get().start(cstr_dwght, cstr_addr, port, recvTO, recv_bufsiz, sendTO,
 		      send_bufsiz, max_retry, size_queue, keep_wght);
-  OSI::handle_signal(on_signal);
-  PlayManager::get().start(cstr_cname, cstr_dlog, devices, verbose_eng);
-  time_start = steady_clock::now(); }
+  PlayManager::get().start(cstr_cname, cstr_dlog, devices, verbose_eng); }
 
 static void output() noexcept {
   static bool first = true;
@@ -222,12 +220,13 @@ int main() {
   OSI::prevent_multirun(FName(Param::name_autousi));
   sleep_for(seconds(random_device()() % max_sleep));
   set_terminate(on_terminate);
-  
   init();
   std::shared_ptr<const WghtFile> wght = Client::get().get_wght();
+  OSI::handle_signal(on_signal);
+  time_start = steady_clock::now();
   PlayManager::get().engine_start(wght->get_fname(), wght->get_crc64());
 
-  cout << "self-play start" << endl;
+  cout << "self-play started" << endl;
   while (! flag_signal) {
     output();
 
