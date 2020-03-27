@@ -171,15 +171,14 @@ void NNetService::worker_push() noexcept {
       FName fn;
       {
 	lock_guard<mutex> lock(_m_nnreset);
+	_sem_service_lock.dec_wait();
+	pservice->id_ipc_next = 0;
+	_sem_service_lock.inc();
 	_flag_cv_nnreset = true;
 	fn = _fname;
       }
       _cv_nnreset.notify_one();
       
-      _sem_service_lock.dec_wait();
-      pservice->id_ipc_next = 0;
-      _sem_service_lock.inc();
-
       uint version;
       uint64_t digest;
       NNAux::wght_t wght = NNAux::read(fn, version, digest);
