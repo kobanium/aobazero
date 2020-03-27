@@ -177,7 +177,6 @@ void NNetService::worker_push() noexcept {
       _cv_nnreset.notify_one();
       
       _sem_service_lock.dec_wait();
-      if (0 < pservice->njob) die(ERR_INT("INTERNAL ERROR"));
       pservice->id_ipc_next = 0;
       _sem_service_lock.inc();
 
