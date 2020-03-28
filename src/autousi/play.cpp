@@ -347,9 +347,10 @@ public:
       _record += "\n";
       _flag_playing = false;
       return move(_record); }
-    else {
-      engine_out("%s", _startpos.c_str());
-      engine_out("go visit"); } }
+
+    engine_out("%s", _startpos.c_str());
+    engine_out("go visit");
+    return string(""); }
 
   void engine_out(const char *fmt, ...) noexcept {
     assert(_ofs && Child::ok() && ! Child::is_closed() && fmt);
