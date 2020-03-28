@@ -22,26 +22,15 @@ namespace NNAux {
 class ManageSend {
   using uchar = unsigned char;
   using uint  = unsigned int;
-  static constexpr char global_memory[] = "Global Memory";
-  static constexpr char pinned_memory[] = "Pinned Memory";
-  static constexpr char zero_copy[]     = "Zero Copy";
   double _time;
-  OCL::Memory _mem_pin[NNAux::nslot], _mem_work;
+  OCL::Memory _mem_work;
   OCL::Event _event;
-  const char *_method;
-  void *_ptr_map[NNAux::nslot];
-  uint _nbatch;
 
 public:
-  ManageSend() noexcept : _method(nullptr) {}
-  void start(const OCL::Device &dev, const OCL::Queue &queue,
-	     uint maxsize_batch) noexcept;
-  void push(const OCL::Queue &queue, const void *p, size_t size, uint uslot)
-    noexcept;
-  void end(const OCL::Queue &queue) noexcept;
-  const OCL::Memory &get_work() const noexcept {
-    assert(_method); return _mem_work; }
-  std::string gen_info() const noexcept;
+  void start(const OCL::Queue &queue, uint maxsize_batch) noexcept;
+  void push(const OCL::Queue &queue, const void *p, size_t size)
+    const noexcept;
+  const OCL::Memory &get_work() const noexcept { return _mem_work; }
 };
 
 class ManageDecode {
@@ -60,30 +49,16 @@ public:
 };
 
 class ManageRecv {
-  using uchar = unsigned char;
-  using uint  = unsigned int;
-  static constexpr char global_memory[] = "Global Memory";
-  static constexpr char pinned_memory[] = "Pinned Memory";
-  static constexpr char zero_copy[]     = "Zero Copy";
-  double _time;
-  const char *_method;
+  using uint = unsigned int;
   OCL::Memory _mem;
-  OCL::Memory _mem_pin[NNAux::nslot];
   OCL::Event _event[NNAux::nslot];
-  void *_ptr_map[NNAux::nslot];
-  void *_ptr_out[NNAux::nslot];
-  size_t _size[NNAux::nslot];
 
 public:
-  ManageRecv() noexcept : _method(nullptr) {}
-  void start(const OCL::Device &dev, const OCL::Queue &queue, size_t size_max,
-	     uint nbatch) noexcept;
-  void push(const OCL::Queue &queue, void *p, size_t size, uint uslot)
-    noexcept;
-  void wait(const OCL::Queue &queue, uint uslot) noexcept;
-  void end(const OCL::Queue &queue) noexcept;
-  const OCL::Memory &get() const noexcept { assert(_method); return _mem; }
-  std::string gen_info() const noexcept;
+  void start(const OCL::Queue &queue, size_t size_max, uint nbatch) noexcept;
+  void push(const OCL::Queue &queue, void *p, size_t size,
+	    uint uslot) noexcept;
+  void wait(uint uslot) const noexcept;
+  const OCL::Memory &get() const noexcept { return _mem; }
 };
 
 struct SgemmParam {
@@ -298,7 +273,6 @@ class NNetOCL {
     noexcept;
 
 public:
-  ~NNetOCL() noexcept;
   std::string reset(uint maxsize_batch,
 		    const std::vector<std::pair<uint, row_t>> &wght,
 		    int device_id, bool use_half = true, bool flag_out = true,

@@ -60,8 +60,7 @@ static_assert(sizeof(float) == sizeof(ushort) * 2U,
 	      "sizeof(float) == sizeof(ushort) * 2U");
 
 constexpr char msg_bad_wght_dim[] = "bad weight dimension";
-constexpr uint tune_sample_size   = 128U;
-constexpr uint tune_sleep         = 1000U; // usec
+constexpr uint tune_sample_size   = 256U;
 constexpr uint size_wrap_wmma     = 32U;
 constexpr uint len_kernel         = 3U;
 constexpr uint size_kernel        = len_kernel * len_kernel;
@@ -1144,145 +1143,16 @@ static void get_best_device(OCL::Device &device_best) noexcept {
 	device_best = move(device); }
       id += 1U; } } }
 
-static double measure_send_global(const OCL::Queue &queue, size_t size) {
-  assert(queue.ok() && 0 < size);
-  unique_ptr<uchar []> data(new uchar [size]);
-  OCL::Memory mem = queue.gen_mem_hw_dr(size);
-  queue.push_write(mem, size, data.get());
-  queue.finish();
-  uint count = 0;
-  for (uint usample = 0; usample < tune_sample_size; ++usample) {
-    sleep_for(microseconds(tune_sleep));
-    steady_clock::time_point start = steady_clock::now();
-    queue.push_write(mem, size, data.get());
-    queue.finish();
-    steady_clock::time_point end = steady_clock::now();
-    count += static_cast<uint>(duration_cast<microseconds>(end
-							   - start).count()); }
-  return (static_cast<double>(count)
-	  / static_cast<double>(tune_sample_size)); }
+void ManageSend::start(const OCL::Queue &queue, uint maxsize_batch) noexcept {
+  assert(queue.ok() && 0 < maxsize_batch);
+  size_t size_max = (maxsize_batch * NNAux::nch_input * NNAux::size_plane
+		     * sizeof(float));
+  _mem_work = queue.gen_mem_hw_dr(size_max); }
 
-static double measure_send_pinned(const OCL::Queue &queue, size_t size) {
-  assert(queue.ok() && 0 < size);
-  OCL::Memory mem_a = queue.gen_mem_hw_dr(size);
-  OCL::Memory mem_b = queue.gen_mem_map_hw_dr(size);
-  void *ptr = queue.push_map_w(mem_b, size);
-  queue.push_write(mem_a, size, ptr);
-  queue.finish();
-  uint count = 0;
-  for (uint usample = 0; usample < tune_sample_size; ++usample) {
-    sleep_for(microseconds(tune_sleep));
-    steady_clock::time_point start = steady_clock::now();
-    queue.push_write(mem_a, size, ptr);
-    queue.finish();
-    steady_clock::time_point end = steady_clock::now();
-    count += static_cast<uint>(duration_cast<microseconds>(end
-							   - start).count()); }
-  queue.push_unmap(mem_b, ptr);
-  queue.finish();
-  return (static_cast<double>(count)
-	  / static_cast<double>(tune_sample_size)); }
-/*
-static double measure_send_zcopy(const OCL::Queue &queue, size_t size) {
-  assert(queue.ok() && 0 < size);
-  unique_ptr<uchar []> data(new uchar [size]);
-  OCL::Event event;
-  OCL::Memory mem = queue.gen_mem_map_hw_dr(size);
-  sleep_for(microseconds(tune_sleep));
-  void *ptr = queue.push_map_w(mem, size, event);
-  event.wait();
-  copy_n(data.get(), size, static_cast<uchar *>(ptr));
-  queue.push_unmap(mem, ptr);
-  queue.finish();
-  uint count = 0;
-  for (uint usample = 0; usample < tune_sample_size; ++usample) {
-    sleep_for(microseconds(tune_sleep));
-    steady_clock::time_point start = steady_clock::now();
-    ptr = queue.push_map_w(mem, size, event);
-    event.wait();
-    copy_n(data.get(), size, static_cast<uchar *>(ptr));
-    queue.push_unmap(mem, ptr);
-    queue.finish();
-    steady_clock::time_point end = steady_clock::now();
-    count += static_cast<uint>(duration_cast<microseconds>(end
-							   - start).count()); }
-  return (static_cast<double>(count)
-	  / static_cast<double>(tune_sample_size)); }
-*/
-constexpr char ManageSend::global_memory[];
-constexpr char ManageSend::pinned_memory[];
-constexpr char ManageSend::zero_copy[];
-void ManageSend::start(const OCL::Device &dev, const OCL::Queue &queue,
-		       uint maxsize_batch) noexcept {
-  assert(dev.ok() && queue.ok() && 0 < maxsize_batch);
-  _nbatch = maxsize_batch;
-  size_t size_max       = (_nbatch * NNAux::nch_input * NNAux::size_plane 
-			   * sizeof(float));
-  double elapsed_global = DBL_MAX;
-  double elapsed_pinned = DBL_MAX;
-  //double elapsed_zcopy  = DBL_MAX;
-  { size_t ave = send_size_ave * _nbatch;
-    OCL::Queue qtmp = dev.gen_queue();
-    try { elapsed_global = measure_send_global(qtmp, ave); } catch (...) {}
-    try { elapsed_pinned = measure_send_pinned(qtmp, ave); } catch (...) {}
-    /*try { elapsed_zcopy  = measure_send_zcopy (qtmp, ave); } catch (...) {}*/
-  }
-
-  /*if (elapsed_zcopy < elapsed_global && elapsed_zcopy < elapsed_pinned) {
-    _time   = elapsed_zcopy;
-    _method = zero_copy; }
-    else*/
-  if (elapsed_pinned < elapsed_global) {
-    _time   = elapsed_pinned;
-    _method = pinned_memory; }
-  else {
-    _time   = elapsed_global;
-    _method = global_memory; }
-  if (_time == DBL_MAX) die(ERR_INT("ManageSend() failed."));
-
-  //_time   = elapsed_global;
-  //_method = global_memory;
-
-  //_time   = elapsed_pinned;
-  //_method = pinned_memory;
-
-  //_time   = elapsed_zcopy;
-  //_method = zero_copy;
-
-  if (_method == pinned_memory) {
-    _mem_work = queue.gen_mem_hw_dr(size_max);
-    for (uint u = 0; u < NNAux::nslot; ++u) {
-      _mem_pin[u] = queue.gen_mem_map_hw_dr(size_max);
-      _ptr_map[u] = queue.push_map_w(_mem_pin[u], size_max); } }
-  else if (_method == zero_copy)
-    _mem_work = queue.gen_mem_map_hw_dr(size_max);
-  else _mem_work = queue.gen_mem_hw_dr(size_max); }
-
-void ManageSend::end(const OCL::Queue &queue) noexcept {
-  assert(_method && queue.ok());
-  if (_method == pinned_memory) {
-    for (uint u = 0; u < NNAux::nslot; ++u)
-      queue.push_unmap(_mem_pin[u], _ptr_map[u]);
-    queue.finish(); } }
-
-void ManageSend::push(const OCL::Queue &queue, const void *p, size_t size,
-		      uint uslot) noexcept {
-  assert(_method && queue.ok() && p && 0 < size);
-
-  if (_method == global_memory) queue.push_write(_mem_work, size, p);
-  else if (_method == pinned_memory) {
-    memcpy(_ptr_map[uslot], p, size);
-    queue.push_write(_mem_work, size, _ptr_map[uslot]); }
-  else {
-    _ptr_map[uslot] = queue.push_map_w(_mem_work, size, _event);
-    _event.wait();
-    memcpy(_ptr_map[uslot], p, size);
-    queue.push_unmap(_mem_work, _ptr_map[uslot]); } }
-
-string ManageSend::gen_info() const noexcept {
-  string s(_method);
-  s += " (" + to_string(static_cast<uint>(_time)) + "us)";
-  return s; }
+void ManageSend::push(const OCL::Queue &queue, const void *p, size_t size)
+  const noexcept {
+  assert(queue.ok() && p && 0 < size);
+  queue.push_write(_mem_work, size, p); }
 
 void ManageDecode::start(const OCL::Queue &queue, const OCL::Memory &mem_in,
 			 const OCL::Memory &mem_out, uint index_block,
@@ -1325,155 +1195,18 @@ void ManageDecode::push(const OCL::Queue &queue, uint n_one) noexcept {
   _one_size_g[0] = n_one;
   queue.push_ndrange_kernel(_ker_set_one, 3, _one_size_g, _one_size_l); }
 
-static double measure_recv_global(const OCL::Queue &queue, size_t size) {
-  assert(queue.ok() && 0 < size);
-  unique_ptr<uchar []> data(new uchar [size]);
-  OCL::Memory mem = queue.gen_mem_hr_dw(size);
-  queue.push_read(mem, size, data.get());
-  queue.finish();
-  uint count = 0;
-  for (uint usample = 0; usample < tune_sample_size; ++usample) {
-    sleep_for(microseconds(tune_sleep));
-    steady_clock::time_point start = steady_clock::now();
-    queue.push_read(mem, size, data.get());
-    queue.finish();
-    steady_clock::time_point end = steady_clock::now();
-    count += static_cast<uint>(duration_cast<microseconds>(end
-							   - start).count()); }
-  return (static_cast<double>(count)
-	  / static_cast<double>(tune_sample_size)); }
-
-static double measure_recv_pinned(const OCL::Queue &queue, size_t size) {
-  assert(queue.ok() && 0 < size);
-  OCL::Memory mem     = queue.gen_mem_hr_dw(size);
-  OCL::Memory mem_pin = queue.gen_mem_map_hr_dw(size);
-  OCL::Event event;
-  void *ptr = queue.push_map_r(mem_pin, size);
-  queue.push_read(mem, size, ptr);
-  queue.finish();
-  uint count = 0;
-  for (uint usample = 0; usample < tune_sample_size; ++usample) {
-    sleep_for(microseconds(tune_sleep));
-    steady_clock::time_point start = steady_clock::now();
-    queue.push_read(mem, size, ptr);
-    queue.finish();
-    steady_clock::time_point end = steady_clock::now();
-    count += static_cast<uint>(duration_cast<microseconds>(end
-							   - start).count()); }
-  queue.push_unmap(mem_pin, ptr);
-  queue.finish();
-  return (static_cast<double>(count)
-	  / static_cast<double>(tune_sample_size)); }
-
-/*
-static double measure_recv_zcopy(const OCL::Queue &queue, size_t size) {
-  assert(queue.ok() && 0 < size);
-  unique_ptr<uchar []> data(new uchar [size]);
-  OCL::Memory mem = queue.gen_mem_map_hr_dw(size);
-  OCL::Event event;
-  void *ptr = queue.push_map_r(mem, size, event);
-  event.wait();
-  copy_n(static_cast<uchar *>(ptr), size, data.get());
-  queue.push_unmap(mem, ptr, event);
-  event.wait();
-  uint count = 0;
-  for (uint usample = 0; usample < tune_sample_size; ++usample) {
-    sleep_for(microseconds(tune_sleep));
-    steady_clock::time_point start = steady_clock::now();
-    ptr = queue.push_map_r(mem, size, event);
-    event.wait();
-    copy_n(static_cast<uchar *>(ptr), size, data.get());
-    queue.push_unmap(mem, ptr, event);
-    event.wait();
-    steady_clock::time_point end = steady_clock::now();
-    count += static_cast<uint>(duration_cast<microseconds>(end
-							   - start).count()); }
-  return (static_cast<double>(count)
-	  / static_cast<double>(tune_sample_size)); }
-*/
-
-constexpr char ManageRecv::global_memory[];
-constexpr char ManageRecv::pinned_memory[];
-constexpr char ManageRecv::zero_copy[];
-void ManageRecv::start(const OCL::Device &dev, const OCL::Queue &queue,
-		       size_t size_max, uint nbatch) noexcept {
-  assert(dev.ok() && queue.ok() && 0 < size_max);
-
-  double elapsed_global = DBL_MAX;
-  double elapsed_pinned = DBL_MAX;
-  //double elapsed_zcopy  = DBL_MAX;
-  { size_t ave = read_size_ave * nbatch;
-    OCL::Queue qtmp = dev.gen_queue();
-    try { elapsed_global = measure_recv_global(qtmp, ave); } catch (...) {}
-    try { elapsed_pinned = measure_recv_pinned(qtmp, ave); } catch (...) {}
-    //try { elapsed_zcopy  = measure_recv_zcopy (qtmp, ave); } catch (...) {}
-  }
-
-  /*if (elapsed_zcopy < elapsed_global && elapsed_zcopy < elapsed_pinned) {
-    _time   = elapsed_zcopy;
-    _method = zero_copy; }
-    else*/ if (elapsed_pinned < elapsed_global) {
-    _time   = elapsed_pinned;
-    _method = pinned_memory; }
-  else {
-    _time   = elapsed_global;
-    _method = global_memory; }
-  if (_time == DBL_MAX) die(ERR_INT("ManageRecv() failed."));
-
-  //_time   = elapsed_global;
-  //_method = global_memory;
-
-  //_time   = elapsed_pinned;
-  //_method = pinned_memory;
-
-  //_time   = elapsed_zcopy;
-  //_method = zero_copy;
-
-  if (_method == pinned_memory) {
-    _mem = queue.gen_mem_hr_dw(size_max * nbatch);
-    for (uint u = 0; u < NNAux::nslot; ++u) {
-      _mem_pin[u] = queue.gen_mem_map_hr_dw(size_max * nbatch);
-      _ptr_map[u] = queue.push_map_r(_mem_pin[u], size_max * nbatch); } }
-  else if (_method == zero_copy)
-    _mem = queue.gen_mem_map_hr_dw(size_max * nbatch);
-  else _mem = queue.gen_mem_hr_dw(size_max * nbatch); }
-
-void ManageRecv::end(const OCL::Queue &queue) noexcept {
-  assert(_method && queue.ok());
-  if (_method != pinned_memory) return;
-  for (uint u = 0; u < NNAux::nslot; ++u)
-    queue.push_unmap(_mem_pin[u], _ptr_map[u]);
-  queue.finish(); }
+void ManageRecv::start(const OCL::Queue &queue, size_t size_max, uint nbatch)
+  noexcept {
+  assert(queue.ok() && 0 < size_max);
+  _mem = queue.gen_mem_hr_dw(size_max * nbatch); }
 
 void ManageRecv::push(const OCL::Queue &queue, void *p, size_t size,
 		      uint uslot) noexcept {
-  assert(_method && queue.ok() && p && 0 < size && uslot < NNAux::nslot);
-  if (_method == global_memory) queue.push_read(_mem, size, p, _event[uslot]);
-  else if (_method == pinned_memory) {
-    queue.push_read(_mem, size, _ptr_map[uslot], _event[uslot]);
-    _ptr_out[uslot] = p;
-    _size[uslot]    = size; }
-  else {
-    _ptr_map[uslot] = queue.push_map_r(_mem, size, _event[uslot]);
-    _ptr_out[uslot] = p;
-    _size[uslot]    = size; } }
+  assert(queue.ok() && p && 0 < size && uslot < NNAux::nslot);
+  queue.push_read(_mem, size, p, _event[uslot]); }
 
-void ManageRecv::wait(const OCL::Queue &queue, uint uslot)
-  noexcept {
-  assert(queue.ok() && uslot < NNAux::nslot);
-  if (_method == global_memory) _event[uslot].wait();
-  else if (_method == pinned_memory) {
-    _event[uslot].wait();
-    memcpy(_ptr_out[uslot], _ptr_map[uslot], _size[uslot]); }
-  else {
-    _event[uslot].wait();
-    memcpy(_ptr_out[uslot], _ptr_map[uslot], _size[uslot]);
-    queue.push_unmap(_mem, _ptr_map[uslot]); } }
-
-string ManageRecv::gen_info() const noexcept {
-  string s(_method);
-  s += " (" + to_string(static_cast<uint>(_time)) + "us)";
-  return s; }
+void ManageRecv::wait(uint uslot) const noexcept {
+  assert(uslot < NNAux::nslot); _event[uslot].wait(); }
 
 void ManageComputeMatM::start(const OCL::Queue &queue, uint nbatch, uint nm0,
 			      uint nn0, uint nk0, const SgemmParam &param)
@@ -2088,8 +1821,6 @@ static void compress_data(uint index_block, uint nb0, uint nb, const float *in,
   
   size_write = (2U*index_block + n_one + ntot_moves) * sizeof(uint); }
 
-NNetOCL::~NNetOCL() noexcept { _mng_send.end(_queue); }
-
 string NNetOCL::reset(uint maxsize_batch,
 		      const vector<pair<uint, row_t>> &wght, int device_id,
 		      bool use_half, bool flag_out, bool do_sleep) noexcept {
@@ -2204,16 +1935,8 @@ string NNetOCL::reset(uint maxsize_batch,
     lines << "  Wmma support:         " << (use_wmma ? "Yes\n" : "No\n"); }
 
   _queue = _cl_dev.gen_queue();
-    
-  lines << "  Send:                 ";
-
-  _mng_send.start(_cl_dev, _queue, maxsize_batch);
-  lines << _mng_send.gen_info() << "\n";
-
-  lines << "  Recv:                 ";
-  _mng_recv.start(_cl_dev, _queue, (1U + NNAux::nmove) * sizeof(float),
-		  maxsize_batch);
-  lines << _mng_recv.gen_info() << "\n";
+  _mng_send.start(_queue, maxsize_batch);
+  _mng_recv.start(_queue, (1U + NNAux::nmove) * sizeof(float), maxsize_batch);
 
   SgemmParam param_matM
     = tune_compute_matM(use_wmma, _cl_dev, size_tile_in, _resnet_nout,
@@ -2458,7 +2181,7 @@ uint NNetOCL::push_ff(uint size_batch, const float *input,
   compress_data(_index_block, size_batch, _maxsize_batch, input, sizes_nnmove,
 		nnmoves, _ptr_input[uslot].get(), size_write, n_one,
 		ntot_moves);
-  _mng_send.push(_queue, _ptr_input[uslot].get(), size_write, uslot);
+  _mng_send.push(_queue, _ptr_input[uslot].get(), size_write);
   _mng_decode.push(_queue, n_one);
 
   // body part
@@ -2508,12 +2231,12 @@ void NNetOCL::wait_ff(uint uslot) noexcept {
     static double elapsed_ave = 0.0;
     steady_clock::time_point start = steady_clock::now();
     sleep_for(duration<double, std::ratio<7, 10000000>>(elapsed_ave));
-    _mng_recv.wait(_queue, uslot);
+    _mng_recv.wait(uslot);
     steady_clock::time_point end = steady_clock::now();
     double elapsed
       = static_cast<double>(duration_cast<microseconds>(end - start).count());
     elapsed_ave = 0.95 * elapsed_ave + 0.05 * elapsed; }
-  else _mng_recv.wait(_queue, uslot);
+  else _mng_recv.wait(uslot);
 
   compute_probs(_slots_size_batch[uslot], _slots_sizes_nnmove[uslot].get(),
 		_ptr_result[uslot].get() + _maxsize_batch,

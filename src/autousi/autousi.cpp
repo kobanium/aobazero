@@ -151,6 +151,7 @@ static void output() noexcept {
   static uint prev_ntot     = 0;
   static uint prev_nsend    = 0;
   static uint prev_ndiscard = 0;
+  double time_ave_tot = 0.0;
   uint ntot     = PlayManager::get().get_ngen_records();
   uint nsend    = Client::get().get_nsend();
   uint ndiscard = Client::get().get_ndiscard();
@@ -176,13 +177,13 @@ static void output() noexcept {
     fill_n(buf, sizeof(buf), '#');
     uint len = std::min(PlayManager::get().get_nmove(u) / 5,
 			static_cast<uint>(sizeof(buf)) - 1U);
+    double time_ave = PlayManager::get().get_time_average(u);
+    time_ave_tot += time_ave;
     buf[len] = '\0';
     printf("|%s|%4d |%6.0fms|%3d:%-40s|\n",
-	   spid, PlayManager::get().get_did(u),
-	   PlayManager::get().get_time_average(u),
+	   spid, PlayManager::get().get_did(u), time_ave,
 	   PlayManager::get().get_nmove(u), buf); }
   puts("+------+-----+--------+--------------------------------------------+");
-
   printf("- Send Status: Sent %d, Lost %d, Waiting %d\n",
 	 nsend, ndiscard, ntot - nsend - ndiscard);
 
@@ -196,10 +197,9 @@ static void output() noexcept {
   auto rep = duration_cast<seconds>(time_now - time_start).count();
   double sec  = static_cast<double>(rep) + 1e-6;
   double hour = sec / 3600.0;
-  double day  = sec /(3600.0*24.0);
-  printf("- %.1f sent/hour, %.1f sent/day, "
-	 "Running for %.1f hours (%.1f days).\n\n",
-	 nsend / hour, nsend / day, hour, day);
+  printf("- Engine Status: %.0fms/move, %.1fsend/hour, %.1f hours running\n\n",
+	 time_ave_tot / static_cast<double>(PlayManager::get().get_nengine()),
+	 nsend / hour, hour);
 }
 
 static void write_record(const char *prec, size_t len, const char *dname,
