@@ -407,9 +407,11 @@ void PlayManager::engine_start(const FNameID &wfname, uint64_t crc64)
   queue<string> e;
   _moves_eid0.swap(e);
 
+  for (Device &d : _devices) d.nnreset(wfname);
+  for (Device &d : _devices) d.flush_off();
+
   int eid = 0;
   for (Device &d : _devices) {
-    d.nnreset(wfname);
     uint size     = d.get_size_parallel();
     int nnet_id   = d.get_nnet_id();
     int device_id = d.get_device_id();
