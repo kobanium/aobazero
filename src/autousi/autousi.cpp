@@ -60,6 +60,7 @@ static uint print_status, print_csa;
 static steady_clock::time_point time_start;
 static FName opt_dname_csa;
 static uint opt_max_csa;
+static deque<OSI::DirLock> dirlocks;
 
 static bool is_posi(uint u) { return 0 < u; }
 
@@ -70,9 +71,19 @@ static void on_terminate() {
 
   try { WghtFile::cleanup(); }
   catch (exception &e) {
-    cerr << ERR_INT("cleanup() failed").what() << endl;
+    cerr << ERR_INT("WghtFile::cleanup() failed").what() << endl;
+    cerr << e.what() << endl; }
+
+  try { OSI::Semaphore::cleanup(); }
+  catch (exception &e) {
+    cerr << ERR_INT("OSI::Semaphore::cleanup() failed").what() << endl;
     cerr << e.what() << endl; }
   
+  try { OSI::MMap::cleanup(); }
+  catch (exception &e) {
+    cerr << ERR_INT("OSI::Semaphore::cleanup() failed").what() << endl;
+    cerr << e.what() << endl; }
+
   abort(); }
 
 static void on_signal(int signum) { flag_signal = signum; }
@@ -80,7 +91,7 @@ static void on_signal(int signum) { flag_signal = signum; }
 static void init() noexcept {
   vector<string> devices;
   map<string, string> m = {{"WeightSave",    "./weight_save"},
-			   {"CmdPath",       "./autousi"},
+			   {"CmdPath",       "bin/aobaz"},
 			   {"DirLog",        "./log"},
 			   {"DirCSA",        "./csa"},
 			   {"Device",        "S-1:3:7"},
@@ -118,6 +129,9 @@ static void init() noexcept {
   print_csa         = Config::get<uint>  (m, "PrintCSA");
 
   opt_dname_csa.reset_fname(cstr_csa);
+  dirlocks.emplace_back(cstr_dwght);
+  dirlocks.emplace_back(cstr_dlog);
+  dirlocks.emplace_back(cstr_csa);
   Client::get().start(cstr_dwght, cstr_addr, port, recvTO, recv_bufsiz, sendTO,
 		      send_bufsiz, max_retry, size_queue, keep_wght);
   PlayManager::get().start(cstr_cname, cstr_dlog, devices, verbose_eng); }
@@ -217,7 +231,6 @@ static void write_record(const char *prec, size_t len, const char *dname,
   if (!ofs) die(ERR_INT("cannot write %s", fname.get_fname())); }
 
 int main() {
-  OSI::prevent_multirun(FName(Param::name_autousi));
   sleep_for(seconds(random_device()() % max_sleep));
   set_terminate(on_terminate);
   init();
@@ -247,5 +260,4 @@ int main() {
   PlayManager::get().engine_terminate();
   Client::get().end();
   PlayManager::get().end();
-  return 0;
-}
+  return 0; }

@@ -9,17 +9,23 @@
 #include "xzi.hpp"
 #include <algorithm>
 #include <iostream>
+#include <deque>
+#include <mutex>
+#include <vector>
 #include <cassert>
 #include <climits>
 #include <cstring>
+using std::deque;
 using std::min;
+using std::mutex;
+using std::lock_guard;
+using std::unique_ptr;
 using ErrAux::die;
 using handler_t = void (*)(int);
 using uint = unsigned int;
 
 #ifdef USE_WINAPI
 #  include <atomic>
-#  include <mutex>
 #  include <thread>
 #  include <ws2tcpip.h>
 #  include <winsock2.h>
@@ -76,7 +82,7 @@ public:
       CloseHandle(_h);
       die(ERR_INT("CreateSemaphoreA() failed: %s", LastErr().get())); } }
 
-  ~sem_impl() noexcept { 
+  ~sem_impl() noexcept {
     if (! CloseHandle(_h))
       die(ERR_INT("CloseHandle() failed: %s", LastErr().get())); }
 
@@ -533,11 +539,38 @@ char *OSI::strtok(char *str, const char *delim, char **saveptr) noexcept {
   assert(delim && saveptr);
   return strtok_r(str, delim, saveptr); }
 
+uint OSI::get_pid() noexcept {
+  pid_t pid = getpid();
+  if (pid < 0) die(ERR_INT("INTERNAL ERROR"));
+  return static_cast<unsigned int>(pid); }
+
+uint OSI::get_ppid() noexcept {
+  pid_t pid = getppid();
+  if (pid < 0) die(ERR_INT("INTERNAL ERROR"));
+  return static_cast<unsigned int>(pid); }
+
+class OSI::dirlock_impl {
+public:
+  explicit dirlock_impl(const char *dname) noexcept {
+    FName fn(dname);
+    fn.add_fname(".lock");
+    int fd = open(fn.get_fname(), O_CREAT | O_RDWR, 0666);
+    if (flock(fd, LOCK_EX | LOCK_NB) < 0 && errno == EWOULDBLOCK)
+      die(ERR_INT("another instance is using %s", dname)); }
+  ~dirlock_impl() noexcept {} };
+
+struct entry_sem_impl {
+  FName fname;
+  sem_t *psem;
+  explicit entry_sem_impl(const FName &fname_, sem_t *psem_) noexcept :
+    fname(fname_), psem(psem_) {} };
 
 class OSI::sem_impl {
+  static mutex m_entries;
+  static deque<entry_sem_impl> entries;
   FName _fname;
-  bool _flag_create;
   sem_t *_psem;
+  bool _flag_create;
 public:
   explicit sem_impl(const char *name, bool flag_create, uint value) noexcept
     : _fname(name), _flag_create(flag_create) {
@@ -545,13 +578,29 @@ public:
     if (flag_create) {
       errno = 0;
       if (sem_unlink(name) < 0 && errno != ENOENT) die(ERR_CLL("sem_unlink"));
-      _psem = sem_open(name, O_CREAT | O_EXCL, 0600, value); }
-    else _psem = sem_open(name, 0);
-    if (_psem == SEM_FAILED) die(ERR_CLL("sem_open")); }
+      _psem = sem_open(name, O_CREAT | O_EXCL, 0600, value);
+      if (_psem == SEM_FAILED) die(ERR_CLL("sem_open"));
+      lock_guard<mutex> lock(m_entries);
+      entries.emplace_back(_fname, _psem); }
+    else {
+      _psem = sem_open(name, 0);
+      if (_psem == SEM_FAILED) die(ERR_CLL("sem_open")); } }
   ~sem_impl() noexcept {
     if (sem_close(_psem) < 0) die(ERR_CLL("sem_close"));
-    if (_flag_create && sem_unlink(_fname.get_fname()) < 0)
-      die(ERR_CLL("sem_unlink")); }
+    if (_flag_create ) {
+      errno = 0;
+      if (sem_unlink(_fname.get_fname()) < 0 && errno != ENOENT)
+	die(ERR_CLL("sem_unlink"));
+      lock_guard<mutex> lock(m_entries);
+      auto it = entries.begin();
+      while (it != entries.end() && it->psem != _psem) ++it;
+      if (it == entries.end()) die(ERR_CLL("INTERNAL ERROR"));
+      entries.erase(it); } }
+  static void cleanup() noexcept {
+    lock_guard<mutex> lock(m_entries);
+    for (auto it = entries.begin(); it != entries.end();
+	 it = entries.erase(it)) {
+      sem_unlink(it->fname.get_fname()); } }
   void inc() noexcept { if (sem_post(_psem) < 0) die(ERR_CLL("sem_post")); }
   void dec_wait() noexcept {
     if (sem_wait(_psem) < 0) die(ERR_CLL("sem_wait")); }
@@ -563,40 +612,60 @@ public:
     if (0 <= sem_timedwait(_psem, &ts)) return 0;
     if (errno != ETIMEDOUT) die(ERR_CLL("sem_timedwait"));
     return -1; }
-  bool ok() const noexcept { return _psem != SEM_FAILED; }
-};
+  bool ok() const noexcept { return _psem != SEM_FAILED; } };
+mutex OSI::sem_impl::m_entries;
+deque<entry_sem_impl> OSI::sem_impl::entries;
+
+struct entry_mmap_impl {
+  FName fname;
+  void *ptr;
+  explicit entry_mmap_impl(const FName &fname_, void *ptr_) noexcept
+    : fname(fname_), ptr(ptr_) {} };
 
 class OSI::mmap_impl {
+  static mutex m_entries;
+  static deque<entry_mmap_impl> entries;
   FName _fname;
   bool _flag_create;
   size_t _size;
   void *_ptr;
 public:
-  explicit mmap_impl(const char *name, bool flag_create, size_t size)
-    noexcept : _fname(name), _flag_create(flag_create), _size(size) {
+  explicit mmap_impl(const char *name, bool flag_create, size_t size) noexcept
+    : _fname(name), _flag_create(flag_create), _size(size) {
     assert(name && name[0] == '/');
-
     int fd;
     if (flag_create) {
       errno = 0;
       if (shm_unlink(name) < 0 && errno != ENOENT) die(ERR_CLL("shm_unlink"));
-      fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL, 0600); }
-    else fd = shm_open(name, O_RDWR, 0600);
-    if (fd < 0) die(ERR_CLL("shm_open"));
-    
-    if (flag_create && ftruncate(fd, size) < 0) die(ERR_CLL("ftruncate"));
-
-    _ptr = mmap(nullptr, size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
-    if (_ptr == MAP_FAILED) die(ERR_CLL("mmap")); }
-
+      fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL, 0600);
+      if (fd < 0) die(ERR_CLL("shm_open"));
+      if (ftruncate(fd, size) < 0) die(ERR_CLL("ftruncate"));
+      _ptr = mmap(nullptr, size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
+      if (_ptr == MAP_FAILED) die(ERR_CLL("mmap"));
+      lock_guard<mutex> lock(m_entries);
+      entries.emplace_back(_fname, _ptr); }
+    else {
+      fd = shm_open(name, O_RDWR, 0600);
+      if (fd < 0) die(ERR_CLL("shm_open"));
+      _ptr = mmap(nullptr, size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
+      if (_ptr == MAP_FAILED) die(ERR_CLL("mmap")); } }
   ~mmap_impl() noexcept {
     if (munmap(_ptr, _size) < 0) die(ERR_CLL("munmap"));
-    if (_flag_create && shm_unlink(_fname.get_fname()) < 0)
-      die(ERR_CLL("shm_unlink")); }
-
+    if (_flag_create) {
+      if (shm_unlink(_fname.get_fname()) < 0) die(ERR_CLL("shm_unlink"));
+      lock_guard<mutex> lock(m_entries);
+      auto it = entries.begin();
+      while (it != entries.end() && it->ptr != _ptr) ++it;
+      if (it == entries.end()) die(ERR_CLL("INTERNAL ERROR"));
+      entries.erase(it); } }
+  static void cleanup() noexcept {
+    lock_guard<mutex> lock(m_entries);
+    for (auto it = entries.begin(); it != entries.end();
+	 it = entries.erase(it)) shm_unlink(it->fname.get_fname()); }
   void *get() const noexcept { return _ptr; }
-  bool ok() const noexcept { return _ptr != nullptr; }
-};
+  bool ok() const noexcept { return _ptr != nullptr; } };
+mutex OSI::mmap_impl::m_entries;
+deque<entry_mmap_impl> OSI::mmap_impl::entries;
 
 class OSI::rh_impl {
   int _fd;
@@ -607,8 +676,7 @@ public:
     assert(buf);
     ssize_t ret = ::read(_fd, buf, size);
     if (ret < 0) die(ERR_CLL("read"));
-    return static_cast<uint>(ret); }
-};
+    return static_cast<uint>(ret); } };
 
 class OSI::cp_impl {
   pid_t _pid;
@@ -664,8 +732,7 @@ public:
     if (ret < 0) die(ERR_CLL("write"));
     return static_cast<size_t>(ret); }
   rh_impl gen_handle_in() const noexcept { return rh_impl(_pipe_c2p); }
-  rh_impl gen_handle_err() const noexcept { return rh_impl(_perr_c2p); }
-};
+  rh_impl gen_handle_err() const noexcept { return rh_impl(_perr_c2p); } };
 
 class PipeIn_impl {
   size_t _len_buf, _len_line;
@@ -915,7 +982,7 @@ class OSI::Conn_impl {
     ssize_t sret = ::send(_sckt, buf, len, 0);
     if (sret < 0) throw ERR_CLL("send");
     return static_cast<size_t>(sret); }
-
+  
 public:
   explicit Conn_impl(const char *saddr, uint port);
   ~Conn_impl() noexcept { close(); }
@@ -927,10 +994,15 @@ public:
 
 static_assert(INET_ADDRSTRLEN <= 24, "INET_ADDRSTLEN is not 16.");
 
+OSI::DirLock::DirLock(const char *dname)
+noexcept : _impl(unique_ptr<dirlock_impl>(new dirlock_impl(dname))) {}
+OSI::DirLock::~DirLock() noexcept {}
+
 OSI::Semaphore::Semaphore() noexcept : _impl(nullptr) {}
 OSI::Semaphore::~Semaphore() noexcept {}
+void OSI::Semaphore::cleanup() noexcept { OSI::sem_impl::cleanup(); }
 void OSI::Semaphore::open(const char *name, bool flag_create, uint value)
-  noexcept{
+  noexcept {
   assert(name && name[0] == '/');
   _impl.reset(new sem_impl(name, flag_create, value)); }
 void OSI::Semaphore::close() noexcept { _impl.reset(nullptr); }
@@ -942,6 +1014,7 @@ bool OSI::Semaphore::ok() const noexcept { return _impl && _impl->ok(); }
 
 OSI::MMap::MMap() noexcept : _impl(nullptr) {}
 OSI::MMap::~MMap() noexcept {}
+void OSI::MMap::cleanup() noexcept { OSI::mmap_impl::cleanup(); }
 void OSI::MMap::open(const char *name, bool flag_create, size_t size)
   noexcept {
   assert(name && name[0] == '/');

@@ -78,7 +78,6 @@ public:
   static constexpr Type bad       = Type::Bad;
   explicit Device(const string &s, int nnet_id) noexcept
     : _nnet_id(-1), _size_parallel(1U), _flag_half(false), _type(bad) {
-
     if (s.empty()) die(ERR_INT("invalid device %s", s.c_str()));
     char *endptr;
     if (s[0] == 'S' || s[0] == 's') {
@@ -421,7 +420,6 @@ void PlayManager::engine_start(const FNameID &wfname, uint64_t crc64)
 					  eid++, wfname, crc64, _verbose_eng,
 					  _logname)); }
   for (auto &e : _engines) e->engine_out("usi"); }
-
 
 void PlayManager::engine_terminate() noexcept {
   for (const Device &d : _devices) d.flush_on();

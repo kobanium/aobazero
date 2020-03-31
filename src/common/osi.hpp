@@ -14,10 +14,20 @@ namespace OSI {
   char *strtok(char *str, const char *delim, char **saveptr) noexcept;
   void binary2text(char *msg, uint &len, char &ch_last) noexcept;
   bool has_parent() noexcept;
+  uint get_pid() noexcept;
+  uint get_ppid() noexcept;
+
+  class DirLock {
+    std::unique_ptr<class dirlock_impl> _impl;
+  public:
+    explicit DirLock(const char *dwght) noexcept;
+    ~DirLock() noexcept;
+  };
 
   class Semaphore {
     std::unique_ptr<class sem_impl> _impl;
   public:
+    static void cleanup() noexcept;
     explicit Semaphore() noexcept;
     ~Semaphore() noexcept;
     void open(const char *name, bool flag_create, uint value) noexcept;
@@ -31,6 +41,7 @@ namespace OSI {
   class MMap {
     std::unique_ptr<class mmap_impl> _impl;
   public:
+    static void cleanup() noexcept;
     explicit MMap() noexcept;
     ~MMap() noexcept;
     void open(const char *name, bool flag_create, size_t size) noexcept;

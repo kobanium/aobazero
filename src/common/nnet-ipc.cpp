@@ -291,19 +291,20 @@ void NNetService::flush_off() noexcept {
   lock.unlock(); }
 
 NNetService::NNetService(uint nnet_id, uint nipc, uint size_batch,
-			 uint device_id, uint use_half)
-noexcept : _flag_cv_flush(false), _flag_cv_nnreset(false), _nnet_id(nnet_id),
-		   _nipc(nipc), _size_batch(size_batch), _device_id(device_id),
-		   _use_half(use_half) {
+			 uint device_id, uint use_half) noexcept
+: _flag_cv_flush(false), _flag_cv_nnreset(false), _nnet_id(nnet_id),
+  _nipc(nipc), _size_batch(size_batch), _device_id(device_id),
+  _use_half(use_half) {
   if (NNAux::maxnum_nnet <= nnet_id) die(ERR_INT("too many nnets"));
   if (NNAux::maxnum_nipc < nipc)     die(ERR_INT("too many processes"));
 
   char fn[IOAux::maxlen_path + 256U];
-  sprintf(fn, "%s.%03u", Param::name_sem_lock_nnet, nnet_id);
+  uint pid = OSI::get_pid();
+  sprintf(fn, "%s.%07u.%03u", Param::name_sem_lock_nnet, pid, nnet_id);
   _sem_service_lock.open(fn, true, 1U);
-  sprintf(fn, "%s.%03u", Param::name_sem_nnet, nnet_id);
+  sprintf(fn, "%s.%07u.%03u", Param::name_sem_nnet, pid, nnet_id);
   _sem_service.open(fn, true, 0U);
-  sprintf(fn, "%s.%03u", Param::name_mmap_nnet, nnet_id);
+  sprintf(fn, "%s.%07u.%03u", Param::name_mmap_nnet, pid, nnet_id);
   _mmap_service.open(fn, true, sizeof(SharedService));
   auto p = static_cast<SharedService *>(_mmap_service());
   assert(p);
@@ -311,9 +312,9 @@ noexcept : _flag_cv_flush(false), _flag_cv_nnreset(false), _nnet_id(nnet_id),
   p->njob = 0;
 
   for (uint u = 0; u < nipc; ++u) {
-    sprintf(fn, "%s.%03u.%03u", Param::name_sem_nnet, nnet_id, u);
+    sprintf(fn, "%s.%07u.%03u.%03u", Param::name_sem_nnet, pid, nnet_id, u);
     _sem_ipc[u].open(fn, true, 0);
-    sprintf(fn, "%s.%03u.%03u", Param::name_mmap_nnet, nnet_id, u);
+    sprintf(fn, "%s.%07u.%03u.%03u", Param::name_mmap_nnet, pid, nnet_id, u);
     _mmap_ipc[u].open(fn, true, sizeof(SharedIPC)); }
 
   _th_worker_push = thread(&NNetService::worker_push, this);
@@ -347,11 +348,14 @@ _id(-1), _flag_detach(flag_detach) {}
 int NNetIPC::start(uint nnet_id) noexcept {
   assert(nnet_id < NNAux::maxnum_nipc);
   char fn[IOAux::maxlen_path + 256U];
-  sprintf(fn, "%s.%03u", Param::name_sem_lock_nnet, nnet_id);
+  uint pid;
+  if (_flag_detach) pid = OSI::get_pid();
+  else              pid = OSI::get_ppid();
+  sprintf(fn, "%s.%07u.%03u", Param::name_sem_lock_nnet, pid, nnet_id);
   _sem_service_lock.open(fn, false, 1U);
-  sprintf(fn, "%s.%03u", Param::name_sem_nnet, nnet_id);
+  sprintf(fn, "%s.%07u.%03u", Param::name_sem_nnet, pid, nnet_id);
   _sem_service.open(fn, false, 0U);
-  sprintf(fn, "%s.%03u", Param::name_mmap_nnet, nnet_id);
+  sprintf(fn, "%s.%07u.%03u", Param::name_mmap_nnet, pid, nnet_id);
   _mmap_service.open(fn, false, sizeof(SharedService));
 
   _pservice = static_cast<SharedService *>(_mmap_service());
@@ -361,9 +365,9 @@ int NNetIPC::start(uint nnet_id) noexcept {
   if (NNAux::maxnum_nipc <= static_cast<uint>(_id))
     die(ERR_INT("too many processes"));
 
-  sprintf(fn, "%s.%03u.%03u", Param::name_sem_nnet, nnet_id, _id);
+  sprintf(fn, "%s.%07u.%03u.%03u", Param::name_sem_nnet, pid, nnet_id, _id);
   _sem_ipc.open(fn, false, 0);
-  sprintf(fn, "%s.%03u.%03u", Param::name_mmap_nnet, nnet_id, _id);
+  sprintf(fn, "%s.%07u.%03u.%03u", Param::name_mmap_nnet, pid, nnet_id, _id);
   _mmap_ipc.open(fn, false, sizeof(SharedIPC));
   _pipc = static_cast<SharedIPC *>(_mmap_ipc());
   _pipc->nnet_id = nnet_id;

@@ -49,7 +49,8 @@ else ifeq ($(BLAS_AOBA), OpenBLAS)
 	endif
 endif
 
-CXXFLAGS += -std=c++11 -Wextra -Ofast -march=native -mtune=native
+# CXXFLAGS += -std=c++11 -Wextra -Ofast -march=native -mtune=native
+CXXFLAGS += -std=c++11 -Wextra -march=native -mtune=native
 CPPFLAGS += -MD -MP -Isrc/common -DUSE_SSE4
 LDFLAGS  += -llzma -lpthread -lrt
 
