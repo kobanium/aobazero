@@ -146,7 +146,7 @@ class USIEngine : public Child {
   string _startpos, _record, _record_header, _fingerprint, _settings;
   int _device_id, _nnet_id, _version;
   uint _eid, _nmove;
-  bool _flag_playing, _flag_ready;
+  bool _flag_playing, _flag_ready, _flag_usistart;
 
 public:
   explicit USIEngine(const FName &cname, char ch, int device_id, int nnet_id,
@@ -156,7 +156,7 @@ public:
     _time_average(0.0), _logname(logname),
     _fingerprint(to_string(nnet_id) + string("-") + to_string(eid)),
     _device_id(device_id), _nnet_id(nnet_id), _version(-1), _eid(eid),
-    _flag_playing(false), _flag_ready(false) {
+    _flag_playing(false), _flag_ready(false), _flag_usistart(false) {
     assert(cname.ok() && 0 < cname.get_len_fname());
     assert(wfname.ok() && 0 < wfname.get_len_fname());
     assert(isalnum(ch) && -2 < nnet_id && nnet_id < 65536);
@@ -212,6 +212,8 @@ public:
     engine_out("%s", _startpos.c_str());
     _time_last = steady_clock::now();
     engine_out("go visit"); }
+
+  void start_usi() noexcept { _flag_usistart = true; engine_out("usi"); }
 
   string update(char *line, queue<string> &moves_eid0) noexcept {
     assert(line);
@@ -375,6 +377,7 @@ public:
   const string &get_record() const noexcept { return _record; }
   bool is_playing() const noexcept { return _flag_playing; }
   bool is_ready() const noexcept { return _flag_ready; }
+  bool is_usistart() const noexcept { return _flag_usistart; }
   uint get_eid() const noexcept { return _eid; }
   uint get_nmove() const noexcept { return _nmove; }
   int get_did() const noexcept { return _device_id; }
@@ -418,8 +421,7 @@ void PlayManager::engine_start(const FNameID &wfname, uint64_t crc64)
     for (uint u = 0; u < size; ++u)
       _engines.emplace_back(new USIEngine(_cname, ch, device_id, nnet_id,
 					  eid++, wfname, crc64, _verbose_eng,
-					  _logname)); }
-  for (auto &e : _engines) e->engine_out("usi"); }
+					  _logname)); } }
 
 void PlayManager::engine_terminate() noexcept {
   for (const Device &d : _devices) d.flush_on();
@@ -469,6 +471,7 @@ deque<string> PlayManager::manage_play(bool has_conn) noexcept {
 	_ngen_records += 1U;
 	recs.push_back(move(s)); } }
 
+    if (! e->is_usistart()) e->start_usi();
     if (has_conn && e->is_ready() && ! e->is_playing()) e->start_newgame(); }
 
   return recs; }

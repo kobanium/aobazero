@@ -211,10 +211,10 @@ static void output() noexcept {
   auto rep = duration_cast<seconds>(time_now - time_start).count();
   double sec  = static_cast<double>(rep) + 1e-6;
   double hour = sec / 3600.0;
-  printf("- Engine Status: %.0fms/move, %.1fsend/hour, %.1f hours running\n\n",
+  printf("- Engine Status: %.0fmsec/move, %.1fsend/hour, "
+	 "%.1f hours running\n\n",
 	 time_ave_tot / static_cast<double>(PlayManager::get().get_nengine()),
-	 nsend / hour, hour);
-}
+	 nsend / hour, hour); }
 
 static void write_record(const char *prec, size_t len, const char *dname,
 			 uint max_csa) noexcept {
