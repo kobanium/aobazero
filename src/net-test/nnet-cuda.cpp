@@ -32,6 +32,10 @@ NNetCUDA::~NNetCUDA()
     CheckCudaErrors(cudaFree(conv_value_ptr));
     CheckCudaErrors(cudaFree(value_ip_ptr));
     CheckCudaErrors(cudaFree(value_ptr));
+
+    delete[] input_data;
+    delete[] policy;
+    delete[] value;
 }
 
 
@@ -82,41 +86,45 @@ void NNetCUDA::reset(const uint maxsize_batch, const std::vector<std::pair<uint,
   // Set descriptors.
 
   // First conv layers
-  CheckCudnnErrors(cudnnSetTensor4dDescriptor(input_descriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, maxsize_batch, NNAux::nch_input, NNAux::height, NNAux::width));
+  CheckCudnnErrors(cudnnSetTensor4dDescriptor(input_descriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_TYPE, maxsize_batch, NNAux::nch_input, NNAux::height, NNAux::width));
 
   // Residual blocks
-  CheckCudnnErrors(cudnnSetTensor4dDescriptor(hidden_descriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, maxsize_batch, _resnet_nout, NNAux::height, NNAux::width));
+  CheckCudnnErrors(cudnnSetTensor4dDescriptor(hidden_descriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_TYPE, maxsize_batch, _resnet_nout, NNAux::height, NNAux::width));
 
   // Value 1st hidden layer (convolution)
-  CheckCudnnErrors(cudnnSetTensor4dDescriptor(conv_value_descriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, maxsize_batch, _value1_nout, NNAux::height, NNAux::width));
+  CheckCudnnErrors(cudnnSetTensor4dDescriptor(conv_value_descriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_TYPE, maxsize_batch, _value1_nout, NNAux::height, NNAux::width));
   // Value 2nd hidden layer (fully connected)
-  CheckCudnnErrors(cudnnSetTensor4dDescriptor(value_ip_descriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, maxsize_batch, _value2_nout, 1, 1));
+  CheckCudnnErrors(cudnnSetTensor4dDescriptor(value_ip_descriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_TYPE, maxsize_batch, _value2_nout, 1, 1));
   // Value output
-  CheckCudnnErrors(cudnnSetTensor4dDescriptor(value_descriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, maxsize_batch, 1, 1, 1));
+  CheckCudnnErrors(cudnnSetTensor4dDescriptor(value_descriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_TYPE, maxsize_batch, 1, 1, 1));
 
   // Policy hidden conv layer
-  CheckCudnnErrors(cudnnSetTensor4dDescriptor(conv_policy_descriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, maxsize_batch, _policy1_nout, NNAux::height, NNAux::width));
+  CheckCudnnErrors(cudnnSetTensor4dDescriptor(conv_policy_descriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_TYPE, maxsize_batch, _policy1_nout, NNAux::height, NNAux::width));
   // Policy output
-  CheckCudnnErrors(cudnnSetTensor4dDescriptor(policy_descriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, maxsize_batch, NNAux::nch_out_policy, NNAux::height, NNAux::width));
+  CheckCudnnErrors(cudnnSetTensor4dDescriptor(policy_descriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_TYPE, maxsize_batch, NNAux::nch_out_policy, NNAux::height, NNAux::width));
 
   // Malloc GPU memory.
-  CheckCudaErrors(cudaMalloc((void**)&input_ptr, sizeof(float) * maxsize_batch * NNAux::nch_input * NNAux::size_plane));
-  CheckCudaErrors(cudaMalloc((void**)&h1_ptr, sizeof(float) * maxsize_batch * _resnet_nout * NNAux::size_plane));
-  CheckCudaErrors(cudaMalloc((void**)&h2_ptr, sizeof(float) * maxsize_batch * _resnet_nout * NNAux::size_plane));
-  CheckCudaErrors(cudaMalloc((void**)&res_ptr, sizeof(float) * maxsize_batch * _resnet_nout * NNAux::size_plane));
+  CheckCudaErrors(cudaMalloc((void**)&input_ptr, sizeof(cuda_float_t) * maxsize_batch * NNAux::nch_input * NNAux::size_plane));
+  CheckCudaErrors(cudaMalloc((void**)&h1_ptr, sizeof(cuda_float_t) * maxsize_batch * _resnet_nout * NNAux::size_plane));
+  CheckCudaErrors(cudaMalloc((void**)&h2_ptr, sizeof(cuda_float_t) * maxsize_batch * _resnet_nout * NNAux::size_plane));
+  CheckCudaErrors(cudaMalloc((void**)&res_ptr, sizeof(cuda_float_t) * maxsize_batch * _resnet_nout * NNAux::size_plane));
 
   // Value 1st hidden layer (convolution)
-  CheckCudaErrors(cudaMalloc((void**)&conv_value_ptr, sizeof(float) * maxsize_batch * _value1_nout * NNAux::size_plane));
+  CheckCudaErrors(cudaMalloc((void**)&conv_value_ptr, sizeof(cuda_float_t) * maxsize_batch * _value1_nout * NNAux::size_plane));
   // Value 2nd hidden layer (fully connected)
-  CheckCudaErrors(cudaMalloc((void**)&value_ip_ptr, sizeof(float) * maxsize_batch * _value2_nout));
+  CheckCudaErrors(cudaMalloc((void**)&value_ip_ptr, sizeof(cuda_float_t) * maxsize_batch * _value2_nout));
   // Value output
-  CheckCudaErrors(cudaMalloc((void**)&value_ptr, sizeof(float) * maxsize_batch));
+  CheckCudaErrors(cudaMalloc((void**)&value_ptr, sizeof(cuda_float_t) * maxsize_batch));
 
   // Policy hidden conv layer
-  CheckCudaErrors(cudaMalloc((void**)&conv_policy_ptr, sizeof(float) * maxsize_batch * _policy1_nout * NNAux::size_plane));
+  CheckCudaErrors(cudaMalloc((void**)&conv_policy_ptr, sizeof(cuda_float_t) * maxsize_batch * _policy1_nout * NNAux::size_plane));
   // Policy output
-  CheckCudaErrors(cudaMalloc((void**)&policy_ptr, sizeof(float) * maxsize_batch * NNAux::nch_out_policy * NNAux::size_plane));  
+  CheckCudaErrors(cudaMalloc((void**)&policy_ptr, sizeof(cuda_float_t) * maxsize_batch * NNAux::nch_out_policy * NNAux::size_plane));  
 
+
+  input_data = new cuda_float_t[maxsize_batch * NNAux::nch_input * NNAux::size_plane];
+  policy = new cuda_float_t[maxsize_batch * NNAux::nch_out_policy * NNAux::size_plane];
+  value = new cuda_float_t[maxsize_batch];
 
   // Temporary scales and biases for BatchNormalization Layer
   float bn_scale[_resnet_nout], bn_bias[_resnet_nout];
@@ -195,12 +203,11 @@ void NNetCUDA::reset(const uint maxsize_batch, const std::vector<std::pair<uint,
 void NNetCUDA::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
 		  const ushort *nnmoves, float *probs, float *values) noexcept {
 
-  float data[max_batch_size * NNAux::size_input];
   for (uint u = 0; u < size_batch * NNAux::size_input; u++) {
-    data[u] = input[u];
+    input_data[u] = ConvertToGPUData(input[u]);
   }
   
-  CheckCudaErrors(cudaMemcpy(input_ptr, data, sizeof(float) * max_batch_size * NNAux::size_input, cudaMemcpyHostToDevice));
+  CheckCudaErrors(cudaMemcpy(input_ptr, input_data, sizeof(cuda_float_t) * max_batch_size * NNAux::size_input, cudaMemcpyHostToDevice));
 
   conv->Forward(cuda_handles.cudnn, input_descriptor, hidden_descriptor, input_ptr, h1_ptr);
   bn->Forward(cuda_handles.cudnn, hidden_descriptor, h1_ptr, h1_ptr);
@@ -241,11 +248,8 @@ void NNetCUDA::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
   tanh->Forward(cuda_handles.cudnn, value_descriptor, value_ptr);
 
   // Get Policy and Value
-  float policy[max_batch_size * NNAux::nch_out_policy * NNAux::size_plane];
-  float value[max_batch_size];
-
-  CheckCudaErrors(cudaMemcpy(value, value_ptr, sizeof(float) * max_batch_size, cudaMemcpyDeviceToHost));
-  CheckCudaErrors(cudaMemcpy(policy, policy_ptr, sizeof(float) * max_batch_size * NNAux::nch_out_policy * NNAux::size_plane, cudaMemcpyDeviceToHost));
+  CheckCudaErrors(cudaMemcpy(value, value_ptr, sizeof(cuda_float_t) * max_batch_size, cudaMemcpyDeviceToHost));
+  CheckCudaErrors(cudaMemcpy(policy, policy_ptr, sizeof(cuda_float_t) * max_batch_size * NNAux::nch_out_policy * NNAux::size_plane, cudaMemcpyDeviceToHost));
 
   for (uint ub = 0; ub < size_batch; ub++) {
     const ushort *m = nnmoves + ub * NNAux::nmove;
@@ -255,7 +259,7 @@ void NNetCUDA::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
     for (uint u = 0; u < sizes_nnmove[ub]; u++) {
       assert(m[u] < NNAux::nch_out_policy * NNAux::size_plane);
 
-      probs_b[u] = policy[m[u] + ub * NNAux::nch_out_policy * NNAux::size_plane];
+      probs_b[u] = ConvertToHostData(policy[m[u] + ub * NNAux::nch_out_policy * NNAux::size_plane]);
       sum += probs_b[u];
     }
 
@@ -265,7 +269,7 @@ void NNetCUDA::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
       probs_b[u] *= inv_sum;
     }
     
-    values[ub] = value[ub];
+    values[ub] = ConvertToHostData(value[ub]);
   }
   
 }

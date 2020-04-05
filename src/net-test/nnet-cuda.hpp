@@ -26,15 +26,19 @@ private:
   cudnnTensorDescriptor_t policy_descriptor;
   cudnnTensorDescriptor_t value_descriptor;
 
-  float *input_ptr;
-  float *h1_ptr;
-  float *h2_ptr;
-  float *res_ptr;
-  float *conv_value_ptr;
-  float *value_ip_ptr;
-  float *value_ptr;
-  float *conv_policy_ptr;
-  float *policy_ptr;
+  cuda_float_t *input_ptr;
+  cuda_float_t *h1_ptr;
+  cuda_float_t *h2_ptr;
+  cuda_float_t *res_ptr;
+  cuda_float_t *conv_value_ptr;
+  cuda_float_t *value_ip_ptr;
+  cuda_float_t *value_ptr;
+  cuda_float_t *conv_policy_ptr;
+  cuda_float_t *policy_ptr;
+
+  cuda_float_t *input_data;
+  cuda_float_t *policy;
+  cuda_float_t *value;
   
   std::unique_ptr<Add> add = nullptr;
   std::unique_ptr<ReLU> relu = nullptr;

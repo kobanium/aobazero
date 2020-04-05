@@ -3,6 +3,7 @@
 
 #include <memory>
 
+#include "cuda_data_type.hpp"
 #include "cuda_wrapper.hpp"
 
 
@@ -12,7 +13,7 @@ private:
   int number_of_input_planes;
   int filter_height;
   int filter_width;
-  float *filter_data_gpu = nullptr;
+  cuda_float_t *filter_data_gpu = nullptr;
 
   size_t workspace_size = 0;
   void *workspace = nullptr;
@@ -39,16 +40,30 @@ public:
     CheckCudnnErrors(cudnnCreateFilterDescriptor(&filter_descriptor));
   
     const unsigned int data_size = number_of_filters * number_of_input_planes * filter_height * filter_width;
-    const unsigned int required_memory_size = data_size * sizeof(float);
+    const unsigned int required_memory_size = data_size * sizeof(cuda_float_t);
 
     std::cerr << "Filter Size : " << required_memory_size << " bytes (" << data_size << ")" << std::endl;
 
     // Preparation for filters
     const int pad = (filter_size - 1) / 2;
+
     CheckCudaErrors(cudaMalloc((void**)&filter_data_gpu, required_memory_size));
-    CheckCudaErrors(cudaMemcpy(filter_data_gpu, filter_param, required_memory_size, cudaMemcpyHostToDevice));  
-    CheckCudnnErrors(cudnnSetFilter4dDescriptor(filter_descriptor, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW, number_of_filters, number_of_input_planes, filter_height, filter_width));
-    CheckCudnnErrors(cudnnSetConvolution2dDescriptor(convolution_descriptor, pad, pad, 1, 1, 1, 1, CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
+
+    cuda_float_t send_data[data_size];
+    for (unsigned int i = 0; i < data_size; i++) {
+      send_data[i] = ConvertToGPUData(filter_param[i]);
+    }
+    CheckCudaErrors(cudaMemcpy(filter_data_gpu, send_data, required_memory_size, cudaMemcpyHostToDevice));
+    CheckCudnnErrors(cudnnSetFilter4dDescriptor(filter_descriptor, CUDNN_DATA_TYPE, CUDNN_TENSOR_NCHW, number_of_filters, number_of_input_planes, filter_height, filter_width));
+    CheckCudnnErrors(cudnnSetConvolution2dDescriptor(convolution_descriptor, pad, pad, 1, 1, 1, 1, CUDNN_CROSS_CORRELATION, CUDNN_DATA_TYPE));
+
+
+#if defined USE_FP16
+    CheckCudnnErrors(cudnnSetConvolutionMathType(convolution_descriptor, CUDNN_TENSOR_OP_MATH));
+#else
+    CheckCudnnErrors(cudnnSetConvolutionMathType(convolution_descriptor, CUDNN_TENSOR_OP_MATH_ALLOW_CONVERSION));
+#endif
+
     CheckCudnnErrors(cudnnGetConvolutionForwardAlgorithm(cudnn_handle,
                                                          input_descriptor,
                                                          filter_descriptor,
@@ -91,11 +106,11 @@ public:
   Forward( cudnnHandle_t &cudnn_handle,
            cudnnTensorDescriptor_t &input_descriptor,
            cudnnTensorDescriptor_t &output_descriptor,
-           float *input_ptr,
-           float *output_ptr )
+           cuda_float_t *input_ptr,
+           cuda_float_t *output_ptr )
   {
-    const float alpha = 1.0f;
-    const float beta = 0.0f;
+    constexpr float alpha = 1.0f;
+    constexpr float beta = 0.0f;
 
     CheckCudnnErrors(cudnnConvolutionForward(cudnn_handle,
                                              &alpha,
@@ -105,7 +120,7 @@ public:
                                              filter_data_gpu,
                                              convolution_descriptor,
                                              forward_algorithm,
-                                              workspace,
+                                             workspace,
                                              workspace_size,
                                              &beta,
                                              output_descriptor,
@@ -118,7 +133,7 @@ class FullyConnected {
 private:
   int in_size;
   int out_size;
-  float *weight_data_gpu = nullptr;
+  cuda_float_t *weight_data_gpu = nullptr;
 
 public:
   
@@ -130,12 +145,18 @@ public:
     out_size = output_size;
 
     const unsigned int data_size = in_size * out_size;
-    const unsigned int required_memory_size = data_size * sizeof(float);
+    const unsigned int required_memory_size = data_size * sizeof(cuda_float_t);
 
     std::cerr << "Weight Size : " << required_memory_size << " bytes (" << data_size << ")" << std::endl;
 
     CheckCudaErrors(cudaMalloc((void**)&weight_data_gpu, required_memory_size));
-    CheckCudaErrors(cudaMemcpy(weight_data_gpu, weight_param, required_memory_size, cudaMemcpyHostToDevice));
+
+    cuda_float_t send_data[data_size];
+    for (unsigned int i = 0; i < data_size; i++) {
+      send_data[i] = ConvertToGPUData(weight_param[i]);
+    }
+
+    CheckCudaErrors(cudaMemcpy(weight_data_gpu, send_data, required_memory_size, cudaMemcpyHostToDevice));
   }
 
   
@@ -148,12 +169,12 @@ public:
   }
   
   void Forward( cublasHandle_t &cublas_handle,
-                float *input_ptr,
-                float *output_ptr,
+                cuda_float_t *input_ptr,
+                cuda_float_t *output_ptr,
                 const int batch_size )
   {
-    const float alpha = 1.0f;
-    const float beta = 0.0f;
+    const cuda_float_t alpha = GPU_DATA_ONE;
+    const cuda_float_t beta = GPU_DATA_ZERO;
 
     CheckCublasErrors(cublasGemmEx(cublas_handle,
                                    CUBLAS_OP_T,
@@ -163,17 +184,18 @@ public:
                                    in_size,
                                    &alpha,
                                    weight_data_gpu,
-                                   CUDA_R_32F,
+                                   CUDA_DATA_TYPE,
                                    in_size,
                                    input_ptr,
-                                    CUDA_R_32F,
+                                   CUDA_DATA_TYPE,
                                    in_size,
                                    &beta,
                                    output_ptr,
-                                   CUDA_R_32F,
+                                   CUDA_DATA_TYPE,
                                    out_size,
-                                   CUDA_R_32F,
-                                   CUBLAS_GEMM_DFALT));
+                                   CUDA_DATA_TYPE,
+                                   //CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+                                   CUBLAS_GEMM_DEFAULT));
   }
 
 };
@@ -244,12 +266,12 @@ public:
   void
   Forward( cudnnHandle_t &cudnn_handle,
            cudnnTensorDescriptor_t &tensor_descriptor,
-           float *input_ptr,
-           float *output_ptr )
+           cuda_float_t *input_ptr,
+           cuda_float_t *output_ptr )
   {
-    const float alpha = 1.0f;
-    const float beta = 0.0f;
-    const double epsilon = 1e-5;
+    constexpr float alpha = 1.0f;
+    constexpr float beta = 0.0f;
+    constexpr double epsilon = 1e-5;
 
     CheckCudnnErrors(cudnnDeriveBNTensorDescriptor(batchnorm_descriptor,
                                                    tensor_descriptor,
@@ -276,7 +298,7 @@ public:
 class Bias {
 private:
   int number_of_biases;
-  float *bias_data_gpu = nullptr;
+  cuda_float_t *bias_data_gpu = nullptr;
   cudnnTensorDescriptor_t bias_descriptor;
 
 public:
@@ -287,13 +309,17 @@ public:
     number_of_biases = num_of_biases;
     CheckCudnnErrors(cudnnCreateTensorDescriptor(&bias_descriptor));
 
-    const unsigned int required_memory_size = number_of_biases * sizeof(float);
+    const unsigned int required_memory_size = number_of_biases * sizeof(cuda_float_t);
 
     std::cerr << "Bias Size : " << required_memory_size << " bytes" << std::endl;
 
+    cuda_float_t send_data[num_of_biases];
+    for (int i = 0; i < num_of_biases; i++) {
+      send_data[i] = ConvertToGPUData(bias_param[i]);
+    }
     CheckCudaErrors(cudaMalloc((void**)&bias_data_gpu, required_memory_size));
-    CheckCudaErrors(cudaMemcpy(bias_data_gpu, bias_param, required_memory_size, cudaMemcpyHostToDevice));
-    CheckCudnnErrors(cudnnSetTensor4dDescriptor(bias_descriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, 1, number_of_biases, 1, 1));
+    CheckCudaErrors(cudaMemcpy(bias_data_gpu, send_data, required_memory_size, cudaMemcpyHostToDevice));
+    CheckCudnnErrors(cudnnSetTensor4dDescriptor(bias_descriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_TYPE, 1, number_of_biases, 1, 1));
   }
 
   ~Bias()
@@ -308,10 +334,10 @@ public:
   void
   Forward( cudnnHandle_t &cudnn_handle,
            cudnnTensorDescriptor_t &tensor_descriptor,
-           float *tensor_ptr )
+           cuda_float_t *tensor_ptr )
   {
-    const float alpha = 1.0f;
-    const float beta = 1.0f;
+    constexpr float alpha = 1.0f;
+    constexpr float beta = 1.0f;
 
     CheckCudnnErrors(cudnnAddTensor(cudnn_handle,
                                     &alpha,
@@ -343,9 +369,9 @@ public:
   void
   Forward( cudnnHandle_t &cudnn_handle,
            cudnnTensorDescriptor_t &tensor_descriptor,
-           float *tensor_ptr )
+           cuda_float_t *tensor_ptr )
   {
-    float alpha = 1.0f, beta = 0.0f;
+    constexpr float alpha = 1.0f, beta = 0.0f;
   
     CheckCudnnErrors(cudnnActivationForward(cudnn_handle,
                                             activation_descriptor,
@@ -364,10 +390,9 @@ public:
   void
   Forward( cudnnHandle_t &cudnn_handle,
            cudnnTensorDescriptor_t &tensor_descriptor,
-           float *tensor_ptr )
+           cuda_float_t *tensor_ptr )
   {
-    const float alpha = 1.0f;
-    const float beta = 0.0f;
+    constexpr float alpha = 1.0f, beta = 0.0f;
     
     CheckCudnnErrors(cudnnSoftmaxForward(cudnn_handle,
                                          CUDNN_SOFTMAX_ACCURATE,
@@ -401,10 +426,9 @@ public:
   void
   Forward( cudnnHandle_t &cudnn_handle,
            cudnnTensorDescriptor_t &tensor_descriptor,
-           float *tensor_ptr )
+           cuda_float_t *tensor_ptr )
   {
-    const float alpha = 1.0f;
-    const float beta = 0.0f;
+    const float alpha = 1.0f, beta = 0.0f;
     
     CheckCudnnErrors(cudnnActivationForward(cudnn_handle,
                                             activation_descriptor,
@@ -424,11 +448,11 @@ public:
   // y = x + y
   Forward( cudnnHandle_t &cudnn_handle,
            cudnnTensorDescriptor_t &tensor_descriptor,
-           float *x,
-           float *y )
+           cuda_float_t *x,
+           cuda_float_t *y )
   {
-    const float alpha = 1.0f;
-    const float beta = 1.0f;
+    constexpr float alpha = 1.0f;
+    constexpr float beta = 1.0f;
 
     CheckCudnnErrors(cudnnAddTensor(cudnn_handle, &alpha, tensor_descriptor, x, &beta, tensor_descriptor, y));
   }
@@ -459,9 +483,9 @@ private:
 
 public:
   ResBlock( CudaHandles &cuda_handles,
-              cudnnTensorDescriptor_t &tensor_descriptor,
-              ResParameter &res,
-              const int filters )
+            cudnnTensorDescriptor_t &tensor_descriptor,
+            ResParameter &res,
+            const int filters )
   {
     conv1.reset(new Convolution(cuda_handles.cudnn, tensor_descriptor, tensor_descriptor, filters, filters, 3, res.conv1_weight));
     conv2.reset(new Convolution(cuda_handles.cudnn, tensor_descriptor, tensor_descriptor, filters, filters, 3, res.conv2_weight));
@@ -477,10 +501,10 @@ public:
   
   void Forward( CudaHandles &cuda_handles,
                 cudnnTensorDescriptor_t &res_descriptor,
-                float *input_ptr,
-                float *hidden_ptr,
-                float *res_ptr,
-                float *output_ptr,
+                cuda_float_t *input_ptr,
+                cuda_float_t *hidden_ptr,
+                cuda_float_t *res_ptr,
+                cuda_float_t *output_ptr,
                 std::unique_ptr<ReLU> &relu,
                 std::unique_ptr<Add> &add,
                 const int batch_size )
