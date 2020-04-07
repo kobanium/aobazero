@@ -730,7 +730,6 @@ void Network::compare_net_outputs(const Netresult& data,
         throw std::runtime_error("OpenCL self-check mismatch.");
     }
 }
-*/
 template<typename T>
 T relative_difference(T a, T b) {
     // Handle NaN
@@ -751,29 +750,64 @@ T relative_difference(T a, T b) {
 
     return std::max(fabs((a - b) / a), fabs((a - b) / b));
 }
+*/
 
 //void compare_net_outputs(std::vector<float>& data,
 //                         std::vector<float>& ref) {
-int Network::compare_net_outputs(std::vector<scored_node>& data,
-                                  std::vector<scored_node>& ref) {
-    // We accept an error up to 5%, but output values
-    // smaller than 1/1000th are "rounded up" for the comparison.
-    constexpr float relative_error =  5e-2f;	//  5%
+//int Network::compare_net_outputs(std::vector<scored_node>& data,
+//                                  std::vector<scored_node>& ref) {
+// We accept an error up to 5%, but output values
+// smaller than 1/1000th are "rounded up" for the comparison.
+//    constexpr float relative_error =  5e-2f;	//  5%
 //  constexpr float relative_error = 15e-2f;	// 15%
-    for (auto idx = size_t{0}; idx < data.size(); ++idx) {
-        auto err = relative_difference(data[idx].first, ref[idx].first);
-       if ( data[idx].first == 0 ) continue;   // process batch only returns available moves.
-        if (err > relative_error) {
-            myprintf("Error in OpenCL calculation: idx=%d/%d, expected %f got %f "
-                   "(error=%f%%)\n", (int)idx, (int)data.size(), ref[idx].first, data[idx].first, err * 100.0);
-            for (auto i=idx; i<idx+10 && i<data.size(); i++) if ( data[idx].first != 0 ) myprintf("%d: %f, %f\n", (int)i, ref[i].first, data[i].first);
-            myprintf("Update your GPU drivers or reduce the amount of games "
-                   "played simultaneously.\n");
-            return 1;
-        }
-    }
-    return 0;
-}
+//    for (auto idx = size_t{0}; idx < data.size(); ++idx) {
+//        auto err = relative_difference(data[idx].first, ref[idx].first);
+//       if ( data[idx].first == 0 ) continue;   // process batch only returns available moves.
+//        if (err > relative_error) {
+//            myprintf("Error in OpenCL calculation: idx=%d/%d, expected %f got %f "
+//                   "(error=%f%%)\n", (int)idx, (int)data.size(), ref[idx].first, data[idx].first, err * 100.0);
+//            for (auto i=idx; i<idx+10 && i<data.size(); i++) if ( data[idx].first != 0 ) myprintf("%d: %f, %f\n", (int)i, ref[i].first, data[i].first);
+//            myprintf("Update your GPU drivers or reduce the amount of games "
+//                   "played simultaneously.\n");
+//            return 1;
+//        }
+//    }
+//    return 0;
+//}
+template<typename T> T abs_error(T a, T b) noexcept {
+  if (std::isnan(a) || std::isnan(b)) return std::numeric_limits<T>::max();
+  return std::fabs(a - b); }
+
+int Network::compare_net_outputs(std::vector<scored_node>& policy,
+				 std::vector<scored_node>& policy_ref,
+				 float value, float value_ref) {
+  constexpr float th_abs_error = 0.002f;
+  float err;
+
+  for (unsigned int idx = 0; idx < policy.size(); ++idx) {
+    if ( policy[idx].first == 0 ) continue;
+
+    //myprintf("Policy: %.8f %.8f\n", policy[idx].first, policy_ref[idx].first);
+    err = abs_error(policy[idx].first, policy_ref[idx].first);
+    if (err < th_abs_error) continue;
+
+    myprintf("Error in OpenCL calculation: idx=%u/%zu, expected %f got %f "
+	     "(error=%f%%)\n", idx, policy.size(), policy_ref[idx].first,
+	     policy[idx].first, err * 100.0f);
+    for (unsigned int u = idx; u < idx + 10U && u < policy.size(); ++u)
+      if ( policy[idx].first != 0 )
+	myprintf("%u: %f, %f\n", u, policy_ref[u].first, policy[u].first);
+    myprintf("Updating your GPU driver may solve this problem.\n");
+    return 1; }
+
+  //myprintf("value: %.8f %.8f\n", value, value_ref);
+  err = abs_error(value, value_ref);
+  if (err < 2.0f * th_abs_error) return 0;
+
+  myprintf("Error in OpenCL calculation: expected value %f got %f "
+	   "(error=%f%%)\n", value_ref, value, err * 100.0);
+  myprintf("Updating your GPU driver may solve this problem.\n");
+  return 1; }
 #endif
 
 std::vector<float> softmax(const std::vector<float>& input,
@@ -875,9 +909,12 @@ Network::Netresult_old Network::get_output(
             && (force_selfcheck || Random::get_Rng().randfix<SELFCHECK_PROBABILITY>() == 0)
         ) {
             auto result_ref = get_output_internal(planes, true);
-            if ( compare_net_outputs(result.first, result_ref.first) ) {
-                throw std::runtime_error("OpenCL self-check mismatch.");
-            }
+	    //if ( compare_net_outputs(result.first, result_ref.first) ) {
+	    //throw std::runtime_error("OpenCL self-check mismatch.");
+	    //}
+            if (! compare_net_outputs(result.first, result_ref.first,
+				      result.second, result.second) )
+	      throw std::runtime_error("OpenCL self check failed.");
         }
 #else
         (void)force_selfcheck;

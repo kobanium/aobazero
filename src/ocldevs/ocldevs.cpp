@@ -1,5 +1,6 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
+#if defined(USE_OpenCL_AOBA)
 #include "err.hpp"
 #include "opencl.hpp"
 #include <exception>
@@ -39,4 +40,9 @@ int main() {
     for (auto &device : devices) out_device_info(device_id++, device); }
 
   return 0; }
-  
+#else
+#include <iostream>
+int main() {
+  std::cout << "This program cannot use OpenCL." << std::endl;
+  return 0; }
+#endif

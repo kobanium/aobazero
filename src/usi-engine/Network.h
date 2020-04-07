@@ -134,7 +134,10 @@ public:
       const GameState* state, NNPlanes & planes, int rotation);
 #ifdef USE_OPENCL_SELFCHECK
 //    void compare_net_outputs(const Netresult& data, const Netresult& ref);
-    int compare_net_outputs(std::vector<scored_node>& data, std::vector<scored_node>& ref);
+//int compare_net_outputs(std::vector<scored_node>& data, std::vector<scored_node>& ref);
+    int compare_net_outputs(std::vector<scored_node>& policy,
+			    std::vector<scored_node>& policy_ref,
+			    float value, float value_ref);
     std::unique_ptr<ForwardPipe> m_forward_cpu;
 #endif
 

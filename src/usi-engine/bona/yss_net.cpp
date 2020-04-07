@@ -411,7 +411,9 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 			}
 			
 //			int ret = GTP::s_network->compare_net_outputs(result.first, result_ref.first);
-			int ret = GTP::s_network->compare_net_outputs(result.first, cpu_result);
+//			int ret = GTP::s_network->compare_net_outputs(result.first, cpu_result);
+			int ret = GTP::s_network->compare_net_outputs(result.first, cpu_result,
+								      result.second, result_ref.second);
 			static int count = 0;
 			count++;
 			int per_bigs = 0;

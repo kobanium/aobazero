@@ -160,7 +160,48 @@ public:
     assert(cname.ok() && 0 < cname.get_len_fname());
     assert(wfname.ok() && 0 < wfname.get_len_fname());
     assert(isalnum(ch) && -2 < nnet_id && nnet_id < 65536);
+    char *argv[256];
+    int argc = 0;
 
+    unique_ptr<char []> a0(new char [cname.get_len_fname() + 1U]);
+    memcpy(a0.get(), cname.get_fname(), cname.get_len_fname() + 1U);
+    argv[argc++] = a0.get();
+
+    char opt_q[] = "-q";
+    if (!verbose_eng) argv[argc++] = opt_q;
+
+    char opt_p[]       = "-p";
+    char opt_p_value[] = "800";
+    argv[argc++] = opt_p;
+    argv[argc++] = opt_p_value;
+
+    char opt_n[] = "-n";
+    argv[argc++] = opt_n;
+
+    char opt_m[]       = "-m";
+    char opt_m_value[] = "30";
+    argv[argc++] = opt_m;
+    argv[argc++] = opt_m_value;
+
+    char opt_w[] = "-w";
+    unique_ptr<char []> opt_w_value(new char [wfname.get_len_fname() + 1U]);
+    memcpy(opt_w_value.get(), wfname.get_fname(), wfname.get_len_fname() + 1U);
+    argv[argc++] = opt_w;
+    argv[argc++] = opt_w_value.get();
+
+    char opt_u[] = "-u";
+    char opt_u_value[256];
+    opt_u[1] = ch;
+    sprintf(opt_u_value, "%i", nnet_id);
+    argv[argc++] = opt_u;
+    argv[argc++] = opt_u_value;
+
+    assert(argc < 256);
+    unique_ptr<char []> path(new char [cname.get_len_fname() + 1U]);
+    memcpy(path.get(), cname.get_fname(), cname.get_len_fname() + 1U);
+    argv[argc] = nullptr;
+    Child::open(path.get(), argv);
+    /*
     unique_ptr<char []> path(new char [cname.get_len_fname() + 1U]);
     unique_ptr<char []> a0  (new char [cname.get_len_fname() + 1U]);
     unique_ptr<char []> a7  (new char [wfname.get_len_fname() + 1U]);
@@ -185,6 +226,7 @@ public:
     argv[argc++] = opt_u;
     argv[argc++] = opt_u_value;
     Child::open(path.get(), argv);
+    */
   
     _logname.add_fmt_fname(fmt_log, nnet_id, eid);
     _ofs.open(_logname.get_fname(), ios::trunc);

@@ -1,5 +1,6 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
+#if defined(_OPENMP) || defined(USE_MKL)
 #include "err.hpp"
 #include "iobase.hpp"
 #include "nnet-cpu.hpp"
@@ -695,3 +696,4 @@ uint NNetCPU::push_ff(uint size_batch, const float *input,
   for (uint ub = 0; ub < size_batch; ++ub) values[ub] = std::tanh(values[ub]);
 
   return 0; }
+#endif
