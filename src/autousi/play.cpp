@@ -185,7 +185,8 @@ public:
 
     char opt_w[] = "-w";
     unique_ptr<char []> opt_w_value(new char [wfname.get_len_fname() + 1U]);
-    memcpy(opt_w_value.get(), wfname.get_fname(), wfname.get_len_fname() + 1U);
+    memcpy(opt_w_value.get(),
+	   wfname.get_fname(), wfname.get_len_fname() + 1U);
     argv[argc++] = opt_w;
     argv[argc++] = opt_w_value.get();
 
@@ -201,32 +202,6 @@ public:
     memcpy(path.get(), cname.get_fname(), cname.get_len_fname() + 1U);
     argv[argc] = nullptr;
     Child::open(path.get(), argv);
-    /*
-    unique_ptr<char []> path(new char [cname.get_len_fname() + 1U]);
-    unique_ptr<char []> a0  (new char [cname.get_len_fname() + 1U]);
-    unique_ptr<char []> a7  (new char [wfname.get_len_fname() + 1U]);
-    char a1[] = "-p";  char a2[] = "800";
-    char a3[] = "-n";
-    char a4[] = "-m";  char a5[] = "30";
-    char a6[] = "-w";
-    memcpy(path.get(), cname.get_fname(), cname.get_len_fname() + 1U);
-    memcpy(a0.get(), cname.get_fname(), cname.get_len_fname() + 1U);
-    memcpy(a7.get(), wfname.get_fname(), wfname.get_len_fname() + 1U);
-    char *argv[] = { a0.get(), a1, a2, a3, a4, a5, a6, a7.get(),
-		     nullptr, nullptr, nullptr, nullptr,
-		     nullptr, nullptr, nullptr, nullptr };
-    int argc = 8;
-    char opt_q[] = "-q";
-    if (!verbose_eng) argv[argc++] = opt_q;
-
-    char opt_u[] = "-u";
-    char opt_u_value[256];
-    opt_u[1] = ch;
-    sprintf(opt_u_value, "%i", nnet_id);
-    argv[argc++] = opt_u;
-    argv[argc++] = opt_u_value;
-    Child::open(path.get(), argv);
-    */
   
     _logname.add_fmt_fname(fmt_log, nnet_id, eid);
     _ofs.open(_logname.get_fname(), ios::trunc);

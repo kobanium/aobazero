@@ -781,31 +781,29 @@ template<typename T> T abs_error(T a, T b) noexcept {
 int Network::compare_net_outputs(std::vector<scored_node>& policy,
 				 std::vector<scored_node>& policy_ref,
 				 float value, float value_ref) {
-  constexpr float th_abs_error = 0.002f;
+  constexpr float th_abs_error = 0.01f;
   float err;
 
   for (unsigned int idx = 0; idx < policy.size(); ++idx) {
     if ( policy[idx].first == 0 ) continue;
 
-    //myprintf("Policy: %.8f %.8f\n", policy[idx].first, policy_ref[idx].first);
     err = abs_error(policy[idx].first, policy_ref[idx].first);
     if (err < th_abs_error) continue;
 
     myprintf("Error in OpenCL calculation: idx=%u/%zu, expected %f got %f "
-	     "(error=%f%%)\n", idx, policy.size(), policy_ref[idx].first,
-	     policy[idx].first, err * 100.0f);
+	     "(error=%f)\n", idx, policy.size(), policy_ref[idx].first,
+	     policy[idx].first, err);
     for (unsigned int u = idx; u < idx + 10U && u < policy.size(); ++u)
       if ( policy[idx].first != 0 )
 	myprintf("%u: %f, %f\n", u, policy_ref[u].first, policy[u].first);
     myprintf("Updating your GPU driver may solve this problem.\n");
     return 1; }
 
-  //myprintf("value: %.8f %.8f\n", value, value_ref);
   err = abs_error(value, value_ref);
   if (err < 2.0f * th_abs_error) return 0;
 
   myprintf("Error in OpenCL calculation: expected value %f got %f "
-	   "(error=%f%%)\n", value_ref, value, err * 100.0);
+	   "(error=%f)\n", value_ref, value, err);
   myprintf("Updating your GPU driver may solve this problem.\n");
   return 1; }
 #endif
