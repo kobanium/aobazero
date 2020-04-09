@@ -9,13 +9,13 @@
 #include "xzi.hpp"
 #include <algorithm>
 #include <iostream>
-#include <deque>
+#include <map>
 #include <mutex>
 #include <vector>
 #include <cassert>
 #include <climits>
 #include <cstring>
-using std::deque;
+using std::map;
 using std::min;
 using std::mutex;
 using std::lock_guard;
@@ -559,15 +559,9 @@ public:
       die(ERR_INT("another instance is using %s", dname)); }
   ~dirlock_impl() noexcept {} };
 
-struct entry_sem_impl {
-  FName fname;
-  sem_t *psem;
-  explicit entry_sem_impl(const FName &fname_, sem_t *psem_) noexcept :
-    fname(fname_), psem(psem_) {} };
-
+static mutex m_sem_save;
+static map<sem_t *, FName> sem_save;
 class OSI::sem_impl {
-  static mutex m_entries;
-  static deque<entry_sem_impl> entries;
   FName _fname;
   sem_t *_psem;
   bool _flag_create;
@@ -580,27 +574,27 @@ public:
       if (sem_unlink(name) < 0 && errno != ENOENT) die(ERR_CLL("sem_unlink"));
       _psem = sem_open(name, O_CREAT | O_EXCL, 0600, value);
       if (_psem == SEM_FAILED) die(ERR_CLL("sem_open"));
-      lock_guard<mutex> lock(m_entries);
-      entries.emplace_back(_fname, _psem); }
+      lock_guard<mutex> lock(m_sem_save);
+      assert(sem_save.find(_psem) == sem_save.end());
+      sem_save[_psem] = _fname; }
     else {
       _psem = sem_open(name, 0);
       if (_psem == SEM_FAILED) die(ERR_CLL("sem_open")); } }
   ~sem_impl() noexcept {
     if (sem_close(_psem) < 0) die(ERR_CLL("sem_close"));
-    if (_flag_create ) {
-      errno = 0;
-      if (sem_unlink(_fname.get_fname()) < 0 && errno != ENOENT)
-	die(ERR_CLL("sem_unlink"));
-      lock_guard<mutex> lock(m_entries);
-      auto it = entries.begin();
-      while (it != entries.end() && it->psem != _psem) ++it;
-      if (it == entries.end()) die(ERR_CLL("INTERNAL ERROR"));
-      entries.erase(it); } }
+    if (!_flag_create) return;
+
+    lock_guard<mutex> lock(m_sem_save);
+    errno = 0;
+    if (sem_unlink(_fname.get_fname()) < 0 && errno != ENOENT)
+      die(ERR_CLL("sem_unlink"));
+    if (sem_save.find(_psem) == sem_save.end())
+      die(ERR_CLL("INTERNAL ERROR"));
+    sem_save.erase(_psem); }
   static void cleanup() noexcept {
-    lock_guard<mutex> lock(m_entries);
-    for (auto it = entries.begin(); it != entries.end();
-	 it = entries.erase(it)) {
-      sem_unlink(it->fname.get_fname()); } }
+    lock_guard<mutex> lock(m_sem_save);
+    for (auto &f : sem_save) sem_unlink(f.second.get_fname());
+    sem_save.clear(); }
   void inc() noexcept { if (sem_post(_psem) < 0) die(ERR_CLL("sem_post")); }
   void dec_wait() noexcept {
     if (sem_wait(_psem) < 0) die(ERR_CLL("sem_wait")); }
@@ -613,18 +607,10 @@ public:
     if (errno != ETIMEDOUT) die(ERR_CLL("sem_timedwait"));
     return -1; }
   bool ok() const noexcept { return _psem != SEM_FAILED; } };
-mutex OSI::sem_impl::m_entries;
-deque<entry_sem_impl> OSI::sem_impl::entries;
 
-struct entry_mmap_impl {
-  FName fname;
-  void *ptr;
-  explicit entry_mmap_impl(const FName &fname_, void *ptr_) noexcept
-    : fname(fname_), ptr(ptr_) {} };
-
+static mutex m_mmap_save;
+static map<void *, FName> mmap_save;
 class OSI::mmap_impl {
-  static mutex m_entries;
-  static deque<entry_mmap_impl> entries;
   FName _fname;
   bool _flag_create;
   size_t _size;
@@ -642,8 +628,9 @@ public:
       if (ftruncate(fd, size) < 0) die(ERR_CLL("ftruncate"));
       _ptr = mmap(nullptr, size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
       if (_ptr == MAP_FAILED) die(ERR_CLL("mmap"));
-      lock_guard<mutex> lock(m_entries);
-      entries.emplace_back(_fname, _ptr); }
+      lock_guard<mutex> lock(m_mmap_save);
+      assert(m_mmap_save.find(_ptr) == m_mmap_save.end());
+      mmap_save[_ptr] = _fname; }
     else {
       fd = shm_open(name, O_RDWR, 0600);
       if (fd < 0) die(ERR_CLL("shm_open"));
@@ -651,21 +638,19 @@ public:
       if (_ptr == MAP_FAILED) die(ERR_CLL("mmap")); } }
   ~mmap_impl() noexcept {
     if (munmap(_ptr, _size) < 0) die(ERR_CLL("munmap"));
-    if (_flag_create) {
-      if (shm_unlink(_fname.get_fname()) < 0) die(ERR_CLL("shm_unlink"));
-      lock_guard<mutex> lock(m_entries);
-      auto it = entries.begin();
-      while (it != entries.end() && it->ptr != _ptr) ++it;
-      if (it == entries.end()) die(ERR_CLL("INTERNAL ERROR"));
-      entries.erase(it); } }
+    if (!_flag_create) return;
+
+    lock_guard<mutex> lock(m_mmap_save);
+    if (shm_unlink(_fname.get_fname()) < 0) die(ERR_CLL("shm_unlink"));
+    if (mmap_save.find(_ptr) == mmap_save.end())
+      die(ERR_CLL("INTERNAL ERROR"));
+    mmap_save.erase(_ptr); }
   static void cleanup() noexcept {
-    lock_guard<mutex> lock(m_entries);
-    for (auto it = entries.begin(); it != entries.end();
-	 it = entries.erase(it)) shm_unlink(it->fname.get_fname()); }
+    lock_guard<mutex> lock(m_mmap_save);
+    for (auto &f : mmap_save) shm_unlink(f.second.get_fname());
+    mmap_save.clear(); }
   void *get() const noexcept { return _ptr; }
   bool ok() const noexcept { return _ptr != nullptr; } };
-mutex OSI::mmap_impl::m_entries;
-deque<entry_mmap_impl> OSI::mmap_impl::entries;
 
 class OSI::rh_impl {
   int _fd;

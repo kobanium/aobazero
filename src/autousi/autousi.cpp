@@ -258,6 +258,6 @@ int main() {
   cout << "\nsignal " << flag_signal << " caught" << endl;
 
   PlayManager::get().engine_terminate();
-  Client::get().end();
   PlayManager::get().end();
+  Client::get().end();
   return 0; }

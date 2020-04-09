@@ -418,7 +418,7 @@ void PlayManager::start(const char *cname, const char *dlog,
   int nnet_id = 0;
   for (const string &s : devices_str) _devices.emplace_back(s, nnet_id++); }
 
-void PlayManager::end() noexcept { _devices.clear(); }
+void PlayManager::end() noexcept { _devices.clear(); seq_s.clear(); }
 
 void PlayManager::engine_start(const FNameID &wfname, uint64_t crc64)
   noexcept {

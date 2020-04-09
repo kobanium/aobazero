@@ -38,7 +38,8 @@ using std::unique_lock;
 using std::vector;
 using ErrAux::die;
 using uint = unsigned int;
-enum class Type : uint { Register, FeedForward, FlushON, FlushOFF, NNReset };
+enum class Type : uint { Register, FeedForward, FlushON, FlushOFF, NNReset,
+    End };
 #if defined(USE_OPENCL_AOBA)
 using NNet = NNetOCL;
 #else
@@ -86,7 +87,7 @@ public:
     _nnmoves(new ushort [size_batch * SAux::maxsize_moves]),
     _probs(new float [size_batch * SAux::maxsize_moves]),
     _values(new float [size_batch]), _ids(new uint [size_batch]),
-    _ubatch(0), _size_batch(size_batch), _do_wait(false) {
+    _ubatch(0), _size_batch(size_batch), _wait_id(0), _do_wait(false) {
     fill_n(_input.get(), size_batch * NNAux::size_input, 0.0f);
     fill_n(_sizes_nnmove.get(), size_batch, 0); }
 
@@ -160,6 +161,10 @@ void NNetService::worker_push() noexcept {
     _sem_service_lock.inc();
     assert(id < _nipc || id == NNAux::maxnum_nipc);
 
+    if (type == Type::End) {
+      std::cerr << "Terminate (nnet_id: " << _nnet_id << ")" << std::endl;
+      return; }
+
     if (type == Type::Register) {
       assert(pipc[id] && pipc[id]->nnet_id == _nnet_id && _sem_ipc[id].ok());
       _sem_ipc[id].inc();
@@ -205,11 +210,8 @@ void NNetService::worker_push() noexcept {
 	continue; }
 
       if (!entry1.is_full()) continue;
-
       entry1.push_ff(*pnnet);
-
       if (entry0.is_full()) entry0.wait_ff(*pnnet, _sem_ipc, pipc);
-
       entry1.swap(entry0);
       continue; }
 
@@ -317,8 +319,7 @@ NNetService::NNetService(uint nnet_id, uint nipc, uint size_batch,
     sprintf(fn, "%s.%07u.%03u.%03u", Param::name_mmap_nnet, pid, nnet_id, u);
     _mmap_ipc[u].open(fn, true, sizeof(SharedIPC)); }
 
-  _th_worker_push = thread(&NNetService::worker_push, this);
-  _th_worker_push.detach(); }
+  _th_worker_push = thread(&NNetService::worker_push, this); }
 
 NNetService::NNetService(uint nnet_id, uint nipc, uint size_batch,
 			 uint device_id, uint use_half, const FName &fname)
@@ -326,6 +327,18 @@ noexcept : NNetService(nnet_id, nipc, size_batch, device_id, use_half) {
   nnreset(fname); }
 
 NNetService::~NNetService() noexcept {
+  assert(_mmap_service.ok());
+  auto p = static_cast<SharedService *>(_mmap_service());
+  assert(p && _sem_service.ok() && _sem_service_lock.ok());
+  _sem_service_lock.dec_wait();
+  assert(p->njob <= NNAux::maxnum_nipc);
+  p->jobs[p->njob].id   = NNAux::maxnum_nipc;
+  p->jobs[p->njob].type = Type::End;
+  p->njob += 1U;
+  _sem_service_lock.inc();
+  _sem_service.inc();
+  _th_worker_push.join();
+
   _sem_service_lock.close();
   _sem_service.close();
   _mmap_service.close();
@@ -391,8 +404,7 @@ void NNetIPC::end() noexcept {
   _sem_ipc.close();
   _mmap_ipc.close(); }
 
-int NNetIPC::get_id() const noexcept {
-  assert(ok()); return _id; }
+int NNetIPC::get_id() const noexcept { assert(ok()); return _id; }
 
 float *NNetIPC::get_input() const noexcept {
   assert(ok() && _pipc); return _pipc->input; }
