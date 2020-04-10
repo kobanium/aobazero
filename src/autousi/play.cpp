@@ -156,7 +156,8 @@ public:
     _time_average(0.0), _logname(logname),
     _fingerprint(to_string(nnet_id) + string("-") + to_string(eid)),
     _device_id(device_id), _nnet_id(nnet_id), _version(-1), _eid(eid),
-    _flag_playing(false), _flag_ready(false), _flag_usistart(false) {
+    _nmove(0), _flag_playing(false), _flag_ready(false),
+    _flag_usistart(false) {
     assert(cname.ok() && 0 < cname.get_len_fname());
     assert(wfname.ok() && 0 < wfname.get_len_fname());
     assert(isalnum(ch) && -2 < nnet_id && nnet_id < 65536);
@@ -379,18 +380,16 @@ public:
     int nb = vsnprintf(buf, sizeof(buf), fmt, argList);
     va_end(argList);
     if (sizeof(buf) <= static_cast<size_t>(nb) + 1U)
-      die(ERR_INT("buffer overrun (engine %d-%d)", _nnet_id, _eid));
+      die(ERR_INT("buffer overrun (engine %s)", get_fp()));
 
     out_log(buf);
     buf[nb]     = '\n';
     buf[nb + 1] = '\0';
     if (!Child::write(buf, strlen(buf))) {
-      if (errno == EPIPE) die(ERR_INT("engine %d-%d terminates",
-				      _nnet_id, _eid));
+      if (errno == EPIPE) die(ERR_INT("engine %s terminates", get_fp()));
       die(ERR_CLL("write")); } }
 
   const char *get_fp() const noexcept { return _fingerprint.c_str(); }
-  
   const string &get_record() const noexcept { return _record; }
   bool is_playing() const noexcept { return _flag_playing; }
   bool is_ready() const noexcept { return _flag_ready; }
