@@ -3,8 +3,8 @@
 #pragma once
 #include "iobase.hpp"
 #include "osi.hpp"
-#include "param.hpp"
 #include <condition_variable>
+#include <deque>
 #include <mutex>
 #include <thread>
 #include <cstdint>
@@ -39,15 +39,21 @@ class NNetService {
   OSI::Semaphore _sem_ipc[NNAux::maxnum_nipc];
   OSI::MMap _mmap_service;
   OSI::MMap _mmap_ipc[NNAux::maxnum_nipc];
+  std::unique_ptr<class NNet> _pnnet;
   std::thread _th_worker_push;
+  std::thread _th_worker_wait;
   std::condition_variable _cv_flush;
   std::condition_variable _cv_nnreset;
+  std::condition_variable _cv_entries;
   std::mutex _m_flush;
   std::mutex _m_nnreset;
+  std::mutex _m_entries;
+  std::deque<class Entry> _entries;
   bool _flag_cv_flush, _flag_cv_nnreset;
   uint _nnet_id, _nipc, _size_batch, _device_id, _use_half;
   FName _fname;
   void worker_push() noexcept;
+  void worker_wait() noexcept;
 
 public:
   NNetService(uint nnet_id, uint nipc, uint size_batch, uint device_id,

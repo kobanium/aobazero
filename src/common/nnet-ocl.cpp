@@ -32,6 +32,7 @@ using std::deque;
 using std::endl;
 using std::fill_n;
 using std::forward;
+using std::lock_guard;
 using std::make_tuple;
 using std::max;
 using std::max_element;
@@ -44,6 +45,7 @@ using std::sort;
 using std::string;
 using std::stringstream;
 using std::swap;
+using std::thread;
 using std::tie;
 using std::to_string;
 using std::tuple;
@@ -80,21 +82,17 @@ constexpr float bn_factor         = 1.0f / 999.982f;
 constexpr float bn_eps            = 1e-5f;
 
 /*
-  static double elapsed_sum = 0.0;
-  static uint nelapsed      = 0;
-
+  static int64_t elapsed_sum = 0;
+  static int64_t nelapsed    = 0;
   _queue.finish();
   steady_clock::time_point start = steady_clock::now();
   _queue.finish();
   steady_clock::time_point end = steady_clock::now();
-  double elapsed
-    = static_cast<double>(duration_cast<microseconds>(end - start).count());
+  int64_t elapsed = duration_cast<microseconds>(end - start).count();
   elapsed_sum += elapsed;
   nelapsed    += 1U;
-  std::cout << std::endl;
-  std::cout << elapsed << std::endl;
-  std::cout << elapsed_sum / static_cast<double>(nelapsed) << std::endl;
-  std::cout << std::endl;
+  std::cout << std::endl
+	    << elapsed << " " << elapsed_sum / nelapsed << std::endl;
 */
 
 constexpr char code_zero_clear[] = R"(
@@ -183,9 +181,12 @@ const string code_common =
 float x1(float x) { return x; }
 float x2(float x) { return x + x; }
 float x3(float x) { return x + x + x; }
-float x4(float x) { x += x; return x + x; }
-float x6(float x) { x += x; return x + x + x; }
-float x9(float x) { float y = x + x; y += y; return y + y + x; }
+float x4(float x) { return 4.0f * x; }
+float x6(float x) { return 6.0f * x; }
+float x9(float x) { return 9.0f * x; }
+//float x4(float x) { x += x; return x + x; }
+//float x6(float x) { x += x; return x + x + x; }
+//float x9(float x) { float y = x + x; y += y; return y + y + x; }
 )";
 
 const string code_compute_matV_child = R"(
@@ -200,6 +201,7 @@ void compute_matV_child(uint ch, uint ub, uint utile, uint uh, uint uw,
                         __global void *matV) {
   int y0 = uh*LEN_TILE_OUT - PAD;
   int x0 = uw*LEN_TILE_OUT - PAD;
+
   float md[LEN_TILE_IN][LEN_TILE_IN];
   for (int y = 0; y < LEN_TILE_IN; ++y)
     for (int x = 0; x < LEN_TILE_IN; ++x) {
@@ -324,9 +326,15 @@ void func_BNReLU(__local float *f, uint off, float sd_inv, float mean,
   f[off] = max(0.0f, sd_inv * (x - mean)); }
 #endif
 
-void compute_matA_child(uint origin, float mean, float sd_inv,
-                        float mm[LEN_TILE_IN][LEN_TILE_IN],
+void compute_matA_child(uint ub, uint utile, uint origin, float mean,
+                        float sd_inv, __local float *flM,
                         __local float *flout) {
+  float mm[LEN_TILE_IN][LEN_TILE_IN];
+  for (uint uh_in = 0; uh_in < LEN_TILE_IN; ++uh_in)
+    for (uint uw_in = 0; uw_in < LEN_TILE_IN; ++uw_in)
+      mm[uh_in][uw_in] = flM[(uh_in*LEN_TILE_IN + uw_in)*NB*NTILE
+                             + ub*NTILE + utile];
+
   func_BNReLU(flout, origin + 0U*WIDTH + 0U, sd_inv, mean,
               + mm[0][0] + mm[0][1] + mm[0][2] + mm[0][3]
               + mm[1][0] + mm[1][1] + mm[1][2] + mm[1][3]
@@ -368,8 +376,7 @@ void compute_matA_child(uint origin, float mean, float sd_inv,
               + mm[1][1] + mm[1][2] + x4(mm[1][3]) + mm[1][4]
               + mm[2][1] + mm[2][2] + x4(mm[2][3]) + mm[2][4]
               + x4(mm[3][1] + mm[3][2] + x4(mm[3][3]) + mm[3][4])
-              + mm[4][1] + mm[4][2] + x4(mm[4][3]) + mm[4][4]);
-  barrier(CLK_LOCAL_MEM_FENCE); }
+              + mm[4][1] + mm[4][2] + x4(mm[4][3]) + mm[4][4]); }
 )";
 
 const string code_compute_matA = R"(
@@ -388,37 +395,31 @@ void compute_matA_BNReLU(__global const void *matM,
   uint utile = get_global_id(0);
   uint ub    = get_global_id(1);
   uint ch    = get_global_id(2);
-  uint chb   = ch*NB + ub;
-  float mm[LEN_TILE_IN][LEN_TILE_IN];
 
   __local float flM[LEN_TILE_IN*LEN_TILE_IN * NTILE*NB]
                 __attribute__((aligned(SIZE_ALIGN)));
+  __local float flout[NB*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
+
   for (uint sq = 0; sq < LEN_TILE_IN*LEN_TILE_IN; ++sq)
     flM[sq*NB*NTILE + ub*NTILE + utile]
       = load(sq*NM*NN + ch*NN + ub*NTILE + utile, matM);
 
-  barrier(CLK_LOCAL_MEM_FENCE);
-  for (uint uh_in = 0; uh_in < LEN_TILE_IN; ++uh_in)
-    for (uint uw_in = 0; uw_in < LEN_TILE_IN; ++uw_in)
-      mm[uh_in][uw_in] = flM[(uh_in * LEN_TILE_IN + uw_in)*NB*NTILE
-                             + ub*NTILE + utile];
+#ifdef DO_JOIN
+  for (uint u = 0; u < NTILE; ++u)
+    flout[u*NB*NTILE + ub*NTILE + utile]
+      = fbypass[ch*NB*128U + u*NB*NTILE + ub*NTILE + utile];
+#endif
 
   uint uh      = utile / NTILE_W;
   uint uw      = utile % NTILE_W;
   uint origin  = ub*SIZE_PLANE + (uh*WIDTH + uw)*LEN_TILE_OUT;
   float mean   = mean_array[ch];
   float sd_inv = sd_inv_array[ch];
-  __local float flout[NB*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
 
-#ifdef DO_JOIN
-  for (uint u = 0; u < NTILE; ++u)
-    flout[u*NB*NTILE + ub*NTILE + utile]
-      = fbypass[ch*NB*128U + u*NB*NTILE + ub*NTILE + utile];
   barrier(CLK_LOCAL_MEM_FENCE);
-#endif
+  compute_matA_child(ub, utile, origin, mean, sd_inv, flM, flout);
 
-  compute_matA_child(origin, mean, sd_inv, mm, flout);
-
+  barrier(CLK_LOCAL_MEM_FENCE);
   for (uint u = 0; u < NTILE; ++u)
     fout[ch*NN_OUT + u*NB*NTILE + ub*NTILE + utile]
       = flout[u*NB*NTILE + ub*NTILE + utile]; }
@@ -461,45 +462,37 @@ void compute_matAV(__global const void *matM,
   uint utile = get_global_id(0);
   uint ub    = get_global_id(1);
   uint ch    = get_global_id(2);
-  float mm[LEN_TILE_IN][LEN_TILE_IN];
 
-  __local float flM[LEN_TILE_IN*LEN_TILE_IN * NTILE*NB]
-                __attribute__((aligned(SIZE_ALIGN)));
+  __local float flMorV[LEN_TILE_IN*LEN_TILE_IN * NTILE*NB]
+                    __attribute__((aligned(SIZE_ALIGN)));
+  __local float flout[NB*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
+
   for (uint sq = 0; sq < LEN_TILE_IN*LEN_TILE_IN; ++sq)
-    flM[sq*NB*NTILE + ub*NTILE + utile]
+    flMorV[sq*NB*NTILE + ub*NTILE + utile]
       = load(sq*NM*NN + ch*NN + ub*NTILE + utile, matM);
 
-  barrier(CLK_LOCAL_MEM_FENCE);
-  for (uint uh_in = 0; uh_in < LEN_TILE_IN; ++uh_in)
-    for (uint uw_in = 0; uw_in < LEN_TILE_IN; ++uw_in)
-      mm[uh_in][uw_in] = flM[(uh_in*LEN_TILE_IN + uw_in)*NB*NTILE
-                             + ub*NTILE + utile];
+#ifdef DO_JOIN
+  for (uint u = 0; u < NTILE; ++u)
+    flout[u*NB*NTILE + ub*NTILE + utile]
+      = fbypass[ch*NB*128U + u*NB*NTILE + ub*NTILE + utile];
+#endif
 
   uint uh      = utile / NTILE_W;
   uint uw      = utile % NTILE_W;
   uint origin  = ub*SIZE_PLANE + (uh*WIDTH + uw)*LEN_TILE_OUT;
   float mean   = mean_array[ch];
   float sd_inv = sd_inv_array[ch];
-  __local float flout[NB*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
-  __local float flV[LEN_TILE_IN*LEN_TILE_IN*NB*NTILE]
-                __attribute__((aligned(SIZE_ALIGN)));
 
-#ifdef DO_JOIN
-  for (uint u = 0; u < NTILE; ++u)
-    flout[u*NB*NTILE + ub*NTILE + utile]
-      = fbypass[ch*NB*128U + u*NB*NTILE + ub*NTILE + utile];
   barrier(CLK_LOCAL_MEM_FENCE);
-#endif
+  compute_matA_child(ub, utile, origin, mean, sd_inv, flMorV, flout);
 
-  compute_matA_child(origin, mean, sd_inv, mm, flout);
-
+  barrier(CLK_LOCAL_MEM_FENCE);
 #ifdef DO_FORK
   for (uint u = 0; u < NTILE; ++u)
     fbypass[ch*NB*128U + u*NB*NTILE + ub*NTILE + utile]
       = flout[u*NB*NTILE + ub*NTILE + utile];
 #endif
-
-  compute_matV_child(ch, ub, utile, uh, uw, flout, flV, matV); }
+  compute_matV_child(ch, ub, utile, uh, uw, flout, flMorV, matV); }
 )";
 
 const string code_compute_matM_wmma = R"(
@@ -997,9 +990,8 @@ static double measure_compute_matM(const OCL::Queue &queue,
     queue.push_ndrange_kernel(ker, 3U, size_g, size_l);
   queue.finish();
   steady_clock::time_point end = steady_clock::now();
-  double elapsed = static_cast<double>
-    (duration_cast<microseconds>(end - start).count());
-  return (elapsed / static_cast<double>(sample_size)); }
+  int64_t elapsed = duration_cast<microseconds>(end - start).count();
+  return (elapsed / static_cast<int64_t>(sample_size)); }
 
 static SgemmParam tune_compute_matM(bool use_wmma, const OCL::Device &dev,
 				    uint nbatch, uint nm0, uint nn0, uint nk0)
@@ -1266,9 +1258,8 @@ static double measure_sgemm(const OCL::Queue &queue, const SgemmParam param,
     queue.push_ndrange_kernel(ker, 3U, size_g, size_l);
   queue.finish();
   steady_clock::time_point end = steady_clock::now();
-  double elapsed = static_cast<double>
-    (duration_cast<microseconds>(end - start).count());
-  return (elapsed / static_cast<double>(sample_size)); }
+  int64_t elapsed = duration_cast<microseconds>(end - start).count();
+  return (elapsed / static_cast<int64_t>(sample_size)); }
 
 void ManageSgemm::start(const OCL::Device &dev, const OCL::Queue &queue,
 			bool, bool, bool do_transa, bool do_transb,
@@ -1821,16 +1812,25 @@ static void compress_data(uint index_block, uint nb0, uint nb, const float *in,
   
   size_write = (2U*index_block + n_one + ntot_moves) * sizeof(uint); }
 
+NNetOCL::NNetOCL() noexcept :  _th_worker_ocl(&NNetOCL::worker_ocl, this),
+  _pool1_slot_size(NNAux::nslot), _pool2_slot_size(0) {
+  _th_worker_ocl.detach();
+  fill_n(_pool3_slots, NNAux::nslot, false); }
+
 string NNetOCL::reset(uint maxsize_batch,
 		      const vector<pair<uint, row_t>> &wght, int device_id,
 		      bool use_half, bool flag_out, bool do_sleep) noexcept {
+  lock_guard<mutex> lock_push_ff(_m_push_ff);
+  lock_guard<mutex> lock_wait_ff(_m_wait_ff);
   assert(0 < maxsize_batch);
-  _do_sleep = do_sleep;
-  stringstream lines;
+  if (_pool1_slot_size != NNAux::nslot) die(ERR_INT("Internal Error"));
+  if (_pool2_slot_size != 0)            die(ERR_INT("Internal Error"));
+  for (bool b: _pool3_slots) if (b)     die(ERR_INT("Internal Error"));
 
+  _do_sleep = do_sleep;
+  _elapsed_wait_ff = 0;
   for (uint uslot = 0; uslot < NNAux::nslot; ++uslot)
-    _pool_slots[NNAux::nslot - uslot - 1U] = uslot;
-  _pool_size = NNAux::nslot;
+    _pool1_slots[NNAux::nslot - uslot - 1U] = uslot;
 
   //
   // compute network dimension
@@ -1926,6 +1926,7 @@ string NNetOCL::reset(uint maxsize_batch,
     get_best_device(_cl_dev);
     if (!_cl_dev.ok()) die(ERR_INT("no device found")); }
 
+  stringstream lines;
   lines << "- Device ID: " << device_id << "\n";
   lines << _cl_dev.gen_info();
 
@@ -2083,6 +2084,7 @@ string NNetOCL::reset(uint maxsize_batch,
   _cl_value2_wght.clear();
   _cl_value3_wght.clear();
   if (flag_out) cout << lines.str() << std::flush;
+
   return lines.str(); }
 
 void NNetOCL::load(bool use_half, const vector<pair<uint, row_t>> &wght)
@@ -2167,75 +2169,108 @@ void NNetOCL::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
 uint NNetOCL::push_ff(uint size_batch, const float *input,
 		      const uint *sizes_nnmove, const ushort *nnmoves,
 		      float *probs, float *values) noexcept {
+  lock_guard<mutex> lock_push_ff(_m_push_ff);
   assert(input && sizes_nnmove && nnmoves && probs && values);
-  if (size_batch == 0 || _maxsize_batch < size_batch)
-    die(ERR_INT("size_batch == 0"));
 
-  unique_lock<mutex> lock(_m);
-  _cv.wait(lock, [&]{ return 0 < _pool_size; });
-  uint uslot = _pool_slots[ --_pool_size ];
-  lock.unlock();
+  unique_lock<mutex> lock_pool1(_m_pool1_slot);
+  _cv_pool1_slot.wait(lock_pool1, [&]{ return 0 < _pool1_slot_size; });
+  uint uslot = _pool1_slots[ --_pool1_slot_size ];
+  lock_pool1.unlock();
+
+  if (size_batch == 0 || _maxsize_batch < size_batch)
+    die(ERR_INT("invalid size_batch"));
 
   size_t size_write;
   uint n_one, ntot_moves;
   compress_data(_index_block, size_batch, _maxsize_batch, input, sizes_nnmove,
 		nnmoves, _ptr_input[uslot].get(), size_write, n_one,
 		ntot_moves);
-  _mng_send.push(_queue, _ptr_input[uslot].get(), size_write);
-  _mng_decode.push(_queue, n_one);
-
-  // body part
-  _mng_compute_matV_input.push(_queue, _cl_output);
-  _mng_compute_matM_input.push(_queue, _cl_reswghts[0].matU);
-  _mng_compute_matAV_input.push(_queue, _cl_reswghts[0].mean,
-				_cl_reswghts[0].sd_inv);
-  uint ulayer = 1U;
-  for (; ulayer + 2U < _cl_reswghts.size(); ulayer += 2U) {
-    _mng_compute_matM.push(_queue, _cl_reswghts[ulayer].matU);
-    _mng_compute_matAV.push(_queue, _cl_reswghts[ulayer].mean,
-			   _cl_reswghts[ulayer].sd_inv);
-    _mng_compute_matM.push(_queue, _cl_reswghts[ulayer + 1U].matU);
-    _mng_compute_matAV_join.push(_queue, _cl_reswghts[ulayer + 1U].mean,
-				 _cl_reswghts[ulayer + 1U].sd_inv); }
-  
-  _mng_compute_matM.push(_queue, _cl_reswghts[ulayer].matU);
-  _mng_compute_matAV.push(_queue, _cl_reswghts[ulayer].mean,
-			  _cl_reswghts[ulayer].sd_inv);
-  _mng_compute_matM.push(_queue, _cl_reswghts[ulayer + 1U].matU);  
-  _mng_compute_matA_join.push(_queue, _cl_reswghts[ulayer + 1U].mean,
-			      _cl_reswghts[ulayer + 1U].sd_inv);
-
-  // head part
-  // in:  f1[_policy1_nout + _value1_nout][size_batch][size_plane]
-  // out: f2[size_batch][_value1_nout][size_plane]
-  _mng_head1.push(_queue);
-  _mng_compute_BNReLU.push(_queue);
-  _mng_compute_policy.push(_queue, ntot_moves, 2U*_index_block + n_one);
-
-  _mng_transform_value2.push(_queue);
-  _mng_value2.push(_queue);
-  _mng_resize_bias_ReLU_value3.push(_queue);
-  _mng_value3.push(_queue);
-  _mng_recv.push(_queue, _ptr_result[uslot].get(),
-		 (_maxsize_batch + ntot_moves) * sizeof(float),	uslot);
   memcpy(_slots_sizes_nnmove[uslot].get(), sizes_nnmove,
 	 sizeof(uint) * size_batch);
   _slots_size_batch[uslot] = size_batch;
   _slots_probs[uslot]      = probs;
   _slots_values[uslot]     = values;
+  _slots_size_write[uslot] = size_write;
+  _slots_n_one[uslot]      = n_one;
+  _slots_ntot_moves[uslot] = ntot_moves;
+
+  unique_lock<mutex> lock_pool2(_m_pool2_slot);
+  assert(_pool2_slot_size < NNAux::nslot);
+  _pool2_slots[ _pool2_slot_size++ ] = uslot;
+  lock_pool2.unlock();
+  _cv_pool2_slot.notify_one();
   return uslot; }
 
+void NNetOCL::worker_ocl() noexcept {
+  while (true) {
+    unique_lock<mutex> lock_pool2(_m_pool2_slot);
+    _cv_pool2_slot.wait(lock_pool2, [&]{ return 0 < _pool2_slot_size; });
+    uint uslot = _pool2_slots[ --_pool2_slot_size ];
+    lock_pool2.unlock();
+
+    size_t size_write = _slots_size_write[uslot];
+    uint n_one        = _slots_n_one[uslot];
+    uint ntot_moves   = _slots_ntot_moves[uslot];
+    _mng_send.push(_queue, _ptr_input[uslot].get(), size_write);
+    _mng_decode.push(_queue, n_one);
+    
+    // body part
+    _mng_compute_matV_input.push(_queue, _cl_output);
+    _mng_compute_matM_input.push(_queue, _cl_reswghts[0].matU);
+    _mng_compute_matAV_input.push(_queue, _cl_reswghts[0].mean,
+				  _cl_reswghts[0].sd_inv);
+    uint ulayer = 1U;
+    for (; ulayer + 2U < _cl_reswghts.size(); ulayer += 2U) {
+      _mng_compute_matM.push(_queue, _cl_reswghts[ulayer].matU);
+      _mng_compute_matAV.push(_queue, _cl_reswghts[ulayer].mean,
+			      _cl_reswghts[ulayer].sd_inv);
+      _mng_compute_matM.push(_queue, _cl_reswghts[ulayer + 1U].matU);
+      _mng_compute_matAV_join.push(_queue, _cl_reswghts[ulayer + 1U].mean,
+				   _cl_reswghts[ulayer + 1U].sd_inv); }
+    
+    _mng_compute_matM.push(_queue, _cl_reswghts[ulayer].matU);
+    _mng_compute_matAV.push(_queue, _cl_reswghts[ulayer].mean,
+			    _cl_reswghts[ulayer].sd_inv);
+    _mng_compute_matM.push(_queue, _cl_reswghts[ulayer + 1U].matU);  
+    _mng_compute_matA_join.push(_queue, _cl_reswghts[ulayer + 1U].mean,
+				_cl_reswghts[ulayer + 1U].sd_inv);
+    
+    // head part
+    // in:  f1[_policy1_nout + _value1_nout][size_batch][size_plane]
+    // out: f2[size_batch][_value1_nout][size_plane]
+    _mng_head1.push(_queue);
+    _mng_compute_BNReLU.push(_queue);
+    _mng_compute_policy.push(_queue, ntot_moves, 2U*_index_block + n_one);
+    
+    _mng_transform_value2.push(_queue);
+    _mng_value2.push(_queue);
+    _mng_resize_bias_ReLU_value3.push(_queue);
+    _mng_value3.push(_queue);
+    _mng_recv.push(_queue, _ptr_result[uslot].get(),
+		   (_maxsize_batch + ntot_moves) * sizeof(float), uslot);
+
+    unique_lock<mutex> lock_pool3(_m_pool3_slot);
+    _pool3_slots[uslot] = true;
+    lock_pool3.unlock();
+    _cv_pool3_slot.notify_one(); } }
+
 void NNetOCL::wait_ff(uint uslot) noexcept {
+  lock_guard<mutex> lock_wait_ff(_m_wait_ff);
   assert(uslot < NNAux::nslot);
+
+  unique_lock<mutex> lock_pool3(_m_pool3_slot);
+  _cv_pool3_slot.wait(lock_pool3, [&]{ return _pool3_slots[uslot]; });
+  _pool3_slots[uslot] = false;
+  lock_pool3.unlock();
+
   if (_do_sleep) {
-    static double elapsed_ave = 0.0;
     steady_clock::time_point start = steady_clock::now();
-    sleep_for(duration<double, std::ratio<7, 10000000>>(elapsed_ave));
+    sleep_for(microseconds(INT64_C(4) * _elapsed_wait_ff / INT64_C(5)));
     _mng_recv.wait(uslot);
     steady_clock::time_point end = steady_clock::now();
-    double elapsed
-      = static_cast<double>(duration_cast<microseconds>(end - start).count());
-    elapsed_ave = 0.95 * elapsed_ave + 0.05 * elapsed; }
+    int64_t elapsed = duration_cast<microseconds>(end - start).count();
+    _elapsed_wait_ff = ((INT64_C(99) * _elapsed_wait_ff + elapsed)
+			/ INT64_C(100)); }
   else _mng_recv.wait(uslot);
 
   compute_probs(_slots_size_batch[uslot], _slots_sizes_nnmove[uslot].get(),
@@ -2245,9 +2280,9 @@ void NNetOCL::wait_ff(uint uslot) noexcept {
     _slots_values[uslot][ub]
       = std::tanh(_ptr_result[uslot][ub] + _value3_bias[0]);
 
-  unique_lock<mutex> lock(_m);
-  assert(_pool_size < NNAux::nslot);
-  _pool_slots[ _pool_size++ ] = uslot;
+  unique_lock<mutex> lock(_m_pool1_slot);
+  assert(_pool1_slot_size < NNAux::nslot);
+  _pool1_slots[ _pool1_slot_size++ ] = uslot;
   lock.unlock();
-  _cv.notify_one(); }
+  _cv_pool1_slot.notify_one(); }
 #endif

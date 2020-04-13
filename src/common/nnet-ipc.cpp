@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <exception>
 #include <iostream>
-#include <map>
 #include <memory>
 #include <random>
 #include <string>
@@ -25,7 +24,6 @@ using std::cout;
 using std::endl;
 using std::fill_n;
 using std::lock_guard;
-using std::map;
 using std::move;
 using std::mt19937_64;
 using std::mutex;
@@ -41,9 +39,9 @@ using uint = unsigned int;
 enum class Type : uint { Register, FeedForward, FlushON, FlushOFF, NNReset,
     End };
 #if defined(USE_OPENCL_AOBA)
-using NNet = NNetOCL;
+class NNet : public NNetOCL {};
 #else
-using NNet = NNetCPU;
+class NNet : public NNetCPU {};
 #endif
 
 SeqPRNService::SeqPRNService() noexcept {
@@ -79,7 +77,6 @@ class Entry {
   unique_ptr<float []> _values;
   unique_ptr<uint []> _ids;
   uint _ubatch, _size_batch, _wait_id;
-  bool _do_wait;
 public:
   explicit Entry(uint size_batch) noexcept :
   _input(new float [size_batch * NNAux::size_input]),
@@ -87,25 +84,13 @@ public:
     _nnmoves(new ushort [size_batch * SAux::maxsize_moves]),
     _probs(new float [size_batch * SAux::maxsize_moves]),
     _values(new float [size_batch]), _ids(new uint [size_batch]),
-    _ubatch(0), _size_batch(size_batch), _wait_id(0), _do_wait(false) {
+    _ubatch(0), _size_batch(size_batch), _wait_id(0) {
     fill_n(_input.get(), size_batch * NNAux::size_input, 0.0f);
     fill_n(_sizes_nnmove.get(), size_batch, 0); }
 
-  void swap(Entry &e) noexcept {
-    _input.swap(e._input);
-    _sizes_nnmove.swap(e._sizes_nnmove);
-    _nnmoves.swap(e._nnmoves);
-    _probs.swap(e._probs);
-    _values.swap(e._values);
-    _ids.swap(e._ids);
-    ::swap(_ubatch, e._ubatch);
-    ::swap(_size_batch, e._size_batch);
-    ::swap(_wait_id, e._wait_id);
-    ::swap(_do_wait, e._do_wait); }
-
   void add(const float *input, uint size_nnmove, const ushort *nnmoves,
 	   uint id) noexcept {
-    assert(_ubatch < _size_batch && !_do_wait && input && nnmoves
+    assert(_ubatch < _size_batch && input && nnmoves
 	   && id < NNAux::maxnum_nipc);
     copy_n(input, NNAux::size_input, &(_input[_ubatch * NNAux::size_input]));
     copy_n(nnmoves, size_nnmove, &(_nnmoves[_ubatch * SAux::maxsize_moves]));
@@ -114,14 +99,12 @@ public:
     _ubatch += 1U; }
 
   void push_ff(NNet &nnet) noexcept {
-    assert(0 < _ubatch && !_do_wait);
+    assert(0 < _ubatch);
     _wait_id = nnet.push_ff(_ubatch, _input.get(), _sizes_nnmove.get(),
-			    _nnmoves.get(), _probs.get(), _values.get());
-    _do_wait = true; }
+			    _nnmoves.get(), _probs.get(), _values.get()); }
 
   void wait_ff(NNet &nnet, OSI::Semaphore sem_ipc[NNAux::maxnum_nipc],
 	       SharedIPC *pipc[NNAux::maxnum_nipc]) noexcept {
-    assert(_do_wait);
     nnet.wait_ff(_wait_id);
     for (uint u = 0; u < _ubatch; ++u) {
       uint id = _ids[u];
@@ -130,24 +113,36 @@ public:
       copy_n(&(_probs[u * SAux::maxsize_moves]), _sizes_nnmove[u],
 	     pipc[id]->probs);
       sem_ipc[id].inc(); }
-    _ubatch  = 0;
-    _do_wait = false; }
+    _ubatch = 0; }
 
   bool is_full() const noexcept { return _ubatch == _size_batch; }
   bool is_empty() const noexcept { return _ubatch == 0; }
 };
 
+void NNetService::worker_wait() noexcept {
+  SharedIPC *pipc[NNAux::maxnum_nipc];
+  for (uint u = 0; u < _nipc; ++u)
+    pipc[u] = static_cast<SharedIPC *>(_mmap_ipc[u]());
+
+  while (true) {
+    unique_lock<mutex> lock(_m_entries);
+    _cv_entries.wait(lock, [&]{ return ! _entries.empty(); });
+    Entry e(move(_entries.front()));
+    _entries.pop_front();
+    lock.unlock();
+
+    e.wait_ff(*_pnnet, _sem_ipc, pipc); } }
+
 void NNetService::worker_push() noexcept {
-  unique_ptr<NNet> pnnet;
   SharedService *pservice = static_cast<SharedService *>(_mmap_service());
   SharedIPC *pipc[NNAux::maxnum_nipc];
   for (uint u = 0; u < _nipc; ++u)
     pipc[u] = static_cast<SharedIPC *>(_mmap_ipc[u]());
 
-  Entry entry0(_size_batch), entry1(_size_batch);
   uint id;
   Type type;
   bool do_flush = false;
+  unique_ptr<Entry> ptr_e(new Entry(_size_batch));
   while (true) {
     assert(_sem_service.ok() && _sem_service_lock.ok());
     _sem_service.dec_wait();
@@ -187,32 +182,32 @@ void NNetService::worker_push() noexcept {
       uint version;
       uint64_t digest;
       NNAux::wght_t wght = NNAux::read(fn, version, digest);
-      pnnet.reset(new NNet);
+      _pnnet.reset(new NNet);
 #if defined(USE_OPENCL_AOBA)
       cout << "Tuning feed-forward engine of device "
 	   << static_cast<int>(_device_id) << " for " << fn.get_fname()
 	   << std::endl;
-      cout << pnnet->reset(_size_batch, wght, _device_id, _use_half,
-			   false, true)
+      cout << _pnnet->reset(_size_batch, wght, _device_id, _use_half,
+			    false, true)
 	   << std::flush;
 #else
-      pnnet->reset(_size_batch, wght);
+      _pnnet->reset(_size_batch, wght);
 #endif
       continue; }
       
     if (type == Type::FeedForward) {
       assert(pipc[id]);
-      entry1.add(pipc[id]->input, pipc[id]->size_nnmove, pipc[id]->nnmoves,
+      ptr_e->add(pipc[id]->input, pipc[id]->size_nnmove, pipc[id]->nnmoves,
 		 id);
-      if (do_flush) {
-	entry1.push_ff(*pnnet);
-	entry1.wait_ff(*pnnet, _sem_ipc, pipc);
-	continue; }
+      if (! do_flush && ! ptr_e->is_full()) continue;
 
-      if (!entry1.is_full()) continue;
-      entry1.push_ff(*pnnet);
-      if (entry0.is_full()) entry0.wait_ff(*pnnet, _sem_ipc, pipc);
-      entry1.swap(entry0);
+      ptr_e->push_ff(*_pnnet);
+      {
+	lock_guard<mutex> lock(_m_entries);
+	_entries.push_back(move(*ptr_e));
+      }
+      _cv_entries.notify_one();
+      ptr_e.reset(new Entry(_size_batch));
       continue; }
 
     if (type == Type::FlushON) {
@@ -223,9 +218,14 @@ void NNetService::worker_push() noexcept {
       _cv_flush.notify_one();
       do_flush = true;
 
-      if (!entry1.is_empty()) entry1.push_ff(*pnnet);
-      if (!entry0.is_empty()) entry0.wait_ff(*pnnet, _sem_ipc, pipc);
-      if (!entry1.is_empty()) entry1.wait_ff(*pnnet, _sem_ipc, pipc);
+      if (ptr_e->is_empty()) continue;
+      ptr_e->push_ff(*_pnnet);
+      {
+	lock_guard<mutex> lock(_m_entries);
+	_entries.push_back(move(*ptr_e));
+      }
+      _cv_entries.notify_one();
+      ptr_e.reset(new Entry(_size_batch));
       continue; }
 
     if (type == Type::FlushOFF) {
@@ -312,14 +312,14 @@ NNetService::NNetService(uint nnet_id, uint nipc, uint size_batch,
   assert(p);
   p->id_ipc_next = 0;
   p->njob = 0;
-
   for (uint u = 0; u < nipc; ++u) {
     sprintf(fn, "%s.%07u.%03u.%03u", Param::name_sem_nnet, pid, nnet_id, u);
     _sem_ipc[u].open(fn, true, 0);
     sprintf(fn, "%s.%07u.%03u.%03u", Param::name_mmap_nnet, pid, nnet_id, u);
     _mmap_ipc[u].open(fn, true, sizeof(SharedIPC)); }
 
-  _th_worker_push = thread(&NNetService::worker_push, this); }
+  _th_worker_push = thread(&NNetService::worker_push, this);
+  _th_worker_wait = thread(&NNetService::worker_wait, this); }
 
 NNetService::NNetService(uint nnet_id, uint nipc, uint size_batch,
 			 uint device_id, uint use_half, const FName &fname)

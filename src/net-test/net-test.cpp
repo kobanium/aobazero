@@ -11,6 +11,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <deque>
+#include <future>
 #include <iostream>
 #include <iomanip>
 #include <map>
@@ -23,14 +24,18 @@
 #include <utility>
 #include <vector>
 #include <climits>
+#include <cstdint>
+using std::async;
 using std::cerr;
 using std::copy_n;
 using std::cout;
 using std::condition_variable;
 using std::deque;
 using std::endl;
+using std::future;
 using std::getline;
 using std::istream;
+using std::launch;
 using std::lock_guard;
 using std::map;
 using std::max;
@@ -55,9 +60,6 @@ using namespace ErrAux;
 using namespace SAux;
 
 constexpr double epsilon = 1e-2;
-
-static double elapsed  = 0.0;
-static uint   nelapsed = 0U;
 
 static uint   value_n       = 0;
 static double value_sum_e   = 0.0;
@@ -199,11 +201,12 @@ class QueueTest {
   deque<TestSet> _deque_ts;
   vector<Entry> _data;
   uint _npush, _nbatch;
+  int64_t _nelapsed;
 
   void worker() noexcept {
-    unique_lock<mutex> lock(_m);
     TestSet ts;
     while (true) {
+      unique_lock<mutex> lock(_m);
       _cv.wait(lock, [&]{ return 0 < _deque_ts.size(); });
       ts = move(_deque_ts.front());
       _deque_ts.pop_front();
@@ -215,12 +218,10 @@ class QueueTest {
 	ts.data[index].compare(ts.probs.get() + index * SAux::maxsize_moves,
 			       ts.values[index]);
 
-      lock.lock();
       for (uint index = 0; index < ts.nentry; ++index)
 	cout << setw(5) << ts.data[index].get_no();
       cout << " OK" << endl;
-      nelapsed += 1U;
- } }
+      _nelapsed += 1U; } }
 
   void flush() noexcept {
     if (_npush == 0) return;
@@ -250,23 +251,23 @@ class QueueTest {
     _npush = 0; }
   
 public:
-  explicit QueueTest() noexcept : _npush(0) {}
-
-  void start(const FName &fname, int device_id, uint nbatch, bool use_half)
-    noexcept {
+  explicit QueueTest(const FName &fname, int device_id, uint nbatch,
+		     bool use_half) noexcept
+    : _th_worker(&QueueTest::worker, this), _npush(0), _nbatch(nbatch),
+    _nelapsed(0) {
     _data.resize(nbatch);
-    _nbatch = nbatch;
     uint version;
     uint64_t digest;
     NNAux::wght_t wght = NNAux::read(fname, version, digest);
-    _th_worker = thread(&QueueTest::worker, this);
 
 #if defined(USE_OPENCL_AOBA)
     _nnet.reset(nbatch, wght, device_id, use_half);
 #else
     _nnet.reset(nbatch, wght);
+    (void)device_id;
+    (void)use_half;
 #endif
-    (void)device_id; (void)use_half; }
+  }
   
   void push(Entry &entry) noexcept {
     assert(entry.ok());
@@ -282,18 +283,18 @@ public:
       _deque_ts.push_back(move(ts));
     }
     _th_worker.join(); }
+
+  int64_t get_nelapsed() const noexcept { return _nelapsed; }
 };
 
-static QueueTest queue_test;
-
-static vector<Entry> read_entries(istream &is) noexcept {
+static vector<Entry> read_entries(istream *pis) noexcept {
   vector<Entry> vec_entry;
   uint no = 0;
 
   for (uint uline = 0;;) {
     // read position startpos move...
     string string_line;
-    if (! getline(is, string_line)) break;
+    if (! getline(*pis, string_line)) break;
     uline += 1U;
     
     stringstream ss(string_line);
@@ -312,7 +313,7 @@ static vector<Entry> read_entries(istream &is) noexcept {
     
     // read NN input
     uline += 1U;
-    if (! getline(is, string_line)) die(ERR_INT("bad line %u", uline));
+    if (! getline(*pis, string_line)) die(ERR_INT("bad line %u", uline));
     ss.clear();
     ss.str(string_line);
     ss >> token1;
@@ -339,7 +340,7 @@ static vector<Entry> read_entries(istream &is) noexcept {
 
     // read state value
     uline += 1U;
-    if (!getline(is, string_line)) die(ERR_INT("bad line %u", uline));
+    if (!getline(*pis, string_line)) die(ERR_INT("bad line %u", uline));
     ss.clear();
     ss.str(string_line);
     ss >> token1;
@@ -349,7 +350,7 @@ static vector<Entry> read_entries(istream &is) noexcept {
 
     // read action probabilities
     uline += 1U;
-    if (!getline(is, string_line)) die(ERR_INT("bad line %u", uline));
+    if (!getline(*pis, string_line)) die(ERR_INT("bad line %u", uline));
     ss.clear();
     ss.str(string_line);
     ss >> token1;
@@ -383,9 +384,8 @@ static vector<Entry> read_entries(istream &is) noexcept {
     
     // read END
     uline += 1U;
-    if (!getline(is, string_line)) die(ERR_INT("bad line %u", uline));
+    if (!getline(*pis, string_line)) die(ERR_INT("bad line %u", uline));
     if (string_line != "END") die(ERR_INT("bad line %u", uline));
-    //if (ms.size() == 0) continue;
 
     // push target position
     map<ushort, string> nnmove2str;
@@ -396,21 +396,6 @@ static vector<Entry> read_entries(istream &is) noexcept {
     
     if (node.get_turn() == white) value_answer = - value_answer;
 
-    /*
-    for (float f : input) cout << " " << f;
-    cout << "\n";
-    cout << ms.size() << "\n";
-    for (uint u = 0; u < ms.size(); ++u) cout << " " << nnmoves2[u];
-    cout << "\n";
-    cout << value_answer << "\n";
-    for (uint u = 0; u < ms.size(); ++u)
-      cout << " " << policy_answer[nnmove2str[nnmoves2[u]]];
-    cout << "\n";
-    {
-      static uint count = 0;
-      if (++count == 1024) std::terminate(); }
-    */
-
     vec_entry.emplace_back(++no, ms.size(), value_answer, move(policy_answer),
 			   move(nnmove2str));
     vec_entry.back().input   = move(input);
@@ -420,23 +405,26 @@ static vector<Entry> read_entries(istream &is) noexcept {
 
 int main(int argc, char **argv) {
   if (get_options(argc, argv) < 0) return 1;
-  queue_test.start(FName(opt_str_wght.c_str()), opt_device_id, opt_batch_size,
-		   opt_use_half);
-  cout << "Reading stdin ... ";
-  cout.flush();
-  vector<Entry> vec_entry = read_entries(std::cin);
-  cout << "done" << endl;
+  cout << "Start reading entries from stdin ..." << endl;
+  future<vector<Entry>> f_vec_entry
+    = async(launch::async, read_entries, &std::cin);
+
+  QueueTest queue_test(FName(opt_str_wght.c_str()), opt_device_id,
+		       opt_batch_size, opt_use_half);
+
+  vector<Entry> vec_entry = f_vec_entry.get();
+  cout << "Finish reading " << vec_entry.size() << " entries" << endl;
 
   steady_clock::time_point start = steady_clock::now();
   for (Entry &entry : vec_entry) queue_test.push(entry);
   queue_test.end();
   steady_clock::time_point end   = steady_clock::now();
-  elapsed = duration_cast<microseconds>(end - start).count();
-
-  if (0 < nelapsed) {
+  int64_t elapsed  = duration_cast<microseconds>(end - start).count();
+  int64_t nelapsed = queue_test.get_nelapsed() * 1000U;
+  if (0 < nelapsed)
     cout << "Average Time: "
-	 << 0.001 * elapsed / static_cast<double>(nelapsed)
-	 << "ms" << endl; }
+	 << static_cast<double>(elapsed) / static_cast<double>(nelapsed)
+	 << "ms" << endl;
   
   if (0 < value_n) {
     double factor = 1.0 / static_cast<double>(value_n);

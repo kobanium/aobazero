@@ -629,7 +629,7 @@ public:
       _ptr = mmap(nullptr, size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
       if (_ptr == MAP_FAILED) die(ERR_CLL("mmap"));
       lock_guard<mutex> lock(m_mmap_save);
-      assert(m_mmap_save.find(_ptr) == m_mmap_save.end());
+      assert(mmap_save.find(_ptr) == mmap_save.end());
       mmap_save[_ptr] = _fname; }
     else {
       fd = shm_open(name, O_RDWR, 0600);

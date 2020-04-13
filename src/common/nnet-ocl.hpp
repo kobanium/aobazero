@@ -4,14 +4,17 @@
 #if defined(USE_OPENCL_AOBA)
 #include "nnet.hpp"
 #include "opencl.hpp"
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 #include <cassert>
+#include <cstdint>
 
 class FName;
 namespace NNAux {
@@ -161,8 +164,7 @@ public:
   void start(bool load_half, const OCL::Queue &queue, bool flag_join, uint nch,
 	     uint nb, uint nm, uint nn, uint nn_out,
 	     const OCL::Memory &mem_matM, const OCL::Memory &mem_bypass,
-	     const OCL::Memory &mem_output)
-    noexcept;
+	     const OCL::Memory &mem_output) noexcept;
   void push(const OCL::Queue &queue, const OCL::Memory &mean,
 	    const OCL::Memory &sd_inv) const noexcept;
 };
@@ -232,10 +234,25 @@ class NNetOCL {
   using row_t  = std::unique_ptr<float []>;
   struct CLResWght { OCL::Memory matU, mean, sd_inv; };
 
-  std::mutex _m;
-  std::condition_variable _cv;
-  uint _pool_slots[NNAux::nslot];
-  uint _pool_size;
+  std::thread _th_worker_ocl;
+  std::mutex _m_push_ff;
+  std::mutex _m_wait_ff;
+
+  std::mutex _m_pool1_slot;
+  std::condition_variable _cv_pool1_slot;
+  uint _pool1_slots[NNAux::nslot];
+  uint _pool1_slot_size;
+
+  std::mutex _m_pool2_slot;
+  std::condition_variable _cv_pool2_slot;
+  uint _pool2_slots[NNAux::nslot];
+  uint _pool2_slot_size;
+
+  std::mutex _m_pool3_slot;
+  std::condition_variable _cv_pool3_slot;
+  bool _pool3_slots[NNAux::nslot];
+
+  std::atomic<int64_t> _elapsed_wait_ff;
 
   ManageSend _mng_send;
   ManageDecode _mng_decode;
@@ -264,15 +281,20 @@ class NNetOCL {
   std::unique_ptr<uint []> _slots_sizes_nnmove[NNAux::nslot];
   float *_slots_probs[NNAux::nslot];
   float *_slots_values[NNAux::nslot];
+  size_t _slots_size_write[NNAux::nslot];
+  uint _slots_n_one[NNAux::nslot];
+  uint _slots_ntot_moves[NNAux::nslot];
   uint _maxsize_batch, _maxsize_out, _resnet_nout, _nres_block;
   uint _head1_nout, _policy1_nout, _value1_nout, _policy2_nin;
   uint _value2_nin, _value2_nout, _value3_nin, _value3_nout, _index_block;
   row_t _value3_bias;
   bool _do_sleep;
+  void worker_ocl() noexcept;
   void load(bool use_half, const std::vector<std::pair<uint, row_t>> &wght)
     noexcept;
 
 public:
+  explicit NNetOCL() noexcept;
   std::string reset(uint maxsize_batch,
 		    const std::vector<std::pair<uint, row_t>> &wght,
 		    int device_id, bool use_half = true, bool flag_out = true,
