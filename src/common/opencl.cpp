@@ -29,6 +29,7 @@ using namespace OCL;
 using namespace ErrAux;
 
 constexpr char options[] = "-Werror -cl-std=CL1.2";
+//constexpr char options[] = "-Werror -cl-std=CL1.2 -cl-fast-relaxed-math";
 
 // cl_event
 class OCL::Event_impl {

@@ -196,123 +196,123 @@ void store(float f, uint off, __global half *p) { vstore_half(f, off, p); }
 void store(float f, uint off, __global float *p) { p[off] = f; }
 #endif
 
-void compute_matV_child(uint ch, uint ub, uint utile, uint uh, uint uw,
-                        __local const float *flin, __local float *flV,
-                        __global void *matV) {
-  int y0 = uh*LEN_TILE_OUT - PAD;
-  int x0 = uw*LEN_TILE_OUT - PAD;
-
-  float md[LEN_TILE_IN][LEN_TILE_IN];
+void compute_matV_child(uint ch, uint ub, uint utile,
+                        float md[LEN_TILE_IN][LEN_TILE_IN],
+                        __local const float *flin, __global void *matV) {
+  uint uh = utile / NTILE_W;
+  uint uw = utile % NTILE_W;
+  int y0  = uh*LEN_TILE_OUT - PAD;
+  int x0  = uw*LEN_TILE_OUT - PAD;
+  flin   += ub * SIZE_PLANE;
   for (int y = 0; y < LEN_TILE_IN; ++y)
     for (int x = 0; x < LEN_TILE_IN; ++x) {
       if (0 <= y0 + y && y0 + y < HEIGHT && 0 <= x0 + x && x0 + x < WIDTH)
-        md[y][x] = flin[ub*SIZE_PLANE + (y0 + y)*WIDTH + x0 + x];
+        md[y][x] = flin[(y0 + y)*WIDTH + x0 + x];
       else md[y][x] = 0.0f; }
 
-  flV[(0U*LEN_TILE_IN + 0U)*NB*NTILE + ub*NTILE + utile]
-    = + x4(md[0][0]) - x2(md[0][1]) - x4(md[0][2]) + x2(md[0][3])
-      - x2(md[1][0]) + x1(md[1][1]) + x2(md[1][2]) - x1(md[1][3])
-      - x4(md[2][0]) + x2(md[2][1]) + x4(md[2][2]) - x2(md[2][3])
-      + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]);
-  flV[(1U*LEN_TILE_IN + 0U)*NB*NTILE + ub*NTILE + utile]
-    = - x4(md[1][0]) + x2(md[1][1]) + x4(md[1][2]) - x2(md[1][3])
-      - x2(md[2][0]) + x1(md[2][1]) + x2(md[2][2]) - x1(md[2][3])
-      + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]);
-  flV[(2U*LEN_TILE_IN + 0U)*NB*NTILE + ub*NTILE + utile]
-    = + x4(md[1][0]) - x2(md[1][1]) - x4(md[1][2]) + x2(md[1][3])
-      - x6(md[2][0]) + x3(md[2][1]) + x6(md[2][2]) - x3(md[2][3])
-      + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]);
-  flV[(3U*LEN_TILE_IN + 0U)*NB*NTILE + ub*NTILE + utile]
-    = - x2(md[1][0]) + x1(md[1][1]) + x2(md[1][2]) - x1(md[1][3])
-      + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]);
-  flV[(4U*LEN_TILE_IN + 0U)*NB*NTILE + ub*NTILE + utile]
-    = + x4(md[1][0]) - x2(md[1][1]) - x4(md[1][2]) + x2(md[1][3])
-      - x2(md[2][0]) + x1(md[2][1]) + x2(md[2][2]) - x1(md[2][3])
-      - x4(md[3][0]) + x2(md[3][1]) + x4(md[3][2]) - x2(md[3][3])
-      + x2(md[4][0]) - x1(md[4][1]) - x2(md[4][2]) + x1(md[4][3]);
-  flV[(0U*LEN_TILE_IN + 1U)*NB*NTILE + ub*NTILE + utile]
-    = - x4(md[0][1]) - x2(md[0][2]) + x2(md[0][3])
-      + x2(md[1][1]) + x1(md[1][2]) - x1(md[1][3])
-      + x4(md[2][1]) + x2(md[2][2]) - x2(md[2][3])
-      - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]);
-  flV[(1U*LEN_TILE_IN + 1U)*NB*NTILE + ub*NTILE + utile]
-    = + x4(md[1][1]) + x2(md[1][2]) - x2(md[1][3])
-      + x2(md[2][1]) + x1(md[2][2]) - x1(md[2][3])
-      - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]);
-  flV[(2U*LEN_TILE_IN + 1U)*NB*NTILE + ub*NTILE + utile]
-    = - x4(md[1][1]) - x2(md[1][2]) + x2(md[1][3])
-      + x6(md[2][1]) + x3(md[2][2]) - x3(md[2][3])
-      - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]);
-  flV[(3U*LEN_TILE_IN + 1U)*NB*NTILE + ub*NTILE + utile]
-    = + x2(md[1][1]) + x1(md[1][2]) - x1(md[1][3])
-      - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]);
-  flV[(4U*LEN_TILE_IN + 1U)*NB*NTILE + ub*NTILE + utile]
-    = - x4(md[1][1]) - x2(md[1][2]) + x2(md[1][3])
-      + x2(md[2][1]) + x1(md[2][2]) - x1(md[2][3])
-      + x4(md[3][1]) + x2(md[3][2]) - x2(md[3][3])
-      - x2(md[4][1]) - x1(md[4][2]) + x1(md[4][3]);
-  flV[(0U*LEN_TILE_IN + 2U)*NB*NTILE + ub*NTILE + utile]
-    = + x4(md[0][1]) - x6(md[0][2]) + x2(md[0][3])
-      - x2(md[1][1]) + x3(md[1][2]) - x1(md[1][3])
-      - x4(md[2][1]) + x6(md[2][2]) - x2(md[2][3])
-      + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]);
-  flV[(1U*LEN_TILE_IN + 2U)*NB*NTILE + ub*NTILE + utile]
-    = - x4(md[1][1]) + x6(md[1][2]) - x2(md[1][3])
-      - x2(md[2][1]) + x3(md[2][2]) - x1(md[2][3])
-      + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]);
-  flV[(2U*LEN_TILE_IN + 2U)*NB*NTILE + ub*NTILE + utile]
-    = + x4(md[1][1]) - x6(md[1][2]) + x2(md[1][3])
-      - x6(md[2][1]) + x9(md[2][2]) - x3(md[2][3])
-      + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]);
-  flV[(3U*LEN_TILE_IN + 2U)*NB*NTILE + ub*NTILE + utile]
-    = - x2(md[1][1]) + x3(md[1][2]) - x1(md[1][3])
-      + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]);
-  flV[(4U*LEN_TILE_IN + 2U)*NB*NTILE + ub*NTILE + utile]
-    = + x4(md[1][1]) - x6(md[1][2]) + x2(md[1][3])
-      - x2(md[2][1]) + x3(md[2][2]) - x1(md[2][3])
-      - x4(md[3][1]) + x6(md[3][2]) - x2(md[3][3])
-      + x2(md[4][1]) - x3(md[4][2]) + x1(md[4][3]);
-  flV[(0U*LEN_TILE_IN + 3U)*NB*NTILE + ub*NTILE + utile]
-    = - x2(md[0][1]) + x2(md[0][3]) + x1(md[1][1]) - x1(md[1][3])
-      + x2(md[2][1]) - x2(md[2][3]) - x1(md[3][1]) + x1(md[3][3]);
-  flV[(1U*LEN_TILE_IN + 3U)*NB*NTILE + ub*NTILE + utile]
-    = + x2(md[1][1]) - x2(md[1][3]) + x1(md[2][1]) - x1(md[2][3])
-      - x1(md[3][1]) + x1(md[3][3]);
-  flV[(2U*LEN_TILE_IN + 3U)*NB*NTILE + ub*NTILE + utile]
-    = - x2(md[1][1]) + x2(md[1][3]) + x3(md[2][1]) - x3(md[2][3])
-      - x1(md[3][1]) + x1(md[3][3]);
-  flV[(3U*LEN_TILE_IN + 3U)*NB*NTILE + ub*NTILE + utile]
-    = + x1(md[1][1]) - x1(md[1][3]) - x1(md[3][1]) + x1(md[3][3]);
-  flV[(4U*LEN_TILE_IN + 3U)*NB*NTILE + ub*NTILE + utile]
-    = - x2(md[1][1]) + x2(md[1][3]) + x1(md[2][1]) - x1(md[2][3])
-      + x2(md[3][1]) - x2(md[3][3]) - x1(md[4][1]) + x1(md[4][3]);
-  flV[(0U*LEN_TILE_IN + 4U)*NB*NTILE + ub*NTILE + utile]
-    = + x4(md[0][1]) - x2(md[0][2]) - x4(md[0][3]) + x2(md[0][4])
-      - x2(md[1][1]) + x1(md[1][2]) + x2(md[1][3]) - x1(md[1][4])
-      - x4(md[2][1]) + x2(md[2][2]) + x4(md[2][3]) - x2(md[2][4])
-      + x2(md[3][1]) - x1(md[3][2]) - x2(md[3][3]) + x1(md[3][4]);
-  flV[(1U*LEN_TILE_IN + 4U)*NB*NTILE + ub*NTILE + utile]
-    = - x4(md[1][1]) + x2(md[1][2]) + x4(md[1][3]) - x2(md[1][4])
-      - x2(md[2][1]) + x1(md[2][2]) + x2(md[2][3]) - x1(md[2][4])
-      + x2(md[3][1]) - x1(md[3][2]) - x2(md[3][3]) + x1(md[3][4]);
-  flV[(2U*LEN_TILE_IN + 4U)*NB*NTILE + ub*NTILE + utile]
-    = + x4(md[1][1]) - x6(md[2][1]) + x2(md[3][1])
-      - x2(md[1][2]) + x3(md[2][2]) - x1(md[3][2])
-      - x4(md[1][3]) + x6(md[2][3]) - x2(md[3][3])
-      + x2(md[1][4]) - x3(md[2][4]) + x1(md[3][4]);
-  flV[(3U*LEN_TILE_IN + 4U)*NB*NTILE + ub*NTILE + utile]
-    = - x2(md[1][1]) + x2(md[3][1]) + x1(md[1][2]) - x1(md[3][2])
-      + x2(md[1][3]) - x2(md[3][3]) - x1(md[1][4]) + x1(md[3][4]);
-  flV[(4U*LEN_TILE_IN + 4U)*NB*NTILE + ub*NTILE + utile]
-    = + x4(md[1][1]) - x2(md[1][2]) - x4(md[1][3]) + x2(md[1][4])
-      - x2(md[2][1]) + x1(md[2][2]) + x2(md[2][3]) - x1(md[2][4])
-      - x4(md[3][1]) + x2(md[3][2]) + x4(md[3][3]) - x2(md[3][4])
-      + x2(md[4][1]) - x1(md[4][2]) - x2(md[4][3]) + x1(md[4][4]);
+  store(+ x4(md[0][0]) - x2(md[0][1]) - x4(md[0][2]) + x2(md[0][3])
+        - x2(md[1][0]) + x1(md[1][1]) + x2(md[1][2]) - x1(md[1][3])
+        - x4(md[2][0]) + x2(md[2][1]) + x4(md[2][2]) - x2(md[2][3])
+        + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]),
+        (0U*LEN_TILE_IN + 0U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(- x4(md[1][0]) + x2(md[1][1]) + x4(md[1][2]) - x2(md[1][3])
+        - x2(md[2][0]) + x1(md[2][1]) + x2(md[2][2]) - x1(md[2][3])
+        + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]),
+        (1U*LEN_TILE_IN + 0U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(+ x4(md[1][0]) - x2(md[1][1]) - x4(md[1][2]) + x2(md[1][3])
+        - x6(md[2][0]) + x3(md[2][1]) + x6(md[2][2]) - x3(md[2][3])
+        + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]),
+        (2U*LEN_TILE_IN + 0U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(- x2(md[1][0]) + x1(md[1][1]) + x2(md[1][2]) - x1(md[1][3])
+        + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]),
+        (3U*LEN_TILE_IN + 0U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(+ x4(md[1][0]) - x2(md[1][1]) - x4(md[1][2]) + x2(md[1][3])
+        - x2(md[2][0]) + x1(md[2][1]) + x2(md[2][2]) - x1(md[2][3])
+        - x4(md[3][0]) + x2(md[3][1]) + x4(md[3][2]) - x2(md[3][3])
+        + x2(md[4][0]) - x1(md[4][1]) - x2(md[4][2]) + x1(md[4][3]),
+        (4U*LEN_TILE_IN + 0U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
 
-  barrier(CLK_LOCAL_MEM_FENCE);
-  for (uint sq = 0; sq < LEN_TILE_IN*LEN_TILE_IN; ++sq)
-    store(flV[sq*NB*NTILE + ub*NTILE + utile],
-          sq*NK*NN + ch*NN + ub*NTILE + utile, matV); }
+  store(- x4(md[0][1]) - x2(md[0][2]) + x2(md[0][3])
+        + x2(md[1][1]) + x1(md[1][2]) - x1(md[1][3])
+        + x4(md[2][1]) + x2(md[2][2]) - x2(md[2][3])
+        - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]),
+        (0U*LEN_TILE_IN + 1U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(+ x4(md[1][1]) + x2(md[1][2]) - x2(md[1][3])
+        + x2(md[2][1]) + x1(md[2][2]) - x1(md[2][3])
+        - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]),
+        (1U*LEN_TILE_IN + 1U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(- x4(md[1][1]) - x2(md[1][2]) + x2(md[1][3])
+        + x6(md[2][1]) + x3(md[2][2]) - x3(md[2][3])
+        - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]),
+        (2U*LEN_TILE_IN + 1U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(+ x2(md[1][1]) + x1(md[1][2]) - x1(md[1][3])
+        - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]),
+        (3U*LEN_TILE_IN + 1U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(- x4(md[1][1]) - x2(md[1][2]) + x2(md[1][3])
+        + x2(md[2][1]) + x1(md[2][2]) - x1(md[2][3])
+        + x4(md[3][1]) + x2(md[3][2]) - x2(md[3][3])
+        - x2(md[4][1]) - x1(md[4][2]) + x1(md[4][3]),
+        (4U*LEN_TILE_IN + 1U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+
+  store(+ x4(md[0][1]) - x6(md[0][2]) + x2(md[0][3])
+        - x2(md[1][1]) + x3(md[1][2]) - x1(md[1][3])
+        - x4(md[2][1]) + x6(md[2][2]) - x2(md[2][3])
+        + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]),
+        (0U*LEN_TILE_IN + 2U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(- x4(md[1][1]) + x6(md[1][2]) - x2(md[1][3])
+        - x2(md[2][1]) + x3(md[2][2]) - x1(md[2][3])
+        + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]),
+        (1U*LEN_TILE_IN + 2U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(+ x4(md[1][1]) - x6(md[1][2]) + x2(md[1][3])
+        - x6(md[2][1]) + x9(md[2][2]) - x3(md[2][3])
+        + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]),
+        (2U*LEN_TILE_IN + 2U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(- x2(md[1][1]) + x3(md[1][2]) - x1(md[1][3])
+        + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]),
+        (3U*LEN_TILE_IN + 2U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(+ x4(md[1][1]) - x6(md[1][2]) + x2(md[1][3])
+        - x2(md[2][1]) + x3(md[2][2]) - x1(md[2][3])
+        - x4(md[3][1]) + x6(md[3][2]) - x2(md[3][3])
+        + x2(md[4][1]) - x3(md[4][2]) + x1(md[4][3]),
+        (4U*LEN_TILE_IN + 2U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+
+  store(- x2(md[0][1]) + x2(md[0][3]) + x1(md[1][1]) - x1(md[1][3])
+        + x2(md[2][1]) - x2(md[2][3]) - x1(md[3][1]) + x1(md[3][3]),
+        (0U*LEN_TILE_IN + 3U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(+ x2(md[1][1]) - x2(md[1][3]) + x1(md[2][1]) - x1(md[2][3])
+        - x1(md[3][1]) + x1(md[3][3]),
+        (1U*LEN_TILE_IN + 3U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(- x2(md[1][1]) + x2(md[1][3]) + x3(md[2][1]) - x3(md[2][3])
+        - x1(md[3][1]) + x1(md[3][3]),
+        (2U*LEN_TILE_IN + 3U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(+ x1(md[1][1]) - x1(md[1][3]) - x1(md[3][1]) + x1(md[3][3]),
+        (3U*LEN_TILE_IN + 3U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(- x2(md[1][1]) + x2(md[1][3]) + x1(md[2][1]) - x1(md[2][3])
+        + x2(md[3][1]) - x2(md[3][3]) - x1(md[4][1]) + x1(md[4][3]),
+        (4U*LEN_TILE_IN + 3U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+
+  store(+ x4(md[0][1]) - x2(md[0][2]) - x4(md[0][3]) + x2(md[0][4])
+        - x2(md[1][1]) + x1(md[1][2]) + x2(md[1][3]) - x1(md[1][4])
+        - x4(md[2][1]) + x2(md[2][2]) + x4(md[2][3]) - x2(md[2][4])
+        + x2(md[3][1]) - x1(md[3][2]) - x2(md[3][3]) + x1(md[3][4]),
+        (0U*LEN_TILE_IN + 4U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(- x4(md[1][1]) + x2(md[1][2]) + x4(md[1][3]) - x2(md[1][4])
+        - x2(md[2][1]) + x1(md[2][2]) + x2(md[2][3]) - x1(md[2][4])
+        + x2(md[3][1]) - x1(md[3][2]) - x2(md[3][3]) + x1(md[3][4]),
+        (1U*LEN_TILE_IN + 4U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(+ x4(md[1][1]) - x6(md[2][1]) + x2(md[3][1])
+        - x2(md[1][2]) + x3(md[2][2]) - x1(md[3][2])
+        - x4(md[1][3]) + x6(md[2][3]) - x2(md[3][3])
+        + x2(md[1][4]) - x3(md[2][4]) + x1(md[3][4]),
+        (2U*LEN_TILE_IN + 4U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(- x2(md[1][1]) + x2(md[3][1]) + x1(md[1][2]) - x1(md[3][2])
+        + x2(md[1][3]) - x2(md[3][3]) - x1(md[1][4]) + x1(md[3][4]),
+        (3U*LEN_TILE_IN + 4U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+  store(+ x4(md[1][1]) - x2(md[1][2]) - x4(md[1][3]) + x2(md[1][4])
+        - x2(md[2][1]) + x1(md[2][2]) + x2(md[2][3]) - x1(md[2][4])
+        - x4(md[3][1]) + x2(md[3][2]) + x4(md[3][3]) - x2(md[3][4])
+        + x2(md[4][1]) - x1(md[4][2]) - x2(md[4][3]) + x1(md[4][4]),
+        (4U*LEN_TILE_IN + 4U)*NK*NN + ch*NN + ub*NTILE + utile, matV); }
 )";
 
 const string code_compute_matA_child = R"(
@@ -326,53 +326,50 @@ void func_BNReLU(__local float *f, uint off, float sd_inv, float mean,
   f[off] = max(0.0f, sd_inv * (x - mean)); }
 #endif
 
-void compute_matA_child(uint ub, uint utile, uint origin, float mean,
-                        float sd_inv, __local float *flM,
+void compute_matA_child(uint ub, uint utile, float mean, float sd_inv,
+                        float mm[LEN_TILE_IN][LEN_TILE_IN],
                         __local float *flout) {
-  float mm[LEN_TILE_IN][LEN_TILE_IN];
-  for (uint uh_in = 0; uh_in < LEN_TILE_IN; ++uh_in)
-    for (uint uw_in = 0; uw_in < LEN_TILE_IN; ++uw_in)
-      mm[uh_in][uw_in] = flM[(uh_in*LEN_TILE_IN + uw_in)*NB*NTILE
-                             + ub*NTILE + utile];
-
-  func_BNReLU(flout, origin + 0U*WIDTH + 0U, sd_inv, mean,
+  uint uh  = utile / NTILE_W;
+  uint uw  = utile % NTILE_W;
+  flout   += ub*SIZE_PLANE + (uh*WIDTH + uw)*LEN_TILE_OUT;
+  func_BNReLU(flout, 0U*WIDTH + 0U, sd_inv, mean,
               + mm[0][0] + mm[0][1] + mm[0][2] + mm[0][3]
               + mm[1][0] + mm[1][1] + mm[1][2] + mm[1][3]
               + mm[2][0] + mm[2][1] + mm[2][2] + mm[2][3]
               + mm[3][0] + mm[3][1] + mm[3][2] + mm[3][3]);
-  func_BNReLU(flout, origin + 0U*WIDTH + 1U, sd_inv, mean,
+  func_BNReLU(flout, 0U*WIDTH + 1U, sd_inv, mean,
               + mm[0][1] - mm[0][2] + x2(mm[0][3])
               + mm[1][1] - mm[1][2] + x2(mm[1][3])
               + mm[2][1] - mm[2][2] + x2(mm[2][3])
               + mm[3][1] - mm[3][2] + x2(mm[3][3]));
-  func_BNReLU(flout, origin + 0U*WIDTH + 2U, sd_inv, mean,
+  func_BNReLU(flout, 0U*WIDTH + 2U, sd_inv, mean,
               + mm[0][1] + mm[0][2] + x4(mm[0][3]) + mm[0][4]
               + mm[1][1] + mm[1][2] + x4(mm[1][3]) + mm[1][4]
               + mm[2][1] + mm[2][2] + x4(mm[2][3]) + mm[2][4]
               + mm[3][1] + mm[3][2] + x4(mm[3][3]) + mm[3][4]);
-  func_BNReLU(flout, origin + 1U*WIDTH + 0U, sd_inv, mean,
+  func_BNReLU(flout, 1U*WIDTH + 0U, sd_inv, mean,
               + mm[1][0] + mm[1][1] + mm[1][2] + mm[1][3]
               - mm[2][0] - mm[2][1] - mm[2][2] - mm[2][3]
               + x2(mm[3][0] + mm[3][1] + mm[3][2] + mm[3][3]));
-  func_BNReLU(flout, origin + 1U*WIDTH + 1U, sd_inv, mean,
+  func_BNReLU(flout, 1U*WIDTH + 1U, sd_inv, mean,
               + mm[1][1] - mm[1][2] + x2(mm[1][3])
               - mm[2][1] + mm[2][2]
               + x2(- mm[2][3] + mm[3][1] - mm[3][2] + x2(mm[3][3])));
-  func_BNReLU(flout, origin + 1U*WIDTH + 2U, sd_inv, mean,
+  func_BNReLU(flout, 1U*WIDTH + 2U, sd_inv, mean,
               + mm[1][1] + mm[1][2] + x4(mm[1][3]) + mm[1][4]
               - mm[2][1] - mm[2][2] - x4(mm[2][3]) - mm[2][4]
               + x2(mm[3][1] + mm[3][2] + x4(mm[3][3]) + mm[3][4]));
-  func_BNReLU(flout, origin + 2U*WIDTH + 0U, sd_inv, mean,
+  func_BNReLU(flout, 2U*WIDTH + 0U, sd_inv, mean,
               + mm[1][0] + mm[1][1] + mm[1][2] + mm[1][3]
               + mm[2][0] + mm[2][1] + mm[2][2] + mm[2][3]
               + x4(mm[3][0] + mm[3][1] + mm[3][2] + mm[3][3])
               + mm[4][0] + mm[4][1] + mm[4][2] + mm[4][3]);
-  func_BNReLU(flout, origin + 2U*WIDTH + 1U, sd_inv, mean,
+  func_BNReLU(flout, 2U*WIDTH + 1U, sd_inv, mean,
               + mm[1][1] - mm[1][2] + x2(mm[1][3])
               + mm[2][1] - mm[2][2]
               + x2(mm[2][3] + x2(mm[3][1] - mm[3][2] + x2(mm[3][3])))
               + mm[4][1] - mm[4][2] + x2(mm[4][3]));
-  func_BNReLU(flout, origin + 2U*WIDTH + 2U, sd_inv, mean,
+  func_BNReLU(flout, 2U*WIDTH + 2U, sd_inv, mean,
               + mm[1][1] + mm[1][2] + x4(mm[1][3]) + mm[1][4]
               + mm[2][1] + mm[2][2] + x4(mm[2][3]) + mm[2][4]
               + x4(mm[3][1] + mm[3][2] + x4(mm[3][3]) + mm[3][4])
@@ -395,29 +392,26 @@ void compute_matA_BNReLU(__global const void *matM,
   uint utile = get_global_id(0);
   uint ub    = get_global_id(1);
   uint ch    = get_global_id(2);
-
-  __local float flM[LEN_TILE_IN*LEN_TILE_IN * NTILE*NB]
-                __attribute__((aligned(SIZE_ALIGN)));
   __local float flout[NB*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
-
-  for (uint sq = 0; sq < LEN_TILE_IN*LEN_TILE_IN; ++sq)
-    flM[sq*NB*NTILE + ub*NTILE + utile]
-      = load(sq*NM*NN + ch*NN + ub*NTILE + utile, matM);
-
 #ifdef DO_JOIN
   for (uint u = 0; u < NTILE; ++u)
     flout[u*NB*NTILE + ub*NTILE + utile]
       = fbypass[ch*NB*128U + u*NB*NTILE + ub*NTILE + utile];
 #endif
 
-  uint uh      = utile / NTILE_W;
-  uint uw      = utile % NTILE_W;
-  uint origin  = ub*SIZE_PLANE + (uh*WIDTH + uw)*LEN_TILE_OUT;
+  uint uh = utile / NTILE_W;
+  uint uw = utile % NTILE_W;
+  float M[LEN_TILE_IN][LEN_TILE_IN];
+  for (uint uh = 0; uh < LEN_TILE_IN; ++uh)
+    for (uint uw = 0; uw < LEN_TILE_IN; ++uw)
+      M[uh][uw] = load((uh*LEN_TILE_IN + uw)*NM*NN + ch*NN + ub*NTILE + utile,
+                       matM);
   float mean   = mean_array[ch];
   float sd_inv = sd_inv_array[ch];
-
+#ifdef DO_JOIN
   barrier(CLK_LOCAL_MEM_FENCE);
-  compute_matA_child(ub, utile, origin, mean, sd_inv, flM, flout);
+#endif
+  compute_matA_child(ub, utile, mean, sd_inv, M, flout);
 
   barrier(CLK_LOCAL_MEM_FENCE);
   for (uint u = 0; u < NTILE; ++u)
@@ -431,16 +425,14 @@ void compute_matV(__global const float *fin, __global void *matV) {
   uint utile = get_global_id(0);
   uint ub    = get_global_id(1);
   uint ch    = get_global_id(2);
-  uint uh    = utile / NTILE_W;
-  uint uw    = utile % NTILE_W;
   __local float flin[NB*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
-  __local float flV[LEN_TILE_IN*LEN_TILE_IN*NB*NTILE]
-                __attribute__((aligned(SIZE_ALIGN)));
   for (uint u = 0; u < 9U; ++u)
     flin[u*NB*NTILE + ub*NTILE + utile]
       = fin[ch*NB*SIZE_PLANE + u*NB*NTILE + ub*NTILE + utile];
+
+  float M[LEN_TILE_IN][LEN_TILE_IN];
   barrier(CLK_LOCAL_MEM_FENCE);
-  compute_matV_child(ch, ub, utile, uh, uw, flin, flV, matV); }
+  compute_matV_child(ch, ub, utile, M, flin, matV); }
 )";
 
 const string code_compute_matAV = R"(
@@ -462,29 +454,24 @@ void compute_matAV(__global const void *matM,
   uint utile = get_global_id(0);
   uint ub    = get_global_id(1);
   uint ch    = get_global_id(2);
-
-  __local float flMorV[LEN_TILE_IN*LEN_TILE_IN * NTILE*NB]
-                    __attribute__((aligned(SIZE_ALIGN)));
   __local float flout[NB*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
-
-  for (uint sq = 0; sq < LEN_TILE_IN*LEN_TILE_IN; ++sq)
-    flMorV[sq*NB*NTILE + ub*NTILE + utile]
-      = load(sq*NM*NN + ch*NN + ub*NTILE + utile, matM);
-
 #ifdef DO_JOIN
   for (uint u = 0; u < NTILE; ++u)
     flout[u*NB*NTILE + ub*NTILE + utile]
       = fbypass[ch*NB*128U + u*NB*NTILE + ub*NTILE + utile];
 #endif
 
-  uint uh      = utile / NTILE_W;
-  uint uw      = utile % NTILE_W;
-  uint origin  = ub*SIZE_PLANE + (uh*WIDTH + uw)*LEN_TILE_OUT;
+  float M[LEN_TILE_IN][LEN_TILE_IN];
+  for (uint uh = 0; uh < LEN_TILE_IN; ++uh)
+    for (uint uw = 0; uw < LEN_TILE_IN; ++uw)
+      M[uh][uw] = load((uh*LEN_TILE_IN + uw)*NM*NN + ch*NN + ub*NTILE + utile,
+                       matM);
   float mean   = mean_array[ch];
   float sd_inv = sd_inv_array[ch];
-
+#ifdef DO_JOIN
   barrier(CLK_LOCAL_MEM_FENCE);
-  compute_matA_child(ub, utile, origin, mean, sd_inv, flMorV, flout);
+#endif
+  compute_matA_child(ub, utile, mean, sd_inv, M, flout);
 
   barrier(CLK_LOCAL_MEM_FENCE);
 #ifdef DO_FORK
@@ -492,7 +479,7 @@ void compute_matAV(__global const void *matM,
     fbypass[ch*NB*128U + u*NB*NTILE + ub*NTILE + utile]
       = flout[u*NB*NTILE + ub*NTILE + utile];
 #endif
-  compute_matV_child(ch, ub, utile, uh, uw, flout, flMorV, matV); }
+  compute_matV_child(ch, ub, utile, M, flout, matV); }
 )";
 
 const string code_compute_matM_wmma = R"(
@@ -1820,8 +1807,7 @@ NNetOCL::NNetOCL() noexcept :  _th_worker_ocl(&NNetOCL::worker_ocl, this),
 string NNetOCL::reset(uint maxsize_batch,
 		      const vector<pair<uint, row_t>> &wght, int device_id,
 		      bool use_half, bool flag_out, bool do_sleep) noexcept {
-  lock_guard<mutex> lock_push_ff(_m_push_ff);
-  lock_guard<mutex> lock_wait_ff(_m_wait_ff);
+  lock_guard<mutex> lock_pool1(_m_pool1_slot);
   assert(0 < maxsize_batch);
   if (_pool1_slot_size != NNAux::nslot) die(ERR_INT("Internal Error"));
   if (_pool2_slot_size != 0)            die(ERR_INT("Internal Error"));
@@ -2169,7 +2155,6 @@ void NNetOCL::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
 uint NNetOCL::push_ff(uint size_batch, const float *input,
 		      const uint *sizes_nnmove, const ushort *nnmoves,
 		      float *probs, float *values) noexcept {
-  lock_guard<mutex> lock_push_ff(_m_push_ff);
   assert(input && sizes_nnmove && nnmoves && probs && values);
 
   unique_lock<mutex> lock_pool1(_m_pool1_slot);
@@ -2255,7 +2240,6 @@ void NNetOCL::worker_ocl() noexcept {
     _cv_pool3_slot.notify_one(); } }
 
 void NNetOCL::wait_ff(uint uslot) noexcept {
-  lock_guard<mutex> lock_wait_ff(_m_wait_ff);
   assert(uslot < NNAux::nslot);
 
   unique_lock<mutex> lock_pool3(_m_pool3_slot);

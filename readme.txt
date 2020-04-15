@@ -2,7 +2,7 @@
 ------------------------
 
 Ubuntu, CentOS, Windows でビルドする方法を記します。ビルド前に、利用したいハー
-ドウエアのベンダが提供する情報に従って、OpenCL 1.1 の環境を各自ご用意下さい。
+ドウエアのベンダが提供する情報に従って、OpenCL 1.2 の環境を各自ご用意下さい。
 CPU のみで計算を行うプログラムをビルドする場合には OpenCL 環境は不要です。
 
 
@@ -43,15 +43,24 @@ GCC 5.3.1 が利用可能な環境で bash が起動します。
 
 - boost 1.58.0 をインストール
 
-> get http://sourceforge.net/projects/boost/files/boost/1.58.0/boost_1_58_0.tar.gz
+> cd
+> wget http://sourceforge.net/projects/boost/files/boost/1.58.0/boost_1_58_0.tar.gz
 > gzip -dc boost_1_58_0.tar.gz | tar xvf -
 > cd boost_1_58_0
 > ./bootstrap.sh
 > ./b2 install -j[number of threads] --prefix=/[a path with write permission]/inst-dts4
 
+- OpenBLAS をインストール
+
+> cd
+> git clone https://github.com/xianyi/OpenBLAS.git
+> cd OpenBLAS
+> make -j[number of threads]
+> sudo make install PREFIX=/[a path with write permission]/inst-dts4
+
 - 環境変数の設定
 
-コンンパイラとリンカの boost のパスを設定します。
+コンンパイラとリンカのパスを設定します。
 
 Bourne Shell 系ならば
 > exprot CPLUS_INCLUDE_PATH=/path to inst-dts4/include:$CPLUS_INCLUDE_PATH

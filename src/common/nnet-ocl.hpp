@@ -235,8 +235,6 @@ class NNetOCL {
   struct CLResWght { OCL::Memory matU, mean, sd_inv; };
 
   std::thread _th_worker_ocl;
-  std::mutex _m_push_ff;
-  std::mutex _m_wait_ff;
 
   std::mutex _m_pool1_slot;
   std::condition_variable _cv_pool1_slot;
