@@ -1,30 +1,11 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
 #pragma once
-#include "iobase.hpp"
 #include "osi.hpp"
-#include <condition_variable>
-#include <deque>
-#include <mutex>
-#include <thread>
-#include <cstdint>
-
-namespace NNAux {
-  constexpr unsigned int maxnum_nipc = 128U;
-  constexpr unsigned int maxnum_nnet = 64U;
-}
-
-class SeqPRNService {
-  OSI::MMap _mmap;
-
-public:
-  explicit SeqPRNService() noexcept;
-  ~SeqPRNService() noexcept {_mmap.close(); };
-};
+#include "nnet.hpp"
 
 class SeqPRN {
   OSI::MMap _mmap;
-
 public:
   explicit SeqPRN() noexcept;
   ~SeqPRN() noexcept { _mmap.close(); };
@@ -32,50 +13,16 @@ public:
     return static_cast<uint64_t *>(_mmap()); }
 };
 
-class NNetService {
-  using uint = unsigned int;
-  OSI::Semaphore _sem_service_lock;
-  OSI::Semaphore _sem_service;
-  OSI::Semaphore _sem_ipc[NNAux::maxnum_nipc];
-  OSI::MMap _mmap_service;
-  OSI::MMap _mmap_ipc[NNAux::maxnum_nipc];
-  std::unique_ptr<class NNet> _pnnet;
-  std::thread _th_worker_push;
-  std::thread _th_worker_wait;
-  std::condition_variable _cv_flush;
-  std::condition_variable _cv_nnreset;
-  std::condition_variable _cv_entries;
-  std::mutex _m_flush;
-  std::mutex _m_nnreset;
-  std::mutex _m_entries;
-  std::deque<class Entry> _entries;
-  bool _flag_cv_flush, _flag_cv_nnreset;
-  uint _nnet_id, _nipc, _size_batch, _device_id, _use_half;
-  FName _fname;
-  void worker_push() noexcept;
-  void worker_wait() noexcept;
-
-public:
-  NNetService(uint nnet_id, uint nipc, uint size_batch, uint device_id,
-	      uint use_half) noexcept;
-  NNetService(uint nnet_id, uint nipc, uint size_batch, uint device_id,
-	      uint use_half, const FName &fname) noexcept;
-  ~NNetService() noexcept;
-  void nnreset(const FName &fname) noexcept;
-  void flush_on() noexcept;
-  void flush_off() noexcept;
-};
-
 class NNetIPC {
-  using uint = unsigned int;
+  using uint   = unsigned int;
   using ushort = unsigned short;
   OSI::Semaphore _sem_service_lock;
   OSI::Semaphore _sem_service;
   OSI::Semaphore _sem_ipc;
   OSI::MMap _mmap_service;
   OSI::MMap _mmap_ipc;
-  class SharedService *_pservice;
-  class SharedIPC *_pipc;
+  SharedService *_pservice;
+  SharedIPC *_pipc;
   int _id;
   bool _flag_detach;
   int sem_wait(OSI::Semaphore &sem) noexcept;

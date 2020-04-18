@@ -52,8 +52,9 @@ void init_global_objects();	// Leela.cpp
 #endif
 
 #ifdef NN_PARALLEL
-#include "../common/nnet.hpp"
-#include "../common/nnet-ipc.hpp"
+#include "../../common/iobase.hpp"
+#include "../../common/nnet.hpp"
+#include "../../common/nnet-ipc.hpp"
 using std::copy_n;
 
 NNetIPC *p_nnet;

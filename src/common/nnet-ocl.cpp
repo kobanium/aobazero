@@ -183,7 +183,9 @@ float x2(float x) { return x + x; }
 float x3(float x) { return x + x + x; }
 float x4(float x) { return 4.0f * x; }
 float x6(float x) { return 6.0f * x; }
+float x8(float x) { return 8.0f * x; }
 float x9(float x) { return 9.0f * x; }
+float x16(float x) { return 16.0f * x; }
 //float x4(float x) { x += x; return x + x; }
 //float x6(float x) { x += x; return x + x + x; }
 //float x9(float x) { float y = x + x; y += y; return y + y + x; }
@@ -350,29 +352,29 @@ void compute_matA_child(uint ub, uint utile, float mean, float sd_inv,
   func_BNReLU(flout, 1U*WIDTH + 0U, sd_inv, mean,
               + mm[1][0] + mm[1][1] + mm[1][2] + mm[1][3]
               - mm[2][0] - mm[2][1] - mm[2][2] - mm[2][3]
-              + x2(mm[3][0] + mm[3][1] + mm[3][2] + mm[3][3]));
+              + x2(mm[3][0]) + x2(mm[3][1]) + x2(mm[3][2]) + x2(mm[3][3]));
   func_BNReLU(flout, 1U*WIDTH + 1U, sd_inv, mean,
               + mm[1][1] - mm[1][2] + x2(mm[1][3])
               - mm[2][1] + mm[2][2]
-              + x2(- mm[2][3] + mm[3][1] - mm[3][2] + x2(mm[3][3])));
+              - x2(mm[2][3]) + x2(mm[3][1]) - x2(mm[3][2]) + x4(mm[3][3]));
   func_BNReLU(flout, 1U*WIDTH + 2U, sd_inv, mean,
               + mm[1][1] + mm[1][2] + x4(mm[1][3]) + mm[1][4]
               - mm[2][1] - mm[2][2] - x4(mm[2][3]) - mm[2][4]
-              + x2(mm[3][1] + mm[3][2] + x4(mm[3][3]) + mm[3][4]));
+              + x2(mm[3][1]) + x2(mm[3][2]) + x8(mm[3][3]) + x2(mm[3][4]));
   func_BNReLU(flout, 2U*WIDTH + 0U, sd_inv, mean,
               + mm[1][0] + mm[1][1] + mm[1][2] + mm[1][3]
               + mm[2][0] + mm[2][1] + mm[2][2] + mm[2][3]
-              + x4(mm[3][0] + mm[3][1] + mm[3][2] + mm[3][3])
+              + x4(mm[3][0]) + x4(mm[3][1]) + x4(mm[3][2]) + x4(mm[3][3])
               + mm[4][0] + mm[4][1] + mm[4][2] + mm[4][3]);
   func_BNReLU(flout, 2U*WIDTH + 1U, sd_inv, mean,
               + mm[1][1] - mm[1][2] + x2(mm[1][3])
               + mm[2][1] - mm[2][2]
-              + x2(mm[2][3] + x2(mm[3][1] - mm[3][2] + x2(mm[3][3])))
+              + x2(mm[2][3]) + x4(mm[3][1]) - x4(mm[3][2]) + x8(mm[3][3])
               + mm[4][1] - mm[4][2] + x2(mm[4][3]));
   func_BNReLU(flout, 2U*WIDTH + 2U, sd_inv, mean,
               + mm[1][1] + mm[1][2] + x4(mm[1][3]) + mm[1][4]
               + mm[2][1] + mm[2][2] + x4(mm[2][3]) + mm[2][4]
-              + x4(mm[3][1] + mm[3][2] + x4(mm[3][3]) + mm[3][4])
+              + x4(mm[3][1]) + x4(mm[3][2]) + x16(mm[3][3]) + x4(mm[3][4])
               + mm[4][1] + mm[4][2] + x4(mm[4][3]) + mm[4][4]); }
 )";
 

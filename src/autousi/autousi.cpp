@@ -50,7 +50,7 @@ using std::this_thread::sleep_for;
 using namespace IOAux;
 using ErrAux::die;
 using uint   = unsigned int;
-using ushort = unsigned short int;
+using ushort = unsigned short;
 
 constexpr uint max_sleep     = 3U; // in sec
 constexpr char fmt_csa_scn[] = "rec%16[^.].csa";

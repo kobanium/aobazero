@@ -3,7 +3,7 @@
 #include "child.hpp"
 #include "err.hpp"
 #include "iobase.hpp"
-#include "nnet-ipc.hpp"
+#include "nnet-srv.hpp"
 #include "option.hpp"
 #include "osi.hpp"
 #include "param.hpp"
