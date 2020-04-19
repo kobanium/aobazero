@@ -42,6 +42,16 @@ public:
   void encode_input(float *p) const noexcept;
 };
 
+class NNet {
+  using uint = unsigned int;
+public:
+  virtual ~NNet() noexcept {}
+  virtual uint push_ff(uint size_batch, const float *input,
+		       const uint *sizes_nnmove, const ushort *nnmoves,
+		       float *probs, float *values) noexcept = 0;
+  virtual void wait_ff(uint) noexcept = 0;
+};
+
 enum class SrvType : uint { Register, FeedForward, FlushON, FlushOFF,
     NNReset, End };
 

@@ -45,7 +45,7 @@ class NNetService {
   std::mutex _m_nnreset;
   std::mutex _m_entries;
   std::deque<std::unique_ptr<class Entry>> _entries;
-  bool _flag_cv_flush, _flag_cv_nnreset;
+  bool _flag_cv_flush, _flag_cv_nnreset, _flag_quit_worker_wait;
   uint _nnet_id, _nipc, _size_batch, _device_id, _use_half;
   FName _fname;
   void worker_push() noexcept;

@@ -13,39 +13,38 @@ else
 	CPPFLAGS += -DNDEBUG
 endif
 
-USE_OpenMP_AOBA ?= 0
-ifeq ($(USE_OpenMP_AOBA), 1)
-	CXXFLAGS += -fopenmp
-	LDFLAGS  += -fopenmp
-endif
-
 USE_OpenCL_AOBA ?= 0
 ifeq ($(USE_OpenCL_AOBA), 1)
 	CPPFLAGS += -DUSE_OPENCL_AOBA
 	TARGETS  += bin/ocldevs
 	LIB_OpenCL := -lOpenCL
-else
-	LIB_OpenCL :=
+	CPPFLAGS += -I$(OpenCL_INC_AOBA)
 endif
 
-BLAS_AOBA ?= None
-ifeq ($(BLAS_AOBA), IntelMKL)
-	LIB_BLAS := -lmkl_rt
+USE_BLAS_AOBA ?= None
+ifeq ($(USE_BLAS_AOBA), IntelMKL)
 	CPPFLAGS += -DUSE_MKL
+	CXXFLAGS += -fopenmp
+	LDFLAGS  += -fopenmp
+	LIB_BLAS := -lmkl_rt
 	ifdef IntelMKL_INC_AOBA
 		CPPFLAGS += -I$(IntelMKL_INC_AOBA)
 	endif
 	ifdef IntelMKL_LIB_AOBA
-		LDFLAGS  += -L$(IntelMKL_LIB_AOBA) -Wl,-rpath,$(IntelMKL_LIB_AOBA)
+		LDFLAGS += -L$(IntelMKL_LIB_AOBA)
+		LDFLAGS += -Wl,-rpath,$(IntelMKL_LIB_AOBA)
 	endif
-else ifeq ($(BLAS_AOBA), OpenBLAS)
-	LIB_BLAS := -lopenblas
+else ifeq ($(USE_BLAS_AOBA), OpenBLAS)
 	CPPFLAGS += -DUSE_OPENBLAS
+	CXXFLAGS += -fopenmp
+	LDFLAGS  += -fopenmp
+	LIB_BLAS := -lopenblas
 	ifdef OpenBLAS_INC_AOBA
 		CPPFLAGS += -I$(OpenBLAS_INC_AOBA)
 	endif
 	ifdef OpenBLAS_LIB_AOBA
-		LDFLAGS  += -L$(OpenBLAS_LIB_AOBA) -Wl,-rpath,$(OpenBLAS_LIB_AOBA)
+		LDFLAGS += -L$(OpenBLAS_LIB_AOBA)
+		LDFLAGS += -Wl,-rpath,$(OpenBLAS_LIB_AOBA)
 	endif
 endif
 

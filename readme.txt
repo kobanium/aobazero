@@ -1,14 +1,15 @@
-1. AobaZero のビルド方法
-------------------------
+1. AobaZero が提供するプログラム群のビルド方法
+---------------------------------------------
 
-Ubuntu, CentOS, Windows でビルドする方法を記します。ビルド前に、利用したいハー
-ドウエアのベンダが提供する情報に従って、OpenCL 1.2 の環境を各自ご用意下さい。
-CPU のみで計算を行うプログラムをビルドする場合には OpenCL 環境は不要です。
-
+Ubuntu, CentOS, Windows でビルドする方法を記します。OpenCL 1.2 の開発・実行
+環境か、CPU 上で実行可能な BLAS (IntelMKL か OpenBLAS) が必要になります。両
+方使うことも可能です。
 
 1.1 Ubuntu
 
-Ubuntu での手順を記します。
+Ubuntu での手順を記します。ビルド前に、利用したいハードウエアのベンダが提供
+する情報に従って、OpenCL 1.2 の環境を各自ご用意下さい。CPU のみで計算を行う
+プログラムをビルドする場合には OpenCL 環境は不要です。
 
 - Boost や liblzma 等をインストール
 
@@ -50,13 +51,22 @@ GCC 5.3.1 が利用可能な環境で bash が起動します。
 > ./bootstrap.sh
 > ./b2 install -j[number of threads] --prefix=/[a path with write permission]/inst-dts4
 
-- OpenBLAS をインストール
+- OpenBLAS を使うならばこれをインストール
 
 > cd
 > git clone https://github.com/xianyi/OpenBLAS.git
 > cd OpenBLAS
 > make -j[number of threads]
 > sudo make install PREFIX=/[a path with write permission]/inst-dts4
+
+- Intel MKL を使うならばこれをインストール
+
+Intel 社が提供する情報に従ってインストールして下さい。
+
+- OpenCL を使うならばこれの実行環境をインストール
+
+利用したいハードウエアのベンダが提供する情報に従って、OpenCL 1.2 の環境を
+インストールする。
 
 - 環境変数の設定
 
@@ -72,14 +82,16 @@ C Shell 系ならば
 > setenv LIBRARY_PATH /path to inst-dits4/lib:$LIBRARY_PATH
 > setenv LD_RUN_PATH /path to inst-dits4/lib:$LD_RUN_PATH
 
-必要であれば、各ベンダが提供する OpenCL 開発環境へのパスも同様に設定します。
+これらに加えて、OpenCL やIntel MKL などのパスの環境変数も必要ならば設定して
+下さい。OpenCL, OpenBLAS 及び Intel MKL のパスは Makefile.config でも指定可
+能です。
 
 - make を実行
 
 > make -j[number of threads]
 
-もしCPUのみで計算を行うプログラムをビルドしたいならば、
-src/usi_engine/Makefile の53行目を # でコメントし、54行目の # を消して、
+もし CPU のみで計算を行う bin/aobaz をビルドしたいならば、
+src/usi_engine/Makefile の 52 行目を # でコメントし、54 行目の # を消して、
 -DUSE_CPU_ONLY を有効にしてビルドして下さい。
 
 

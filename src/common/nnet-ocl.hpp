@@ -227,13 +227,12 @@ public:
     const noexcept;
 };
 
-class NNetOCL {
+class NNetOCL : public NNet {
   using uint   = unsigned int;
   using ushort = unsigned short;
   using uchar  = unsigned char;
   using row_t  = std::unique_ptr<float []>;
   struct CLResWght { OCL::Memory matU, mean, sd_inv; };
-
   std::thread _th_worker_ocl;
 
   std::mutex _m_pool1_slot;

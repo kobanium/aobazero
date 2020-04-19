@@ -9,6 +9,7 @@
 #include <iostream>
 #include <memory>
 #include <random>
+#include <string>
 #include <thread>
 #include <utility>
 #include <cassert>
@@ -19,17 +20,14 @@ using std::lock_guard;
 using std::move;
 using std::mt19937_64;
 using std::mutex;
+using std::string;
 using std::thread;
+using std::to_string;
 using std::unique_lock;
 using std::unique_ptr;
 using ErrAux::die;
 using uint = unsigned int;
 
-#if defined(USE_OPENCL_AOBA)
-class NNet : public NNetOCL {};
-#else
-class NNet : public NNetCPU {};
-#endif
 
 SeqPRNService::SeqPRNService() noexcept {
   _mmap.open(Param::name_seq_prn, true, sizeof(uint64_t) * Param::len_seq_prn);
@@ -94,7 +92,9 @@ void NNetService::worker_wait() noexcept {
 
   while (true) {
     unique_lock<mutex> lock(_m_entries);
-    _cv_entries.wait(lock, [&]{ return ! _entries.empty(); });
+    _cv_entries.wait(lock, [&]{ return (! _entries.empty()
+					|| _flag_quit_worker_wait); });
+    if (_flag_quit_worker_wait) return;
     unique_ptr<Entry> pe(move(_entries.front()));
     _entries.pop_front();
     lock.unlock();
@@ -150,16 +150,20 @@ void NNetService::worker_push() noexcept {
       uint version;
       uint64_t digest;
       NNAux::wght_t wght = NNAux::read(fn, version, digest);
-      _pnnet.reset(new NNet);
 #if defined(USE_OPENCL_AOBA)
-      std::cout << "Tuning feed-forward engine of device "
-		<< static_cast<int>(_device_id) << " for " << fn.get_fname()
-		<< std::endl;
-      std::cout << _pnnet->reset(_size_batch, wght, _device_id, _use_half,
-				 false, true)
+      string s("Tuning feed-forward engine of device ");
+      s += to_string(static_cast<int>(_device_id)) + string(" for ");
+      s += string(fn.get_fname()) + string("\n");
+      std::cout << s << std::flush;
+
+      _pnnet.reset(new NNetOCL);
+      NNetOCL *p = dynamic_cast<NNetOCL *>(_pnnet.get());
+      std::cout << p->reset(_size_batch, wght, _device_id, _use_half,
+			    false, true)
 		<< std::flush;
 #else
-      _pnnet->reset(_size_batch, wght);
+      _pnnet.reset(new NNetCPU);
+      dynamic_cast<NNetCPU *>(_pnnet.get())->reset(_size_batch, wght);
 #endif
       continue; }
       
@@ -262,9 +266,9 @@ void NNetService::flush_off() noexcept {
 
 NNetService::NNetService(uint nnet_id, uint nipc, uint size_batch,
 			 uint device_id, uint use_half) noexcept
-: _flag_cv_flush(false), _flag_cv_nnreset(false), _nnet_id(nnet_id),
-  _nipc(nipc), _size_batch(size_batch), _device_id(device_id),
-  _use_half(use_half) {
+: _flag_cv_flush(false), _flag_cv_nnreset(false),
+  _flag_quit_worker_wait(false), _nnet_id(nnet_id), _nipc(nipc),
+  _size_batch(size_batch), _device_id(device_id), _use_half(use_half) {
   if (NNAux::maxnum_nnet <= nnet_id) die(ERR_INT("too many nnets"));
   if (NNAux::maxnum_nipc < nipc)     die(ERR_INT("too many processes"));
 
@@ -307,6 +311,13 @@ NNetService::~NNetService() noexcept {
   _sem_service.inc();
   _th_worker_push.join();
 
+  {
+    lock_guard<mutex> lock(_m_entries);
+    _flag_quit_worker_wait = true;
+  }
+  _cv_entries.notify_one();
+  _th_worker_wait.join();
+
   _sem_service_lock.close();
   _sem_service.close();
   _mmap_service.close();
@@ -314,4 +325,6 @@ NNetService::~NNetService() noexcept {
   for (uint u = 0; u < _nipc; ++u) {
     _sem_ipc[u].inc();
     _sem_ipc[u].close();
-    _mmap_ipc[u].close(); } }
+    _mmap_ipc[u].close(); }
+
+  std::cout << "~NNetService called" << std::endl; }

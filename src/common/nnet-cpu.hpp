@@ -1,13 +1,12 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
 #pragma once
-#if defined(_OPENMP) || defined(USE_MKL)
+#if defined(USE_OPENBLAS) || defined(USE_MKL)
 #include "nnet.hpp"
 #include <memory>
 #include <vector>
 
-class FName;
-class NNetCPU {
+class NNetCPU : public NNet {
   using uint   = unsigned int;
   using ushort = unsigned short;
   using row_t  = std::unique_ptr<float []>;

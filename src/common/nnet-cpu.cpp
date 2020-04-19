@@ -1,23 +1,19 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
-#if defined(_OPENMP) || defined(USE_MKL)
-#include "err.hpp"
-#include "iobase.hpp"
-#include "nnet-cpu.hpp"
-#include <algorithm>
-#include <utility>
-#include <vector>
-#include <cassert>
-#if defined(_OPENMP)
+#if defined(USE_OPENBLAS) || defined(USE_MKL)
+#  include "err.hpp"
+#  include "iobase.hpp"
+#  include "nnet-cpu.hpp"
+#  include <algorithm>
+#  include <utility>
+#  include <vector>
+#  include <cassert>
 #  include <omp.h>
-#endif
-#if defined(USE_MKL)
-#  include <mkl.h>
-#elif defined(USE_OPENBLAS)
-#  include <cblas.h>
-#else
-#  error "NO BLAS"
-#endif
+#  if defined(USE_MKL)
+#    include <mkl.h>
+#  elif defined(USE_OPENBLAS)
+#    include <cblas.h>
+#  endif
 using std::copy_n;
 using std::fill_n;
 using std::forward;
@@ -34,12 +30,13 @@ using namespace ErrAux;
 constexpr char msg_bad_wght_dim[] = "bad weight dimension";
 
 static float x1(float x) noexcept { return x; }
-static float x2(float x) noexcept { return x + x; }
-static float x3(float x) noexcept { return x + x + x; }
-static float x4(float x) noexcept { x += x; return x + x; }
-static float x6(float x) noexcept { x += x; return x + x + x; }
-static float x9(float x) noexcept {
-  float y = x + x; y += y; return y + y + x; }
+static float x2(float x) noexcept { return 2.0f * x; }
+static float x3(float x) noexcept { return 3.0f * x; }
+static float x4(float x) noexcept { return 4.0f * x; }
+static float x6(float x) noexcept { return 6.0f * x; }
+static float x8(float x) noexcept { return 8.0f * x; }
+static float x9(float x) noexcept { return 9.0f * x; }
+static float x16(float x) noexcept { return 16.0f * x; }
 
 constexpr uint len_kernel    = 3U;
 constexpr uint size_kernel   = len_kernel * len_kernel;
@@ -54,33 +51,21 @@ constexpr uint pad           = 1U;
 constexpr float bn_factor    = 1.0f / 999.982f;
 constexpr float bn_eps       = 1e-5f;
 
-static void blas_set_num_thread_one() noexcept {
-#if defined(_OPENMP) && defined(USE_MKL)
-  mkl_set_num_threads_local(1);
-#elif defined(_OPENMP) && defined(USE_OPENBLAS)
-  openblas_set_num_threads(1);
-#endif
-}
-
-static void blas_set_num_thread_all() noexcept {
-#if defined(_OPENMP) && defined(USE_MKL)
-  mkl_set_num_threads_local(omp_get_max_threads());
-#elif defined(_OPENMP) && defined(USE_OPENBLAS)
-  openblas_set_num_threads(omp_get_max_threads());
-#endif
-}
-
 void NNetCPU::reset(uint maxsize_batch,
 		    const vector<pair<uint, row_t>> &wght) noexcept {
   assert(0 < maxsize_batch);
-#if defined(_OPENMP)
   omp_set_num_threads(omp_get_max_threads());
-#endif
+
 #if defined(USE_MKL)
-  mkl_set_num_threads_local(1);
-#else
+#  if ! defined(__INTEL_COMPILER) && defined(__linux__) && ! defined(__MIC__)
+  if (mkl_set_threading_layer(MKL_THREADING_GNU) < 0)
+    die(ERR_INT("mkl_set_interface_layer() failed."));
+#  endif
+  mkl_set_num_threads_local(omp_get_max_threads());
+#elif defined(USE_OPENBLAS)
   openblas_set_num_threads(1);
 #endif
+
   _maxsize_batch = maxsize_batch;
   load(wght);
   
@@ -414,29 +399,29 @@ compute_matA_child(uint nchxnb, uint chb, const float *matM, float *fout)
       fout[ucd + 1U * NNAux::width + 0U]
 	= (+ mm[1][0] + mm[1][1] + mm[1][2] + mm[1][3]
 	   - mm[2][0] - mm[2][1] - mm[2][2] - mm[2][3]
-	   + x2(mm[3][0] + mm[3][1] + mm[3][2] + mm[3][3]));
+	   + x2(mm[3][0]) + x2(mm[3][1]) + x2(mm[3][2]) + x2(mm[3][3]));
       fout[ucd + 1U * NNAux::width + 1U]
 	= (+ mm[1][1] - mm[1][2] + x2(mm[1][3])
-	   - mm[2][1] + mm[2][2]
-	   + x2(- mm[2][3] + mm[3][1] - mm[3][2] + x2(mm[3][3])));
+	   - mm[2][1] + mm[2][2] - x2(mm[2][3])
+           + x2(mm[3][1]) - x2(mm[3][2]) + x4(mm[3][3]));
       fout[ucd + 1U * NNAux::width + 2U]
 	= (+ mm[1][1] + mm[1][2] + x4(mm[1][3]) + mm[1][4]
 	   - mm[2][1] - mm[2][2] - x4(mm[2][3]) - mm[2][4]
-	   + x2(mm[3][1] + mm[3][2] + x4(mm[3][3]) + mm[3][4]));
+	   + x2(mm[3][1]) + x2(mm[3][2]) + x8(mm[3][3]) + x2(mm[3][4]));
       fout[ucd + 2U * NNAux::width + 0U]
 	= (+ mm[1][0] + mm[1][1] + mm[1][2] + mm[1][3]
 	   + mm[2][0] + mm[2][1] + mm[2][2] + mm[2][3]
-	   + x4(mm[3][0] + mm[3][1] + mm[3][2] + mm[3][3])
+	   + x4(mm[3][0]) + x4(mm[3][1]) + x4(mm[3][2]) + x4(mm[3][3])
 	   + mm[4][0] + mm[4][1] + mm[4][2] + mm[4][3]);
       fout[ucd + 2U * NNAux::width + 1U]
 	= (+ mm[1][1] - mm[1][2] + x2(mm[1][3])
-	   + mm[2][1] - mm[2][2]
-	   + x2(mm[2][3] + x2(mm[3][1] - mm[3][2] + x2(mm[3][3])))
+	   + mm[2][1] - mm[2][2] + x2(mm[2][3])
+           + x4(mm[3][1]) - x4(mm[3][2]) + x8(mm[3][3])
 	   + mm[4][1] - mm[4][2] + x2(mm[4][3]));
       fout[ucd + 2U * NNAux::width + 2U]
 	= (+ mm[1][1] + mm[1][2] + x4(mm[1][3]) + mm[1][4]
 	   + mm[2][1] + mm[2][2] + x4(mm[2][3]) + mm[2][4]
-	   + x4(mm[3][1] + mm[3][2] + x4(mm[3][3]) + mm[3][4])
+	   + x4(mm[3][1]) + x4(mm[3][2]) + x16(mm[3][3]) + x4(mm[3][4])
 	   + mm[4][1] + mm[4][2] + x4(mm[4][3]) + mm[4][4]); } }
   
 static void compute_matV_input(uint size_batch, const float *fin, float *matV)
@@ -485,12 +470,10 @@ static void compute_matM(uint nout, uint nin, uint size_batch,
     b_array[u] = matV + u * nin * size_batch * ntile;
     c_array[u] = matM + u * nout * ntile * size_batch; }
 
-  blas_set_num_thread_all();
   cblas_sgemm_batch(CblasRowMajor, trans, trans, m_array, n_array, k_array,
 		    alpha_array, a_array, k_array, b_array, n_array,
 		    beta_array, c_array, n_array, 1, group_size);
 #else
-  blas_set_num_thread_one();
 #  pragma omp parallel for
   for (int loop = 0; loop < static_cast<int>(size_tile_in); ++loop) {
     uint uin = loop;
@@ -652,9 +635,9 @@ uint NNetCPU::push_ff(uint size_batch, const float *input,
 				fbody);
 
   // head part
-  blas_set_num_thread_one();
   compute_conv1x1(_head1_nout, _resnet_nout, size_batch, _head1_weight.get(),
 		  fbody, f1);
+
   compute_BNReLU(_head1_nout, size_batch, _head1_mean.get(),
 		 _head1_sd_inv.get(), f1);
   
@@ -694,6 +677,5 @@ uint NNetCPU::push_ff(uint size_batch, const float *input,
   cblas_sgemv(CblasRowMajor, CblasNoTrans, size_batch, _value3_nin,
 	      1.0f, f2, _value3_nin, _value3_weight.get(), 1, 1.0f, values, 1);
   for (uint ub = 0; ub < size_batch; ++ub) values[ub] = std::tanh(values[ub]);
-
   return 0; }
 #endif
