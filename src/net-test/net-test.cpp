@@ -282,6 +282,7 @@ public:
       lock_guard<mutex> lock(_m);
       _deque_ts.push_back(move(ts));
     }
+    _cv.notify_one();
     _th_worker.join(); }
 
   int64_t get_nelapsed() const noexcept { return _nelapsed; }
