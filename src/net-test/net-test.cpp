@@ -71,10 +71,21 @@ static double policy_sum_e  = 0.0;
 static double policy_sum_se = 0.0;
 static double policy_max_e  = 0.0;
 
-static int opt_device_id   = -1;
-static uint opt_batch_size = 1;
-static bool opt_use_half   = false;
+static int opt_thread_num   = -1;
+static int opt_device_id    = -1;
+static uint opt_batch_size  = 1;
+static bool opt_use_half    = false;
+static bool opt_mode_cpu    = false;
+static bool opt_mode_opencl = true;
 static string opt_str_wght;
+
+static string gen_usage(const char *cmd) noexcept {
+  stringstream ss;
+  ss << "Usage: " << cmd
+     << " [-i opencl] [-u device-id] [-b batch-size] [-h] weight\n";
+  ss << "       " << cmd
+     << " [-i cpublas] [-t thread-num] [-b batch-size] weight\n";
+  return ss.str(); }
 
 static double absolute_error(double f1, double f2) noexcept {
   return std::fabs(f1 - f2); }
@@ -85,11 +96,28 @@ static int get_options(int argc, const char * const *argv) noexcept {
   char *endptr;
 
   while (! flag_err) {
-    int opt = Opt::get(argc, argv, "u:b:h");
+    int opt = Opt::get(argc, argv, "b:i:t:u:");
     if (opt < 0) break;
 
     long l;
     switch (opt) {
+    case 'i':
+      if      (strcmp(Opt::arg, "cpublas") == 0) {
+	opt_mode_cpu    = true;
+	opt_mode_opencl = false; }
+      else if (strcmp(Opt::arg, "opencl")  == 0) {
+	opt_mode_cpu    = false;
+	opt_mode_opencl = true; }
+      else flag_err = true;
+      break;
+
+    case 't': 
+      l = strtol(Opt::arg, &endptr, 10);
+      if (endptr == Opt::arg || *endptr != '\0' || l < -1 || l == LONG_MAX)
+	flag_err = true;
+      opt_thread_num = static_cast<int>(l);
+      break;
+
     case 'u': 
       l = strtol(Opt::arg, &endptr, 10);
       if (endptr == Opt::arg || *endptr != '\0' || l < -1 || l == LONG_MAX)
@@ -111,10 +139,8 @@ static int get_options(int argc, const char * const *argv) noexcept {
     opt_str_wght = string(argv[Opt::ind++]);
     return 0; }
   
-  cerr << "Usage: " << Opt::cmd
-       << " [-u device-id] [-b batch-size] [-h] weight" << endl;
-  return -1;
-}
+  cerr << gen_usage(Opt::cmd) << std::flush;
+  return -1; }
 
 class Entry {
   uint _no;
@@ -190,11 +216,7 @@ struct TestSet {
 };
 
 class QueueTest {
-#if defined(USE_OPENCL_AOBA)
-  NNetOCL _nnet;
-#else
-  NNetCPU _nnet;
-#endif
+  unique_ptr<NNet> _pnnet;
   mutex _m;
   condition_variable _cv;
   thread _th_worker;
@@ -213,7 +235,7 @@ class QueueTest {
       lock.unlock();
 
       if (ts.nentry == 0) return;
-      _nnet.wait_ff(ts.wait_id);
+      _pnnet->wait_ff(ts.wait_id);
       for (uint index = 0; index < ts.nentry; ++index)
 	ts.data[index].compare(ts.probs.get() + index * SAux::maxsize_moves,
 			       ts.values[index]);
@@ -239,8 +261,9 @@ class QueueTest {
 	     _nnmoves.get() + index * SAux::maxsize_moves);
       _sizes_nnmove[index] = entry.get_size_nnmove(); }
 
-    uint wait_id = _nnet.push_ff(_npush, _input.get(), _sizes_nnmove.get(),
-				 _nnmoves.get(), _probs.get(), _values.get());
+    uint wait_id = _pnnet->push_ff(_npush, _input.get(), _sizes_nnmove.get(),
+				   _nnmoves.get(), _probs.get(),
+				   _values.get());
     TestSet ts{wait_id, _npush, move(_data), move(_probs), move(_values)};
     unique_lock<mutex> lock(_m);
     _deque_ts.push_back(move(ts));
@@ -252,7 +275,7 @@ class QueueTest {
   
 public:
   explicit QueueTest(const FName &fname, int device_id, uint nbatch,
-		     bool use_half) noexcept
+		     bool use_half, int thread_num) noexcept
     : _th_worker(&QueueTest::worker, this), _npush(0), _nbatch(nbatch),
     _nelapsed(0) {
     _data.resize(nbatch);
@@ -260,14 +283,26 @@ public:
     uint64_t digest;
     NNAux::wght_t wght = NNAux::read(fname, version, digest);
 
+    if (opt_mode_opencl) {
 #if defined(USE_OPENCL_AOBA)
-    _nnet.reset(nbatch, wght, device_id, use_half);
+      _pnnet.reset(new NNetOCL);
+      NNetOCL *p = dynamic_cast<NNetOCL *>(_pnnet.get());
+      p->reset(nbatch, wght, device_id, use_half);
 #else
-    _nnet.reset(nbatch, wght);
-    (void)device_id;
-    (void)use_half;
+      die(ERR_INT("No OpenCL support"));
 #endif
-  }
+    } else if (opt_mode_cpu) {
+#if defined(USE_MKL) || defined(USE_OPENBLAS)
+      _pnnet.reset(new NNetCPU);
+      NNetCPU *p = dynamic_cast<NNetCPU *>(_pnnet.get());
+      p->reset(nbatch, wght, thread_num);
+#else
+      die(ERR_INT("No CPU BLAS support"));
+#endif
+    } else die(ERR_INT("Internal Error"));
+
+    (void)device_id;
+    (void)use_half; }
   
   void push(Entry &entry) noexcept {
     assert(entry.ok());
@@ -411,8 +446,7 @@ int main(int argc, char **argv) {
     = async(launch::async, read_entries, &std::cin);
 
   QueueTest queue_test(FName(opt_str_wght.c_str()), opt_device_id,
-		       opt_batch_size, opt_use_half);
-
+		       opt_batch_size, opt_use_half, opt_thread_num);
   vector<Entry> vec_entry = f_vec_entry.get();
   cout << "Finish reading " << vec_entry.size() << " entries" << endl;
 

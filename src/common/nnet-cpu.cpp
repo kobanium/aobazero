@@ -51,17 +51,18 @@ constexpr uint pad           = 1U;
 constexpr float bn_factor    = 1.0f / 999.982f;
 constexpr float bn_eps       = 1e-5f;
 
-void NNetCPU::reset(uint maxsize_batch,
-		    const vector<pair<uint, row_t>> &wght) noexcept {
+void NNetCPU::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
+		    int thread_num) noexcept {
   assert(0 < maxsize_batch);
-  omp_set_num_threads(omp_get_max_threads());
+  if (thread_num == -1) thread_num = omp_get_max_threads();
+  omp_set_num_threads(thread_num);
 
 #if defined(USE_MKL)
 #  if ! defined(__INTEL_COMPILER) && defined(__linux__) && ! defined(__MIC__)
   if (mkl_set_threading_layer(MKL_THREADING_GNU) < 0)
     die(ERR_INT("mkl_set_interface_layer() failed."));
 #  endif
-  mkl_set_num_threads_local(omp_get_max_threads());
+  mkl_set_num_threads_local(thread_num);
 #elif defined(USE_OPENBLAS)
   openblas_set_num_threads(1);
 #endif

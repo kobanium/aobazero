@@ -462,7 +462,6 @@ void compute_matAV(__global const void *matM,
     flout[u*NB*NTILE + ub*NTILE + utile]
       = fbypass[ch*NB*128U + u*NB*NTILE + ub*NTILE + utile];
 #endif
-
   float M[LEN_TILE_IN][LEN_TILE_IN];
   for (uint uh = 0; uh < LEN_TILE_IN; ++uh)
     for (uint uw = 0; uw < LEN_TILE_IN; ++uw)
@@ -2161,6 +2160,7 @@ uint NNetOCL::push_ff(uint size_batch, const float *input,
 
   unique_lock<mutex> lock_pool1(_m_pool1_slot);
   _cv_pool1_slot.wait(lock_pool1, [&]{ return 0 < _pool1_slot_size; });
+  assert(0 < _pool1_slot_size);
   uint uslot = _pool1_slots[ --_pool1_slot_size ];
   lock_pool1.unlock();
 

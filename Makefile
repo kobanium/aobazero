@@ -21,8 +21,8 @@ ifeq ($(USE_OpenCL_AOBA), 1)
 	CPPFLAGS += -I$(OpenCL_INC_AOBA)
 endif
 
-USE_BLAS_AOBA ?= None
-ifeq ($(USE_BLAS_AOBA), IntelMKL)
+USE_CPUBLAS_AOBA ?= None
+ifeq ($(USE_CPUBLAS_AOBA), IntelMKL)
 	CPPFLAGS += -DUSE_MKL
 	CXXFLAGS += -fopenmp
 	LDFLAGS  += -fopenmp
@@ -34,7 +34,7 @@ ifeq ($(USE_BLAS_AOBA), IntelMKL)
 		LDFLAGS += -L$(IntelMKL_LIB_AOBA)
 		LDFLAGS += -Wl,-rpath,$(IntelMKL_LIB_AOBA)
 	endif
-else ifeq ($(USE_BLAS_AOBA), OpenBLAS)
+else ifeq ($(USE_CPUBLAS_AOBA), OpenBLAS)
 	CPPFLAGS += -DUSE_OPENBLAS
 	CXXFLAGS += -fopenmp
 	LDFLAGS  += -fopenmp

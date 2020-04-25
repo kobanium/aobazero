@@ -125,14 +125,17 @@ void NNetService::worker_push() noexcept {
     assert(id < _nipc || id == NNAux::maxnum_nipc);
 
     if (type == SrvType::End) {
-      std::cerr << "Terminate (nnet_id: " << _nnet_id << ")" << std::endl;
+      string s("Terminate (nnet_id: ");
+      s += to_string(_nnet_id) + string(")");
+      std::cerr << s << std::endl;
       return; }
 
     if (type == SrvType::Register) {
       assert(pipc[id] && pipc[id]->nnet_id == _nnet_id && _sem_ipc[id].ok());
       _sem_ipc[id].inc();
-      std::cerr << "Register id: " << id << " nnet_id: " << _nnet_id
-		<< std::endl;
+      string s("Register id: ");
+      s += to_string(id) + string(" nnet_id: ") + to_string(_nnet_id);
+      std::cerr << s << std::endl;
       continue; }
 
     if (type == SrvType::NNReset) {
@@ -150,21 +153,31 @@ void NNetService::worker_push() noexcept {
       uint version;
       uint64_t digest;
       NNAux::wght_t wght = NNAux::read(fn, version, digest);
-#if defined(USE_OPENCL_AOBA)
-      string s("Tuning feed-forward engine of device ");
-      s += to_string(static_cast<int>(_device_id)) + string(" for ");
-      s += string(fn.get_fname()) + string("\n");
-      std::cout << s << std::flush;
-
-      _pnnet.reset(new NNetOCL);
-      NNetOCL *p = dynamic_cast<NNetOCL *>(_pnnet.get());
-      std::cout << p->reset(_size_batch, wght, _device_id, _use_half,
-			    false, true)
-		<< std::flush;
+      if (_impl == NNet::cpublas) {
+#if defined(USE_OPENBLAS) || defined(USE_MKL)
+	_pnnet.reset(new NNetCPU);
+	dynamic_cast<NNetCPU *>(_pnnet.get())->reset(_size_batch, wght,
+						     _thread_num);
 #else
-      _pnnet.reset(new NNetCPU);
-      dynamic_cast<NNetCPU *>(_pnnet.get())->reset(_size_batch, wght);
+	die(ERR_INT("No CPU BLAS support"));
 #endif
+      } else if (_impl == NNet::opencl) {
+#if defined(USE_OPENCL_AOBA)
+	string s("Tuning feed-forward engine of device ");
+	s += to_string(static_cast<int>(_device_id)) + string(" for ");
+	s += string(fn.get_fname()) + string("\n");
+	std::cout << s << std::flush;
+	
+	_pnnet.reset(new NNetOCL);
+	NNetOCL *p = dynamic_cast<NNetOCL *>(_pnnet.get());
+	std::cout << p->reset(_size_batch, wght, _device_id, _use_half,
+			      false, true)
+		  << std::flush;
+#else
+	die(ERR_INT("No OpenCL support"));
+#endif
+      } else die(ERR_INT("INTERNAL ERROR"));
+
       continue; }
       
     if (type == SrvType::FeedForward) {
@@ -264,11 +277,13 @@ void NNetService::flush_off() noexcept {
   _flag_cv_flush = false;
   lock.unlock(); }
 
-NNetService::NNetService(uint nnet_id, uint nipc, uint size_batch,
-			 uint device_id, uint use_half) noexcept
-: _flag_cv_flush(false), _flag_cv_nnreset(false),
+NNetService::NNetService(NNet::Impl impl, uint nnet_id, uint nipc,
+			 uint size_batch, uint device_id, uint use_half,
+			 uint thread_num) noexcept
+: _impl(impl), _flag_cv_flush(false), _flag_cv_nnreset(false),
   _flag_quit_worker_wait(false), _nnet_id(nnet_id), _nipc(nipc),
-  _size_batch(size_batch), _device_id(device_id), _use_half(use_half) {
+  _size_batch(size_batch), _device_id(device_id), _use_half(use_half),
+  _thread_num(thread_num) {
   if (NNAux::maxnum_nnet <= nnet_id) die(ERR_INT("too many nnets"));
   if (NNAux::maxnum_nipc < nipc)     die(ERR_INT("too many processes"));
 
@@ -293,10 +308,11 @@ NNetService::NNetService(uint nnet_id, uint nipc, uint size_batch,
   _th_worker_push = thread(&NNetService::worker_push, this);
   _th_worker_wait = thread(&NNetService::worker_wait, this); }
 
-NNetService::NNetService(uint nnet_id, uint nipc, uint size_batch,
-			 uint device_id, uint use_half, const FName &fname)
-noexcept : NNetService(nnet_id, nipc, size_batch, device_id, use_half) {
-  nnreset(fname); }
+NNetService::NNetService(NNet::Impl impl, uint nnet_id, uint nipc,
+			 uint size_batch, uint device_id, uint use_half,
+			 uint thread_num, const FName &fname) noexcept
+: NNetService(impl, nnet_id, nipc, size_batch, device_id, use_half,
+	      thread_num) { nnreset(fname); }
 
 NNetService::~NNetService() noexcept {
   assert(_mmap_service.ok());
@@ -325,6 +341,4 @@ NNetService::~NNetService() noexcept {
   for (uint u = 0; u < _nipc; ++u) {
     _sem_ipc[u].inc();
     _sem_ipc[u].close();
-    _mmap_ipc[u].close(); }
-
-  std::cout << "~NNetService called" << std::endl; }
+    _mmap_ipc[u].close(); } }

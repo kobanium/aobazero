@@ -46,16 +46,18 @@ class NNetService {
   std::mutex _m_entries;
   std::deque<std::unique_ptr<class Entry>> _entries;
   bool _flag_cv_flush, _flag_cv_nnreset, _flag_quit_worker_wait;
-  uint _nnet_id, _nipc, _size_batch, _device_id, _use_half;
+  uint _nnet_id, _nipc, _size_batch, _device_id, _use_half, _thread_num;
   FName _fname;
+  NNet::Impl _impl;
   void worker_push() noexcept;
   void worker_wait() noexcept;
 
 public:
-  NNetService(uint nnet_id, uint nipc, uint size_batch, uint device_id,
-	      uint use_half) noexcept;
-  NNetService(uint nnet_id, uint nipc, uint size_batch, uint device_id,
-	      uint use_half, const FName &fname) noexcept;
+  NNetService(NNet::Impl impl, uint nnet_id, uint nipc, uint size_batch,
+	      uint device_id, uint use_half, uint thread_num) noexcept;
+  NNetService(NNet::Impl impl, uint nnet_id, uint nipc, uint size_batch,
+	      uint device_id, uint use_half, uint thread_num,
+	      const FName &fname) noexcept;
   ~NNetService() noexcept;
   void nnreset(const FName &fname) noexcept;
   void flush_on() noexcept;

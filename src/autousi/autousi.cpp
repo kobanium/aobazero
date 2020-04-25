@@ -70,19 +70,13 @@ static void on_terminate() {
   catch (const exception &e) { cout << e.what() << endl; }
 
   try { WghtFile::cleanup(); }
-  catch (exception &e) {
-    cerr << ERR_INT("WghtFile::cleanup() failed").what() << endl;
-    cerr << e.what() << endl; }
+  catch (exception &e) { cerr << e.what() << endl; }
 
   try { OSI::Semaphore::cleanup(); }
-  catch (exception &e) {
-    cerr << ERR_INT("OSI::Semaphore::cleanup() failed").what() << endl;
-    cerr << e.what() << endl; }
+  catch (exception &e) { cerr << e.what() << endl; }
   
   try { OSI::MMap::cleanup(); }
-  catch (exception &e) {
-    cerr << ERR_INT("OSI::Semaphore::cleanup() failed").what() << endl;
-    cerr << e.what() << endl; }
+  catch (exception &e) { cerr << e.what() << endl; }
 
   abort(); }
 
@@ -185,18 +179,20 @@ static void output() noexcept {
   puts("+------+-----+--------+--------------------------------------------+");
   for (uint u = 0; u < PlayManager::get().get_nengine(); ++u) {
     const int BUF_SIZE = 64;
-    char spid[BUF_SIZE] = "  N/A ";
-    snprintf(spid, BUF_SIZE, "%6u", PlayManager::get().get_eid(u));
-    char buf[BUF_SIZE];
+    char spid[BUF_SIZE], sdev[BUF_SIZE], buf[BUF_SIZE];
+    int eid = PlayManager::get().get_eid(u);
+    int did = PlayManager::get().get_did(u);
+    snprintf(spid, BUF_SIZE, "%6u",  eid);
+    if (did == -2) snprintf(sdev, BUF_SIZE, " CPU ");
+    else           snprintf(sdev, BUF_SIZE, "%4d ", did);
     fill_n(buf, sizeof(buf), '#');
     uint len = std::min(PlayManager::get().get_nmove(u) / 5,
 			static_cast<uint>(sizeof(buf)) - 1U);
+    buf[len] = '\0';
     double time_ave = PlayManager::get().get_time_average(u);
     time_ave_tot += time_ave;
-    buf[len] = '\0';
-    printf("|%s|%4d |%6.0fms|%3d:%-40s|\n",
-	   spid, PlayManager::get().get_did(u), time_ave,
-	   PlayManager::get().get_nmove(u), buf); }
+    printf("|%s|%s|%6.0fms|%3d:%-40s|\n",
+	   spid, sdev, time_ave, PlayManager::get().get_nmove(u), buf); }
   puts("+------+-----+--------+--------------------------------------------+");
   printf("- Send Status: Sent %d, Lost %d, Waiting %d\n",
 	 nsend, ndiscard, ntot - nsend - ndiscard);

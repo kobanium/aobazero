@@ -97,19 +97,21 @@ static void close_flush(USIEngine &c) noexcept;
 static void load_book_file() noexcept;
 static void file_out(const char *fmt, ...) noexcept;
 
-constexpr char str_book[] = "records2016_10818.sfen";
-constexpr uint size_book  = 10831U;
-static bool flag_f    = false;
-static bool flag_r    = false;
-static bool flag_u    = false;
-static bool flag_s    = false;
-static bool flag_b    = false;
-static long int num_m = 1;
-static long int num_P = 1;
-static long int num_N = 0;
-static int num_B[2] = { 1,  1};
-static int num_U[2] = {-1, -1};
-static int num_H[2] = { 0,  0};
+constexpr char str_book[]   = "records2016_10818.sfen";
+constexpr uint size_book    = 10831U;
+static bool flag_f          = false;
+static bool flag_r          = false;
+static bool flag_u          = false;
+static bool flag_s          = false;
+static bool flag_b          = false;
+static long int num_m       = 1;
+static long int num_P       = 1;
+static long int num_N       = 0;
+static int num_B[2]         = {  1,  1};
+static int num_U[2]         = { -1, -1};
+static int num_H[2]         = {  0,  0};
+static int num_T[2]         = { -1, -1};
+static NNet::Impl impl_I[2] = { NNet::opencl, NNet::opencl };
 static FName fname_W[2];
 
 static FName shell("/bin/sh");
@@ -118,29 +120,39 @@ static vector <string> book;
 static string file_out_name;
 static atomic<int> flag_signal(0);
 static deque<NNetService> nnets;
+static deque<SeqPRNService> seq_s;
 
 static void on_terminate() {
   exception_ptr p = current_exception();
   try { if (p) rethrow_exception(p); }
   catch (const exception &e) { cout << e.what() << endl; }
-  try { while (!nnets.empty()) nnets.pop_back(); } catch (...) {}
+
+  try { OSI::Semaphore::cleanup(); }
+  catch (exception &e) { cerr << e.what() << endl; }
+  
+  try { OSI::MMap::cleanup(); }
+  catch (exception &e) { cerr << e.what() << endl; }
+
   abort(); }
 
 static void on_signal(int signum) { flag_signal = signum; }
 
 int main(int argc, char **argv) {
+  OSI::DirLock dlock(".");
   set_terminate(on_terminate);
   if (get_options(argc, argv) < 0) return 1;
   if (flag_b) load_book_file();
-  deque<SeqPRNService> seq_s;
+
   if (num_N == 2) {
     seq_s.emplace_back();
-    nnets.emplace_back(0U, num_P, num_B[0], num_U[0], num_H[0], fname_W[0]);
-    nnets.emplace_back(1U, num_P, num_B[1], num_U[1], num_H[1], fname_W[1]); }
+    nnets.emplace_back(impl_I[0], 0U, num_P, num_B[0], num_U[0], num_H[0],
+		       num_T[0], fname_W[0]);
+    nnets.emplace_back(impl_I[1], 1U, num_P, num_B[1], num_U[1], num_H[1],
+		       num_T[1], fname_W[1]); }
   else if (num_N == 1) {
     seq_s.emplace_back();
-    nnets.emplace_back(0U, num_P * 2, num_B[0], num_U[0], num_H[0],
-		       fname_W[0]); }
+    nnets.emplace_back(impl_I[0], 0U, num_P * 2, num_B[0], num_U[0], num_H[0],
+		       num_T[0], fname_W[0]); }
 
   static vector<unique_ptr<Game>> games;
   for (uint u = 0; u < static_cast<uint>(num_P); ++u)
@@ -205,6 +217,7 @@ int main(int argc, char **argv) {
     close_flush(ptr->engine1); }
 
   while (!nnets.empty()) nnets.pop_back();
+  while (!seq_s.empty()) seq_s.pop_back();
   return 0; }
 
 enum { win = 0, draw = 1, lose = 2 };
@@ -579,9 +592,9 @@ static int get_options(int argc, const char * const *argv) noexcept {
   uint num;
 
   while (! flag_err) {
-    int opt = Opt::get(argc, argv, "0:1:c:m:P:B:U:H:W:frsub");
+    int opt = Opt::get(argc, argv, "0:1:c:m:P:I:B:U:H:W:T:frsub");
     if (opt < 0) break;
-    
+
     switch (opt) {
     case '0': cmd0 = string(Opt::arg); break;
     case '1': cmd1 = string(Opt::arg); break;
@@ -601,9 +614,22 @@ static int get_options(int argc, const char * const *argv) noexcept {
       if (endptr == Opt::arg || *endptr != '\0'
 	  || num_P == LONG_MAX || num_P < 1) flag_err = true;
       break;
+    case 'I':
+      num = 0;
+      strncpy(buf, Opt::arg, sizeof(buf));
+      buf[sizeof(buf) - 1U] = '\0';
+      for (char *str = buf;; str = nullptr) {
+	const char *token = OSI::strtok(str, ":", &endptr);
+	if (!token) break;
+	if (2U <= num) { flag_err = true; break; }
+	if      (token[0] == 'B') impl_I[num] = NNet::cpublas;
+	else if (token[0] == 'O') impl_I[num] = NNet::opencl;
+	else                      flag_err = true;
+	if (2U < ++num) { flag_err = true; break; } }
+      break;
     case 'W':
       strncpy(buf, Opt::arg, sizeof(buf));
-      buf[sizeof(buf) - 1U] = '0';
+      buf[sizeof(buf) - 1U] = '\0';
       for (char *str = buf;; str = nullptr) {
 	const char *token = OSI::strtok(str, ":", &endptr);
 	if (!token) break;
@@ -638,6 +664,15 @@ static int get_options(int argc, const char * const *argv) noexcept {
 	if (*endptr != ':') break;
 	if (2U <= ++num) { flag_err = true; break; } }
       break;
+    case 'T':
+      num = 0;
+      for (const char *str = Opt::arg;; str = endptr + 1) {
+	num_T[num] = strtol(str, &endptr, 10);
+	if (endptr == str || (*endptr != '\0' && *endptr != ':')
+	    || num_T[num] < -1 || INT_MAX <= num_T[num]) flag_err = true;
+	if (*endptr != ':') break;
+	if (2U <= ++num) { flag_err = true; break; } }
+      break;
     default: flag_err = true; break; } }
 
   if (!flag_err && 0 < cmd0.size() && 0 < cmd1.size()) {
@@ -651,10 +686,12 @@ static int get_options(int argc, const char * const *argv) noexcept {
     cout << "'Parallel:    " << num_P << "\n";
     for (int i = 0; i < num_N; ++i) {
       cout << "'NNet" << i << ":\n";
-      cout << "'- Weight:      " << fname_W[i].get_fname() << "\n";
-      cout << "'- BatchSize:  " << num_B[i] << "\n";
-      cout << "'- Device:     " << num_U[i] << "\n";
-      cout << "'- Half:       " << num_H[i] << "\n"; }
+      cout << "'- Implimentation " << (int)impl_I[i] << "\n";
+      cout << "'- Weight:        " << fname_W[i].get_fname() << "\n";
+      cout << "'- BatchSize:     " << num_B[i] << "\n";
+      cout << "'- Device:        " << num_U[i] << "\n";
+      cout << "'- Half:          " << num_H[i] << "\n";
+      cout << "'- Thread:        " << num_T[i] << "\n"; }
     cout.flush();
     std::time_t tt = std::time(nullptr);
     struct std::tm *tb = std::localtime(&tt);
@@ -676,42 +713,47 @@ static int get_options(int argc, const char * const *argv) noexcept {
     cout << "'" << file_out_name << "\n";
     return 0; }
 
-  cerr << "Usage: " << Opt::cmd << " [OPTION] -0 \"CMD0\" -1 \"CMD1\"\n";
-  cerr << 
-    "Generate gameplays between two USI shogi engines\n\n"
-    "Mandatory options:\n"
-    "  -0 \"CMD0\" Start player0 as '/bin/sh -c \"CMD0\"'.\n"
-    "  -1 \"CMD1\" Start player1 as '/bin/sh -c \"CMD1\"'.\n\n"
-    "Other options:\n"
-    "  -m NUM   Generate NUM gameplays. NUM must be a positive integer.\n"
-    "           The default value is 1.\n"
-    "  -f       Always assign player0 to Sente (black). If this is not\n"
-    "           specified, then Sente and Gote (white) are assigned\n"
-    "           alternatively.\n"
-    "  -r       Print CSA records.\n"
-    "  -s       Print results in detail.\n"
-    "  -u       Print verbose USI messages.\n"
-    "  -b       Use positions recorded in records2016_10818.sfen (a\n"
-    "           collection of 24 moves from the no-handicap initial\n"
-    "           position).\n"
-    "  -c SHELL Use SHELL, e.g., /bin/csh, instead of /bin/sh.\n\n"
-    "  -P NUM   Generate NUM gameplays simultaneously. The default is 1.\n"
-    "  -U STR   Specifies device IDs of nnet daemon.  STR can contain two\n"
-    "           IDs separated by ':'. Each ID must be different from the\n"
-    "           other.\n"
-    "  -W STR   Specifies weight paths for all nnet daemons. STR can contain\n"
-    "           two file names separated by ':'.\n"
-    "  -B STR   Specifies batch sizes of nnet daemons. STR can contain two\n"
-    "           sizes separated by ':'. The default size is 1.\n"
-    "  -H STR   Nnet uses half precision floating-point values. STR can\n"
-    "           contain two binary values separated by ':'. The value should\n"
-    "           be 1 (use half) or 0 (do not use half). The default is 0.\n"
-    "Example:\n"
-    "  " << Opt::cmd <<
-    " -0 \"~/aobaz -w ~/w0.txt\" -1 \"~/aobaz -w ~/w1.txt\"\n"
-    "            Generate a gameplay between 'w0.txt' (black) and 'w1.txt'\n"
-    "            (white)\n";
-  
+  cerr << "\nUsage: " << Opt::cmd << " [OPTION] -0 \"CMD0\" -1 \"CMD1\"\n";
+  cerr << R"(
+      Generate gameplays between two USI shogi engines
+
+Mandatory options:
+  -0 "CMD0" Start player0 as '/bin/sh -c "CMD0"'.
+  -1 "CMD1" Start player1 as '/bin/sh -c "CMD1"'.
+
+Other options:
+  -m NUM   Generate NUM gameplays. NUM must be a positive integer. The default
+           value is 1.
+  -f       Always assign player0 to Sente (black). If this is not specified,
+           then Sente and Gote (white) are assigned alternatively.
+  -r       Print CSA records.
+  -s       Print results in detail.
+  -u       Print verbose USI messages.
+  -b       Use positions recorded in records2016_10818.sfen (a collection of
+           24 moves from the no-handicap initial position).
+  -c SHELL Use SHELL, e.g., /bin/csh, instead of /bin/sh.
+  -P NUM   Generate NUM gameplays simultaneously. The default is 1.
+  -I STR   Specifies nnet implementation. STR can conatin two characters
+           separated by ':'. Character 'B' means CPU BLAS implementation, and
+           'O' means OpenCL implimentation. The default is 0.
+  -B STR   Specifies batch sizes of nnet computation. STR can contain two
+           sizes separated by ':'. The default size is 1.
+  -W STR   Specifies weight paths for nnet computation. STR can contain two
+           file names separated by ':'.
+  -U STR   Specifies device IDs of OpenCL nnet computation. STR can contain
+           two IDs separated by ':'. Each ID must be different from the other.
+  -H STR   OpenCL uses half precision floating-point values. STR can contain
+           two binary values separated by ':'. The value should be 1 (use
+           half) or 0 (do not use half). The default is 0.
+  -T STR   Specifies the number of threads for CPU BLAS computation. STR can
+           contain two numbers separated by ':'. The default is -1 (means an
+           upper bound of the number).
+Example:
+  )" << Opt::cmd << R"( -0 "~/aobaz -w ~/w0.txt" -1 "~/aobaz -w ~/w1.txt"
+           Generate a gameplay between 'w0.txt' (black) and 'w1.txt' (white)
+
+)";
+
   return -1; }
 
 static void load_book_file() noexcept {

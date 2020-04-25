@@ -58,9 +58,12 @@ class Device {
   class DataNNService {
     NNetService _nnet;
   public:
-    DataNNService(uint nnet_id, uint size_parallel, uint size_batch, uint id,
-		  uint use_half) noexcept
-    : _nnet(nnet_id, size_parallel, size_batch, id, use_half) {}
+    DataNNService(NNet::Impl impl, uint nnet_id, uint size_parallel,
+		  uint size_batch, uint id, uint use_half, uint thread_num)
+    noexcept : _nnet(impl, nnet_id, size_parallel, size_batch, id, use_half,
+		     thread_num) {
+      lock_guard<mutex> lock(m_seq);
+      if (seq_s.empty()) seq_s.emplace_back(); }
     void nnreset(const FName &fname) noexcept { _nnet.nnreset(fname); }
     void flush_on() noexcept { _nnet.flush_on(); }
     void flush_off() noexcept { _nnet.flush_off(); }
@@ -80,10 +83,34 @@ public:
     : _nnet_id(-1), _size_parallel(1U), _flag_half(false), _type(bad) {
     if (s.empty()) die(ERR_INT("invalid device %s", s.c_str()));
     char *endptr;
-    if (s[0] == 'S' || s[0] == 's') {
-      {
-	lock_guard<mutex> lock(m_seq);
-	if (seq_s.empty()) seq_s.emplace_back(); }
+    if (s[0] == 'B' || s[0] == 'b') {
+      const char *token = s.c_str() + 1;
+      long int thread_num = strtol(token, &endptr, 10);
+      if (endptr == token || *endptr != ':' || thread_num < -1
+	  || thread_num == LONG_MAX) die(ERR_INT("invalid device %s", token));
+      token = endptr + 1;
+      
+      long int size_batch = strtol(token, &endptr, 10);
+      if (endptr == token || *endptr != ':' || size_batch < 1
+	  || size_batch == LONG_MAX) die(ERR_INT("invalid device %s",
+						 s.c_str()));
+      token = endptr + 1;
+      
+      long int size_parallel = strtol(token, &endptr, 10);
+      if (*endptr != '\0' || endptr == token || size_parallel < 1
+	  || size_parallel == LONG_MAX)
+	die(ERR_INT("invalid device %s", s.c_str()));
+      
+      _device_id     = -2;
+      _nnet_id       = nnet_id;
+      _type          = nnservice;
+      _size_parallel = size_parallel;
+      _size_batch    = size_batch;
+      _data_nnservice.reset(new DataNNService(NNet::cpublas, _nnet_id,
+					      _size_parallel, _size_batch,
+					      _device_id, _flag_half,
+					      thread_num)); }
+    else if (s[0] == 'O' || s[0] == 'o') {
       const char *token = s.c_str() + 1;
       long int device_id = strtol(token, &endptr, 10);
       if (endptr == token || *endptr != ':' || device_id < -1
@@ -110,9 +137,9 @@ public:
       _type          = nnservice;
       _size_parallel = size_parallel;
       _size_batch    = size_batch;
-      _data_nnservice.reset(new DataNNService(_nnet_id, _size_parallel,
-					      _size_batch, _device_id,
-					      _flag_half)); }
+      _data_nnservice.reset(new DataNNService(NNet::opencl, _nnet_id,
+					      _size_parallel, _size_batch,
+					      _device_id, _flag_half, 0)); }
     else {
       const char *token = s.c_str();
       _nnet_id = strtol(token, &endptr, 10);

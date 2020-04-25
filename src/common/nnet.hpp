@@ -45,6 +45,8 @@ public:
 class NNet {
   using uint = unsigned int;
 public:
+  enum class Impl : uint { CPUBLAS, OpenCL, End };
+  static constexpr Impl cpublas = Impl::CPUBLAS, opencl  = Impl::OpenCL;
   virtual ~NNet() noexcept {}
   virtual uint push_ff(uint size_batch, const float *input,
 		       const uint *sizes_nnmove, const ushort *nnmoves,

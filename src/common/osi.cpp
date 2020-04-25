@@ -559,6 +559,7 @@ public:
       die(ERR_INT("another instance is using %s", dname)); }
   ~dirlock_impl() noexcept {} };
 
+static bool flag_sem_save = false;
 static mutex m_sem_save;
 static map<sem_t *, FName> sem_save;
 class OSI::sem_impl {
@@ -575,6 +576,7 @@ public:
       _psem = sem_open(name, O_CREAT | O_EXCL, 0600, value);
       if (_psem == SEM_FAILED) die(ERR_CLL("sem_open"));
       lock_guard<mutex> lock(m_sem_save);
+      if (flag_sem_save) { mutex m; m.lock(); m.lock(); }
       assert(sem_save.find(_psem) == sem_save.end());
       sem_save[_psem] = _fname; }
     else {
@@ -583,16 +585,13 @@ public:
   ~sem_impl() noexcept {
     if (sem_close(_psem) < 0) die(ERR_CLL("sem_close"));
     if (!_flag_create) return;
-
-    lock_guard<mutex> lock(m_sem_save);
     errno = 0;
     if (sem_unlink(_fname.get_fname()) < 0 && errno != ENOENT)
-      die(ERR_CLL("sem_unlink"));
-    if (sem_save.find(_psem) == sem_save.end())
-      die(ERR_CLL("INTERNAL ERROR"));
-    sem_save.erase(_psem); }
+      die(ERR_CLL("sem_unlink")); }
+
   static void cleanup() noexcept {
     lock_guard<mutex> lock(m_sem_save);
+    flag_sem_save = true;
     for (auto &f : sem_save) sem_unlink(f.second.get_fname());
     sem_save.clear(); }
   void inc() noexcept { if (sem_post(_psem) < 0) die(ERR_CLL("sem_post")); }
@@ -608,6 +607,7 @@ public:
     return -1; }
   bool ok() const noexcept { return _psem != SEM_FAILED; } };
 
+static bool flag_mmap_save = false;
 static mutex m_mmap_save;
 static map<void *, FName> mmap_save;
 class OSI::mmap_impl {
@@ -629,6 +629,7 @@ public:
       _ptr = mmap(nullptr, size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
       if (_ptr == MAP_FAILED) die(ERR_CLL("mmap"));
       lock_guard<mutex> lock(m_mmap_save);
+      if (flag_mmap_save) { mutex m; m.lock(); m.lock(); }
       assert(mmap_save.find(_ptr) == mmap_save.end());
       mmap_save[_ptr] = _fname; }
     else {
@@ -639,14 +640,11 @@ public:
   ~mmap_impl() noexcept {
     if (munmap(_ptr, _size) < 0) die(ERR_CLL("munmap"));
     if (!_flag_create) return;
+    if (shm_unlink(_fname.get_fname()) < 0) die(ERR_CLL("shm_unlink")); }
 
-    lock_guard<mutex> lock(m_mmap_save);
-    if (shm_unlink(_fname.get_fname()) < 0) die(ERR_CLL("shm_unlink"));
-    if (mmap_save.find(_ptr) == mmap_save.end())
-      die(ERR_CLL("INTERNAL ERROR"));
-    mmap_save.erase(_ptr); }
   static void cleanup() noexcept {
     lock_guard<mutex> lock(m_mmap_save);
+    flag_mmap_save = true;
     for (auto &f : mmap_save) shm_unlink(f.second.get_fname());
     mmap_save.clear(); }
   void *get() const noexcept { return _ptr; }
@@ -1170,4 +1168,3 @@ void OSI::IAddr::set_iaddr(const sockaddr_in &c_addr) noexcept {
 OSI::Dir::Dir(const char *dname) noexcept : _impl(new Dir_impl(dname)) {}
 OSI::Dir::~Dir() noexcept {}
 const char * OSI::Dir::next() const noexcept { return _impl->next(); }
-
