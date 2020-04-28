@@ -62,7 +62,7 @@ void NNetCPU::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
   if (mkl_set_threading_layer(MKL_THREADING_GNU) < 0)
     die(ERR_INT("mkl_set_interface_layer() failed."));
 #  endif
-  mkl_set_num_threads_local(thread_num);
+  mkl_set_num_threads(thread_num);
 #elif defined(USE_OPENBLAS)
   openblas_set_num_threads(1);
 #endif

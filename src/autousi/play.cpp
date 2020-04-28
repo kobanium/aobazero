@@ -64,10 +64,7 @@ class Device {
 		     thread_num) {
       lock_guard<mutex> lock(m_seq);
       if (seq_s.empty()) seq_s.emplace_back(); }
-    void nnreset(const FName &fname) noexcept { _nnet.nnreset(fname); }
-    void flush_on() noexcept { _nnet.flush_on(); }
-    void flush_off() noexcept { _nnet.flush_off(); }
-  };
+    void nnreset(const FName &fname) noexcept { _nnet.nnreset(fname); } };
   unique_ptr<DataNNService> _data_nnservice;
   int _nnet_id, _device_id;
   uint _size_parallel;
@@ -153,12 +150,7 @@ public:
   int get_nnet_id() const noexcept { return _nnet_id; }
   char get_id_option_character() const noexcept {
     return _type == nnservice ? 'e' : 'u'; }
-  uint get_size_parallel() const noexcept { return _size_parallel; }
-  void flush_on() const noexcept {
-    if (_type == nnservice) _data_nnservice->flush_on(); }
-  void flush_off() const noexcept {
-    if (_type == nnservice) _data_nnservice->flush_off(); }
-};
+  uint get_size_parallel() const noexcept { return _size_parallel; } };
 constexpr Device::Type Device::aobaz;
 constexpr Device::Type Device::nnservice;
 constexpr Device::Type Device::bad;
@@ -453,7 +445,6 @@ void PlayManager::engine_start(const FNameID &wfname, uint64_t crc64)
   _moves_eid0.swap(e);
 
   for (Device &d : _devices) d.nnreset(wfname);
-  for (Device &d : _devices) d.flush_off();
 
   int eid = 0;
   for (Device &d : _devices) {
@@ -467,7 +458,7 @@ void PlayManager::engine_start(const FNameID &wfname, uint64_t crc64)
 					  _logname)); } }
 
 void PlayManager::engine_terminate() noexcept {
-  for (const Device &d : _devices) d.flush_on();
+
   for (auto &e : _engines) e->engine_out("quit");
 
   while (!_engines.empty()) {
@@ -488,9 +479,7 @@ void PlayManager::engine_terminate() noexcept {
       if (flag_err && flag_in) {
 	(*it)->close();
 	it = _engines.erase(it); }
-      else ++it; } }
-
-  for (const Device &d : _devices) d.flush_off(); }
+      else ++it; } } }
 
 
 deque<string> PlayManager::manage_play(bool has_conn) noexcept {

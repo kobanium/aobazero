@@ -211,7 +211,6 @@ int main(int argc, char **argv) {
       if (! flag_f) turn0 = turn0.to_opp(); } }
 
   if (flag_signal) { cout << "cought signal " << flag_signal << endl; }
-  for (auto &nnet : nnets) nnet.flush_on();
   for (auto &ptr : games) {
     close_flush(ptr->engine0);
     close_flush(ptr->engine1); }

@@ -36,21 +36,24 @@ class NNetService {
   OSI::MMap _mmap_service;
   OSI::MMap _mmap_ipc[NNAux::maxnum_nipc];
   std::unique_ptr<class NNet> _pnnet;
+  std::thread _th_worker_srv;
   std::thread _th_worker_push;
   std::thread _th_worker_wait;
-  std::condition_variable _cv_flush;
   std::condition_variable _cv_nnreset;
-  std::condition_variable _cv_entries;
-  std::mutex _m_flush;
+  std::condition_variable _cv_entries_push;
+  std::condition_variable _cv_entries_wait;
   std::mutex _m_nnreset;
   std::mutex _m_entries;
-  std::deque<std::unique_ptr<class Entry>> _entries;
-  bool _flag_cv_flush, _flag_cv_nnreset, _flag_quit_worker_wait;
+  std::deque<std::unique_ptr<class Entry>> _entries_pool;
+  std::deque<std::unique_ptr<class Entry>> _entries_push;
+  std::deque<std::unique_ptr<class Entry>> _entries_wait;
+  bool _flag_cv_nnreset, _flag_quit;
   uint _nnet_id, _nipc, _size_batch, _device_id, _use_half, _thread_num;
   FName _fname;
   NNet::Impl _impl;
-  void worker_push() noexcept;
+  void worker_srv() noexcept;
   void worker_wait() noexcept;
+  void worker_push() noexcept;
 
 public:
   NNetService(NNet::Impl impl, uint nnet_id, uint nipc, uint size_batch,
@@ -60,8 +63,6 @@ public:
 	      const FName &fname) noexcept;
   ~NNetService() noexcept;
   void nnreset(const FName &fname) noexcept;
-  void flush_on() noexcept;
-  void flush_off() noexcept;
 };
 
 class NNetIPC {

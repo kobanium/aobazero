@@ -43,7 +43,22 @@ class Entry {
   unique_ptr<float []> _values;
   unique_ptr<uint []> _ids;
   uint _ubatch, _size_batch, _wait_id;
+
 public:
+  /*
+  Entry & operator=(Entry && e) noexcept {
+    if (this != &e) {
+      _input        = move(e._input);
+      _sizes_nnmove = move(e._sizes_nnmove);
+      _nnmoves      = move(e._nnmoves);
+      _probs        = move(e._probs);
+      _values       = move(e._values);
+      _ids          = move(e._ids);
+      _ubatch       = e._ubatch;
+      _size_batch   = e._size_batch;
+      _wait_id      = e._wait_id; }
+    return *this; }
+    Entry(Entry && e) noexcept { *this = move(e); } */
   explicit Entry(uint size_batch) noexcept :
   _input(new float [size_batch * NNAux::size_input]),
     _sizes_nnmove(new uint [size_batch]),
@@ -82,8 +97,28 @@ public:
     _ubatch = 0; }
 
   bool is_full() const noexcept { return _ubatch == _size_batch; }
-  bool is_empty() const noexcept { return _ubatch == 0; }
-};
+  bool is_empty() const noexcept { return _ubatch == 0; } };
+
+void NNetService::worker_push() noexcept {
+  while (true) {
+    unique_lock<mutex> lock(_m_entries);
+    _cv_entries_push.wait(lock, [&]{
+	if (_flag_quit) return true;
+	if (_entries_push.empty()) return false;
+	//if (1U < _entries_wait.size()) return false;
+
+	if (_entries_wait.size() < 1U) return true;
+	if (_entries_push.front()->is_full()) return true;
+	return false; });
+
+    if (_flag_quit) return;
+    unique_ptr<Entry> p = move(_entries_push.front());
+    p->push_ff(*_pnnet);
+    _entries_push.pop_front();
+    _entries_wait.push_back(move(p));
+    lock.unlock();
+    _cv_entries_wait.notify_one(); } }
+
 
 void NNetService::worker_wait() noexcept {
   SharedIPC *pipc[NNAux::maxnum_nipc];
@@ -92,16 +127,21 @@ void NNetService::worker_wait() noexcept {
 
   while (true) {
     unique_lock<mutex> lock(_m_entries);
-    _cv_entries.wait(lock, [&]{ return (! _entries.empty()
-					|| _flag_quit_worker_wait); });
-    if (_flag_quit_worker_wait) return;
-    unique_ptr<Entry> pe(move(_entries.front()));
-    _entries.pop_front();
+    _cv_entries_wait.wait(lock, [&]{
+	return (0 < _entries_wait.size() || _flag_quit); });
+    if (_flag_quit) return;
     lock.unlock();
+    _entries_wait.front()->wait_ff(*_pnnet, _sem_ipc, pipc);
 
-    pe->wait_ff(*_pnnet, _sem_ipc, pipc); } }
+    lock.lock();
+    unique_ptr<Entry> p = move(_entries_wait.front());
+    _entries_wait.pop_front();
+    _entries_pool.push_back(move(p));
+    lock.unlock();
+    _cv_entries_push.notify_one();
+  } }
 
-void NNetService::worker_push() noexcept {
+void NNetService::worker_srv() noexcept {
   SharedService *pservice = static_cast<SharedService *>(_mmap_service());
   SharedIPC *pipc[NNAux::maxnum_nipc];
   for (uint u = 0; u < _nipc; ++u)
@@ -109,8 +149,6 @@ void NNetService::worker_push() noexcept {
 
   uint id;
   SrvType type;
-  bool do_flush = false;
-  unique_ptr<Entry> ptr_e(new Entry(_size_batch));
   while (true) {
     assert(_sem_service.ok() && _sem_service_lock.ok());
     _sem_service.dec_wait();
@@ -140,14 +178,20 @@ void NNetService::worker_push() noexcept {
 
     if (type == SrvType::NNReset) {
       FName fn;
+      lock_guard<mutex> lock_push(_m_entries);
+      if (!_entries_push.empty()) die(ERR_INT("Internal Error"));
+      if (!_entries_wait.empty()) die(ERR_INT("Internal Error"));
+	
+      _sem_service_lock.dec_wait();
+      pservice->id_ipc_next = 0;
+      uint njob = pservice->njob;
+      _sem_service_lock.inc();
+      if (0 < njob) die(ERR_INT("Internal Error"));
+
       {
 	lock_guard<mutex> lock(_m_nnreset);
-	_sem_service_lock.dec_wait();
-	pservice->id_ipc_next = 0;
-	_sem_service_lock.inc();
 	_flag_cv_nnreset = true;
-	fn = _fname;
-      }
+	fn = _fname; }
       _cv_nnreset.notify_one();
       
       uint version;
@@ -182,44 +226,24 @@ void NNetService::worker_push() noexcept {
       
     if (type == SrvType::FeedForward) {
       assert(pipc[id]);
-      ptr_e->add(pipc[id]->input, pipc[id]->size_nnmove, pipc[id]->nnmoves,
-		 id);
-      if (! do_flush && ! ptr_e->is_full()) continue;
-
-      ptr_e->push_ff(*_pnnet);
+      bool flag_do_notify = false;
       {
 	lock_guard<mutex> lock(_m_entries);
-	_entries.push_back(move(ptr_e));
-      }
-      _cv_entries.notify_one();
-      ptr_e.reset(new Entry(_size_batch));
-      continue; }
+	if (_entries_push.empty()) flag_do_notify = true;
+	if (_entries_push.empty() || _entries_push.back()->is_full()) {
+	  if (_entries_pool.empty())
+	    _entries_pool.emplace_back(new Entry(_size_batch));
 
-    if (type == SrvType::FlushON) {
-      {
-	lock_guard<mutex> lock(_m_flush);
-	_flag_cv_flush = true;
-      }
-      _cv_flush.notify_one();
-      do_flush = true;
+	  unique_ptr<Entry> p = move(_entries_pool.back());
+	  _entries_pool.pop_back();
+	  _entries_push.push_back(move(p)); }
 
-      if (ptr_e->is_empty()) continue;
-      ptr_e->push_ff(*_pnnet);
-      {
-	lock_guard<mutex> lock(_m_entries);
-	_entries.push_back(move(ptr_e));
-      }
-      _cv_entries.notify_one();
-      ptr_e.reset(new Entry(_size_batch));
-      continue; }
+	_entries_push.back()->add(pipc[id]->input, pipc[id]->size_nnmove,
+				  pipc[id]->nnmoves, id);
+	if (_entries_push.size() == 1 && _entries_push.back()->is_full())
+	  flag_do_notify = true; }
 
-    if (type == SrvType::FlushOFF) {
-      {
-	lock_guard<mutex> lock(_m_flush);
-	_flag_cv_flush = true;
-      }
-      _cv_flush.notify_one();
-      do_flush = false;
+      if (flag_do_notify) _cv_entries_push.notify_one();
       continue; }
 
     die(ERR_INT("INTERNAL ERROR")); } }
@@ -243,47 +267,12 @@ void NNetService::nnreset(const FName &fname) noexcept {
   _flag_cv_nnreset = false;
   lock.unlock(); }
 
-void NNetService::flush_on() noexcept {
-  assert(_mmap_service.ok());
-  auto p = static_cast<SharedService *>(_mmap_service());
-  assert(p && _sem_service.ok() && _sem_service_lock.ok());
-  _sem_service_lock.dec_wait();
-  assert(p->njob <= NNAux::maxnum_nipc);
-  p->jobs[p->njob].id   = NNAux::maxnum_nipc;
-  p->jobs[p->njob].type = SrvType::FlushON;
-  p->njob += 1U;
-  _sem_service_lock.inc();
-  _sem_service.inc();
-
-  unique_lock<mutex> lock(_m_flush);
-  _cv_flush.wait(lock, [&]{ return _flag_cv_flush; });
-  _flag_cv_flush = false;
-  lock.unlock(); }
-
-void NNetService::flush_off() noexcept {
-  assert(_mmap_service.ok());
-  auto p = static_cast<SharedService *>(_mmap_service());
-  assert(p && _sem_service.ok() && _sem_service_lock.ok());
-  _sem_service_lock.dec_wait();
-  assert(p->njob <= NNAux::maxnum_nipc);
-  p->jobs[p->njob].id   = NNAux::maxnum_nipc;
-  p->jobs[p->njob].type = SrvType::FlushOFF;
-  p->njob += 1U;
-  _sem_service_lock.inc();
-  _sem_service.inc();
-
-  unique_lock<mutex> lock(_m_flush);
-  _cv_flush.wait(lock, [&]{ return _flag_cv_flush; });
-  _flag_cv_flush = false;
-  lock.unlock(); }
-
 NNetService::NNetService(NNet::Impl impl, uint nnet_id, uint nipc,
 			 uint size_batch, uint device_id, uint use_half,
 			 uint thread_num) noexcept
-: _impl(impl), _flag_cv_flush(false), _flag_cv_nnreset(false),
-  _flag_quit_worker_wait(false), _nnet_id(nnet_id), _nipc(nipc),
-  _size_batch(size_batch), _device_id(device_id), _use_half(use_half),
-  _thread_num(thread_num) {
+: _impl(impl), _flag_cv_nnreset(false), _flag_quit(false), _nnet_id(nnet_id),
+  _nipc(nipc), _size_batch(size_batch), _device_id(device_id),
+  _use_half(use_half), _thread_num(thread_num) {
   if (NNAux::maxnum_nnet <= nnet_id) die(ERR_INT("too many nnets"));
   if (NNAux::maxnum_nipc < nipc)     die(ERR_INT("too many processes"));
 
@@ -305,6 +294,7 @@ NNetService::NNetService(NNet::Impl impl, uint nnet_id, uint nipc,
     sprintf(fn, "%s.%07u.%03u.%03u", Param::name_mmap_nnet, pid, nnet_id, u);
     _mmap_ipc[u].open(fn, true, sizeof(SharedIPC)); }
 
+  _th_worker_srv  = thread(&NNetService::worker_srv,  this);
   _th_worker_push = thread(&NNetService::worker_push, this);
   _th_worker_wait = thread(&NNetService::worker_wait, this); }
 
@@ -325,13 +315,15 @@ NNetService::~NNetService() noexcept {
   p->njob += 1U;
   _sem_service_lock.inc();
   _sem_service.inc();
-  _th_worker_push.join();
 
   {
     lock_guard<mutex> lock(_m_entries);
-    _flag_quit_worker_wait = true;
-  }
-  _cv_entries.notify_one();
+    _flag_quit = true; }
+  _cv_entries_wait.notify_one();
+  _cv_entries_push.notify_one();
+
+  _th_worker_srv.join();
+  _th_worker_push.join();
   _th_worker_wait.join();
 
   _sem_service_lock.close();
