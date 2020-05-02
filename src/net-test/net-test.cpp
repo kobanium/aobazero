@@ -96,7 +96,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
   char *endptr;
 
   while (! flag_err) {
-    int opt = Opt::get(argc, argv, "b:i:t:u:");
+    int opt = Opt::get(argc, argv, "b:i:t:u:h");
     if (opt < 0) break;
 
     long l;

@@ -15,7 +15,9 @@ namespace OCL {
   class Program_impl;
   class Device_impl;
   class Queue_impl;
+  class Context_impl;
   class Memory_impl;
+  class MemPinned_impl;
   class Kernel_impl;
   class Event_impl;
   
@@ -29,8 +31,7 @@ namespace OCL {
     bool ok() const;
     void wait() const;
     Event_impl &get();
-    const Event_impl &get() const;
-  };
+    const Event_impl &get() const; };
 
   class Memory {
     std::unique_ptr<Memory_impl> _impl;
@@ -43,8 +44,21 @@ namespace OCL {
     Memory_impl &get();
     void clear();
     const Memory_impl &get() const;
-    bool ok() const;
-  };
+    bool ok() const; };
+
+  class MemPinned {
+    std::unique_ptr<MemPinned_impl> _impl;
+  public:
+    explicit MemPinned();
+    ~MemPinned();
+    MemPinned(MemPinned_impl &&m_impl);
+    MemPinned(MemPinned &&m);
+    MemPinned &operator=(MemPinned &&m);
+    MemPinned_impl &get();
+    void clear();
+    const MemPinned_impl &get() const;
+    void *get_pointer() const;
+    bool ok() const; };
 
   class Kernel {
     std::unique_ptr<Kernel_impl> _impl;
@@ -57,13 +71,12 @@ namespace OCL {
     const Kernel_impl &get() const;
     bool ok() const;
     void set_arg(uint index, size_t size, const void *value) const;
-    void set_arg(uint index, const Memory &m) const;
+    template <typename M> void set_arg(uint index, const M &m) const;
     std::string gen_info() const;
     size_t gen_work_group_size() const;
     uint64_t gen_local_mem_size() const;
     size_t gen_pref_wgs_multiple() const;
-    uint64_t gen_private_mem_size() const;
-  };
+    uint64_t gen_private_mem_size() const; };
 
   class Program {
     std::unique_ptr<Program_impl> _impl;
@@ -75,8 +88,7 @@ namespace OCL {
     Program &operator=(Program &&p);
     const Program_impl &get() const;
     bool ok() const;
-    Kernel gen_kernel(const char *name) const;
-  };
+    Kernel gen_kernel(const char *name) const; };
 
   class Queue {
     std::unique_ptr<Queue_impl> _impl;
@@ -86,28 +98,33 @@ namespace OCL {
     Queue(Queue_impl &&q_impl);
     Queue(Queue &&q);
     Queue &operator=(Queue &&q);
-    void reset();
     bool ok() const;
     void finish() const;
-    Program gen_program(const char *code) const;
-    Memory gen_mem_map_hw_dr(size_t size) const;
-    Memory gen_mem_map_hr_dw(size_t size) const;
-    Memory gen_mem_hw_dr(size_t size) const;
-    Memory gen_mem_hr_dw(size_t size) const;
-    Memory gen_mem_drw(size_t size) const;
-    void *push_map_w(const Memory &m, size_t size) const;
-    void *push_map_r(const Memory &m, size_t size) const;
-    void *push_map_w(const Memory &m, size_t size, Event &e) const;
-    void *push_map_r(const Memory &m, size_t size, Event &e) const;
-    void push_unmap(const Memory &m, void *ptr) const;
-    void push_unmap(const Memory &m, void *ptr, Event &e) const;
+    void push_wait(const Queue &queue) const;
+    void push_write(const MemPinned &m, size_t size) const;
     void push_write(const Memory &m, size_t size, const void *p) const;
-    void push_read(const Memory &m, size_t size, void *p) const;
+    void push_read(const MemPinned &m, size_t size, Event &e) const;
     void push_read(const Memory &m, size_t size, void *p, Event &e) const;
     void push_kernel(const Kernel &k, size_t size_global) const;
     void push_ndrange_kernel(const Kernel &k, uint dim, const size_t *size_g,
-			     const size_t *size_l) const;
-  };
+			     const size_t *size_l) const; };
+
+  class Context {
+    std::unique_ptr<Context_impl> _impl;
+  public:
+    explicit Context();
+    ~Context();
+    Context(Context_impl &&q_impl);
+    Context(Context &&q);
+    Context &operator=(Context &&q);
+    bool ok() const;
+    Queue gen_queue() const;
+    Program gen_program(const char *code) const;
+    MemPinned gen_mem_pin_hw_dr(size_t size) const;
+    MemPinned gen_mem_pin_hr_dw(size_t size) const;
+    Memory gen_mem_hw_dr(size_t size) const;
+    Memory gen_mem_hr_dw(size_t size) const;
+    Memory gen_mem_drw(size_t size) const; };
 
   class Device {
     std::unique_ptr<Device_impl> _impl;
@@ -117,7 +134,7 @@ namespace OCL {
     Device(Device_impl &&d_impl);
     Device(Device &&d);
     Device &operator=(Device &&d);
-    Queue gen_queue() const;
+    Context gen_context() const;
     bool ok() const;
     std::string gen_info() const;
     std::string gen_type() const;
@@ -131,8 +148,7 @@ namespace OCL {
     uint64_t gen_global_mem_size() const;
     uint64_t gen_max_mem_alloc_size() const;
     uint64_t gen_local_mem_size() const;
-    size_t gen_kernel_preferred_multiple() const;
-  };
+    size_t gen_kernel_preferred_multiple() const; };
     
   class Platform {
     std::unique_ptr<Platform_impl> _impl;
@@ -146,8 +162,8 @@ namespace OCL {
     std::string gen_profile() const;
     std::string gen_version() const;
     std::string gen_name() const;
-    std::string gen_extensions() const;
-  };
+    std::string gen_extensions() const; };
+
   std::vector<Platform> gen_platforms();
 }
 #endif

@@ -31,13 +31,12 @@ using namespace ErrAux;
 constexpr char options[] = "-Werror -cl-std=CL1.2";
 //constexpr char options[] = "-Werror -cl-std=CL1.2 -cl-fast-relaxed-math";
 
-// cl_event
 class OCL::Event_impl {
   cl_event _event;
 
 public:
   explicit Event_impl() : _event(nullptr) {}
-  ~Event_impl() { if (_event) release(); }
+  ~Event_impl() { if (_event) clReleaseEvent(_event); }
   Event_impl(Event_impl &&e_impl) : _event(e_impl._event) {
     e_impl._event = nullptr; }
   Event_impl &operator=(Event_impl &&e_impl) {
@@ -70,7 +69,7 @@ void OCL::Event::wait() const { return _impl->wait(); }
 bool OCL::Event::ok() const { return _impl && _impl->ok(); }
 const Event_impl &OCL::Event::get() const { return *_impl; }
 
-// cl_mem
+
 class OCL::Memory_impl {
   cl_mem _mem;
 public:
@@ -85,8 +84,7 @@ public:
   ~Memory_impl() { if (_mem) clReleaseMemObject(_mem); }
   const cl_mem *get_p() const { return &_mem; }
   cl_mem get() const { return _mem; }
-  bool ok() const { return _mem != nullptr; }
-};
+  bool ok() const { return _mem; } };
 
 OCL::Memory::Memory() {}
 OCL::Memory::~Memory() {}
@@ -99,7 +97,58 @@ void OCL::Memory::clear() { _impl.reset(nullptr); }
 bool OCL::Memory::ok() const { return _impl && _impl->ok(); }
 const Memory_impl &OCL::Memory::get() const { return *_impl; }
 
-// cl_kernel
+class OCL::MemPinned_impl {
+  cl_mem _mem_device, _mem_pinned;
+  void *_pointer;
+public:
+  explicit MemPinned_impl(const cl_context &context,
+			  const cl_command_queue &queue,
+			  const cl_mem_flags &mem_flags,
+			  const cl_map_flags &map_flags, size_t size) {
+    assert(context);
+    cl_int ret;
+    _mem_pinned = clCreateBuffer(context, mem_flags | CL_MEM_ALLOC_HOST_PTR,
+				 size, nullptr, &ret);
+    if (ret != CL_SUCCESS)
+      throw ERR_INT("clCreateBuffer() failed. Error Code: %d", ret);
+
+    _mem_device = clCreateBuffer(context, mem_flags, size, nullptr, &ret);
+    if (ret != CL_SUCCESS) {
+      clReleaseMemObject(_mem_pinned);
+      throw ERR_INT("clCreateBuffer() failed. Error Code: %d", ret); }
+
+    _pointer = clEnqueueMapBuffer(queue, _mem_pinned, CL_TRUE, map_flags,
+				  0, size, 0, NULL, NULL, &ret);
+    if (ret != CL_SUCCESS) {
+      clReleaseMemObject(_mem_pinned);
+      clReleaseMemObject(_mem_device);
+      throw ERR_INT("clEnqueueMapBuffer() failed. Error Code: %d", ret); } }
+  MemPinned_impl(MemPinned_impl &&m)
+    : _mem_device(m._mem_device), _mem_pinned(m._mem_pinned),
+      _pointer(m._pointer) {
+    m._mem_device = m._mem_pinned = nullptr;
+    m._pointer = nullptr; }
+  ~MemPinned_impl() {
+    if (_mem_device) clReleaseMemObject(_mem_device);
+    if (_mem_pinned) clReleaseMemObject(_mem_pinned); }
+  const cl_mem *get_p() const { return &_mem_device; }
+  cl_mem get() const { return _mem_device; }
+  bool ok() const { return (_mem_device && _mem_pinned); }
+  void *get_pointer() const { return _pointer; } };
+
+OCL::MemPinned::MemPinned() {}
+OCL::MemPinned::~MemPinned() {}
+OCL::MemPinned::MemPinned(MemPinned_impl &&m_impl)
+  : _impl(new MemPinned_impl(move(m_impl))) {}
+OCL::MemPinned::MemPinned(MemPinned &&m) : _impl(move(m._impl)) {}
+MemPinned &OCL::MemPinned::operator=(MemPinned &&m) {
+  assert(m.ok()); _impl = move(m._impl); return *this; }
+void OCL::MemPinned::clear() { _impl.reset(nullptr); }
+bool OCL::MemPinned::ok() const { return _impl && _impl->ok(); }
+const MemPinned_impl &OCL::MemPinned::get() const { return *_impl; }
+void *OCL::MemPinned::get_pointer() const {
+  return _impl->get_pointer(); }
+
 class OCL::Kernel_impl {
   cl_kernel _kernel;
 public:
@@ -116,7 +165,8 @@ public:
     cl_int ret = clSetKernelArg(_kernel, index, size, value);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clSetKernelArg() failed. Error Code: %d", ret); }
-  void set_arg(uint index, const Memory &m) const {
+  template <typename M>
+  void set_arg(uint index, const M &m) const {
     set_arg(index, sizeof(cl_mem), m.get().get_p()); }
   bool ok() const { return _kernel; }
   template <typename T>
@@ -125,8 +175,7 @@ public:
     cl_int ret = clGetKernelWorkGroupInfo(_kernel, nullptr, name, sizeof(T),
 					  &value, nullptr);
     if (ret != CL_SUCCESS) throw ERR_INT("clGetKernelWorkGroupInfo() failed.");
-    return value; }
-};
+    return value; } };
 
 OCL::Kernel::Kernel() {}
 OCL::Kernel::~Kernel() {}
@@ -139,8 +188,11 @@ Kernel &OCL::Kernel::operator=(Kernel &&k) {
 bool OCL::Kernel::ok() const { return _impl && _impl->ok(); }
 void OCL::Kernel::set_arg(uint index, size_t size, const void *value) const {
   return _impl->set_arg(index, size, value); }
-void OCL::Kernel::set_arg(uint index, const Memory &m) const {
+template <typename M> void OCL::Kernel::set_arg(uint index, const M &m) const {
   return _impl->set_arg(index, m); }
+template void OCL::Kernel::set_arg<>(uint index, const Memory &m) const;
+template void OCL::Kernel::set_arg<>(uint index, const MemPinned &m) const;
+
 string OCL::Kernel::gen_info() const {
   stringstream ss;
   ss << "    Max Work-Group Size: " << gen_work_group_size()   << "\n"
@@ -158,8 +210,6 @@ size_t OCL::Kernel::gen_pref_wgs_multiple() const {
 cl_ulong OCL::Kernel::gen_private_mem_size() const {
   return _impl->gen_info<cl_ulong>(CL_KERNEL_PRIVATE_MEM_SIZE); }
 
-// cl_kernel
-#include <iostream>
 class OCL::Program_impl {
   cl_program _pg;
 public:
@@ -194,8 +244,7 @@ public:
   ~Program_impl() { if (_pg) clReleaseProgram(_pg); }
   bool ok() const { return _pg; }
   Kernel_impl gen_kernel(const char *name) const {
-    assert(name); return Kernel_impl(_pg, name); }
-};
+    assert(name); return Kernel_impl(_pg, name); } };
 
 OCL::Program::Program() {}
 OCL::Program::~Program() {}
@@ -210,72 +259,53 @@ Kernel OCL::Program::gen_kernel(const char *name) const {
   assert(name); return Kernel(_impl->gen_kernel(name)); }
 
 class OCL::Queue_impl {
-  cl_device_id _id;
-  cl_context _context;
   cl_command_queue _queue;
 public:
-  Queue_impl(const cl_device_id &id) : _id(id), _context(nullptr),
-				       _queue(nullptr) {
-    assert(id);
+  Queue_impl(const cl_device_id &id, const cl_context &context)
+    : _queue(nullptr) {
+    assert(id && context);
     cl_int ret;
-    _context = clCreateContext(nullptr, 1, &_id, nullptr, nullptr, &ret);
+    _queue = clCreateCommandQueue(context, id, 0, &ret);
+    //_queue = clCreateCommandQueue(context, id,
+    //CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE,
+    //&ret);
     if (ret != CL_SUCCESS)
-      throw ERR_INT("clCreateContext() failed. Error Code: %d", ret);
-
-    _queue = clCreateCommandQueue(_context, _id,
-				  //CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE,
-				  0, &ret);
-    if (ret != CL_SUCCESS) {
-      if (_context) clReleaseContext(_context);
-      throw ERR_INT("clReleaseContext() failed. Error Code: %d", ret); } }
+      throw ERR_INT("clReleaseContext() failed. Error Code: %d", ret); }
   ~Queue_impl() {
-    if (_queue) clReleaseCommandQueue(_queue);
-    if (_context) clReleaseContext(_context); }
-  Queue_impl(Queue_impl &&q_impl) : _id(q_impl._id), _context(q_impl._context),
-				    _queue(q_impl._queue) {
-    q_impl._id      = nullptr;
-    q_impl._queue   = nullptr;
-    q_impl._context = nullptr; }
-  Program_impl gen_program(const char *code) const {
-    assert(code); return Program_impl(code, _id, _context); }
-  Memory_impl gen_memory(const cl_mem_flags &flags, size_t size) const {
-    return Memory_impl(_context, flags, size); }
-  bool ok() const { return (_queue && _context); }
+    if (! _queue) return;
+    clFinish(_queue);
+    clReleaseCommandQueue(_queue); }
+  Queue_impl(Queue_impl &&q_impl) : _queue(q_impl._queue) {
+    q_impl._queue = nullptr; }
+  const cl_command_queue &get() const { return _queue; }
+  bool ok() const { return _queue; }
   void finish() const {
     cl_int ret = clFinish(_queue);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clFinish() failure. Error Code: %d", ret); }
-  void *push_map(const Memory_impl &m_impl, const cl_map_flags &flags,
-		 size_t size) const {
-    assert(m_impl.ok());
-    cl_int ret;
-    void *p = clEnqueueMapBuffer(_queue, m_impl.get(), CL_FALSE, flags,
-				 0, size, 0, nullptr, nullptr, &ret);
+  void push_wait(const OCL::Queue_impl &q) const {
+    cl_event e;
+    cl_int ret = clEnqueueMarkerWithWaitList(q._queue, 0, nullptr, &e);
     if (ret != CL_SUCCESS)
-      throw ERR_INT("clEnqueueMapBuffer() failure. Error Code: %d", ret);
-    return p; }
-  void *push_map(const Memory_impl &m_impl, const cl_map_flags &flags,
-		 size_t size, Event_impl &e_impl) const {
-    assert(m_impl.ok());
-    cl_int ret;
-    void *p = clEnqueueMapBuffer(_queue, m_impl.get(), CL_FALSE, flags,
-				 0, size, 0, nullptr, e_impl.get(), &ret);
+      throw ERR_INT("clEnqueueMarkerWithWaitList() failed. Error Code: %d",
+		    ret);
+
+    ret = clFlush(q._queue);
     if (ret != CL_SUCCESS)
-      throw ERR_INT("clEnqueueMapBuffer() failure. Error Code: %d", ret);
-    return p; }
-  void push_unmap(const Memory_impl &m_impl, void *ptr) const {
-    assert(m_impl.ok() && ptr);
-    cl_int ret = clEnqueueUnmapMemObject(_queue, m_impl.get(), ptr, 0, nullptr,
-					 nullptr);
+      throw ERR_INT("clFlush() failed. Error Code: %d", ret);
+
+    ret = clEnqueueMarkerWithWaitList(_queue, 1U, &e, nullptr);
     if (ret != CL_SUCCESS)
-      throw ERR_INT("clEnqueueUnmapObject() failure. Error Code: %d", ret); }
-  void push_unmap(const Memory_impl &m_impl, void *ptr, Event_impl &e_impl)
+      throw ERR_INT("clEnqueueMarkerWithWaitList() failed. Error Code: %d",
+		    ret); }
+  void push_write(const MemPinned_impl &m_impl, size_t size)
     const {
-    assert(m_impl.ok() && ptr);
-    cl_int ret = clEnqueueUnmapMemObject(_queue, m_impl.get(), ptr, 0, nullptr,
-					 e_impl.get());
+    assert(m_impl.ok());
+    cl_int ret = clEnqueueWriteBuffer(_queue, m_impl.get(), CL_FALSE, 0,
+				      size, m_impl.get_pointer(), 0, nullptr,
+				      nullptr);
     if (ret != CL_SUCCESS)
-      throw ERR_INT("clEnqueueUnmapObject() failure. Error Code: %d", ret); }
+      throw ERR_INT("clEnqueueWriteBuffer() failed. Error Code: %d", ret); }
   void push_write(const Memory_impl &m_impl, size_t size, const void *p)
     const {
     assert(m_impl.ok() && p);
@@ -283,14 +313,14 @@ public:
 				      size, p, 0, nullptr, nullptr);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clEnqueueWriteBuffer() failed. Error Code: %d", ret); }
-
-  void push_read(const Memory_impl &m_impl, size_t size, void *p) const {
-    assert(m_impl.ok() && p);
+  void push_read(const MemPinned_impl &m_impl, size_t size, Event_impl &e_impl)
+    const {
+    assert(m_impl.ok());
     cl_int ret = clEnqueueReadBuffer(_queue, m_impl.get(), CL_FALSE, 0, size,
-				     p, 0, nullptr, nullptr);
+				     m_impl.get_pointer(), 0, nullptr,
+				     e_impl.get());
     if (ret != CL_SUCCESS)
       throw ERR_INT("clEnqueueReadBuffer() failed. Error Code: %d", ret); }
-
   void push_read(const Memory_impl &m_impl, size_t size, void *p,
 		 Event_impl &e_impl) const {
     assert(m_impl.ok() && p);
@@ -327,8 +357,7 @@ public:
     cl_int ret = clEnqueueNDRangeKernel(_queue, k_impl.get(), dim, nullptr,
 					size_g, size_l, 0, nullptr, nullptr);
     if (ret != CL_SUCCESS)
-      throw ERR_INT("clEnqueNDRangeKernel() failed. Error Code: %d", ret); }
-};
+      throw ERR_INT("clEnqueNDRangeKernel() failed. Error Code: %d", ret); } };
 
 OCL::Queue::Queue() {};
 OCL::Queue::~Queue() {};
@@ -336,47 +365,17 @@ OCL::Queue::Queue(Queue_impl &&q_impl) : _impl(new Queue_impl(move(q_impl))) {}
 OCL::Queue::Queue(Queue &&q) : _impl(move(q._impl)) {}
 OCL::Queue &Queue::operator=(Queue &&q) {
   assert(q.ok()); _impl = move(q._impl); return *this; }
-void OCL::Queue::reset() { _impl.reset(nullptr); }
 bool OCL::Queue::ok() const { return _impl && _impl->ok(); }
-
-Program OCL::Queue::gen_program(const char *code) const {
-  return Program(_impl->gen_program(code)); }
-Memory OCL::Queue::gen_mem_map_hw_dr(size_t size) const {
-  return Memory(_impl->gen_memory((CL_MEM_HOST_WRITE_ONLY | CL_MEM_READ_ONLY
-				   | CL_MEM_ALLOC_HOST_PTR), size)); }
-Memory OCL::Queue::gen_mem_map_hr_dw(size_t size) const {
-  return Memory(_impl->gen_memory((CL_MEM_HOST_READ_ONLY | CL_MEM_WRITE_ONLY
-				   | CL_MEM_ALLOC_HOST_PTR), size)); }
-Memory OCL::Queue::gen_mem_hw_dr(size_t size) const {
-  return Memory(_impl->gen_memory(CL_MEM_HOST_WRITE_ONLY | CL_MEM_READ_ONLY,
-				  size)); }
-Memory OCL::Queue::gen_mem_hr_dw(size_t size) const {
-  return Memory(_impl->gen_memory(CL_MEM_HOST_READ_ONLY | CL_MEM_WRITE_ONLY,
-				  size)); }
-Memory OCL::Queue::gen_mem_drw(size_t size) const {
-  return Memory(_impl->gen_memory(CL_MEM_HOST_NO_ACCESS | CL_MEM_READ_WRITE,
-				  size)); }
 void OCL::Queue::finish() const { _impl->finish(); }
-void *OCL::Queue::push_map_w(const Memory &m, size_t size) const {
-  assert(m.ok());
-  return _impl->push_map(m.get(), CL_MAP_WRITE_INVALIDATE_REGION, size); }
-void *OCL::Queue::push_map_r(const Memory &m, size_t size) const {
-  assert(m.ok()); return _impl->push_map(m.get(), CL_MAP_READ, size); }
-void *OCL::Queue::push_map_w(const Memory &m, size_t size, Event &e) const {
-  assert(m.ok());
-  return _impl->push_map(m.get(), CL_MAP_WRITE_INVALIDATE_REGION, size,
-			 e.get()); }
-void *OCL::Queue::push_map_r(const Memory &m, size_t size, Event &e) const {
-  assert(m.ok());
-  return _impl->push_map(m.get(), CL_MAP_READ, size, e.get()); }
-void OCL::Queue::push_unmap(const Memory &m, void *ptr) const {
-  assert(m.ok() && ptr); _impl->push_unmap(m.get(), ptr); }
-void OCL::Queue::push_unmap(const Memory &m, void *ptr, Event &e) const {
-  assert(m.ok() && ptr); _impl->push_unmap(m.get(), ptr, e.get()); }
+void OCL::Queue::push_wait(const Queue &queue) const {
+  assert(queue.ok()); _impl->push_wait(*queue._impl); }
+void OCL::Queue::push_write(const MemPinned &m, size_t size)
+  const { assert(m.ok()); _impl->push_write(m.get(), size); }
 void OCL::Queue::push_write(const Memory &m, size_t size, const void *p)
   const { assert(m.ok() && p); _impl->push_write(m.get(), size, p); }
-void OCL::Queue::push_read(const Memory &m, size_t size, void *p) const {
-  assert(m.ok() && p); _impl->push_read(m.get(), size, p); }
+void OCL::Queue::push_read(const MemPinned &m, size_t size, Event &e)
+  const {
+  assert(m.ok()); _impl->push_read(m.get(), size, e.get()); }
 void OCL::Queue::push_read(const Memory &m, size_t size, void *p, Event &e)
   const {
   assert(m.ok() && p); _impl->push_read(m.get(), size, p, e.get()); }
@@ -388,13 +387,68 @@ void OCL::Queue::push_ndrange_kernel(const Kernel &k, uint dim,
   assert(k.ok() && 0 < dim && dim < 4 && size_g && size_l);
   _impl->push_ndrange_kernel(k.get(), dim, size_g, size_l); }
 
+class OCL::Context_impl {
+  cl_device_id _id;
+  cl_context _context;
+public:
+  Context_impl(const cl_device_id &id) : _id(id), _context(nullptr) {
+    assert(id);
+    cl_int ret;
+    _context = clCreateContext(nullptr, 1, &_id, nullptr, nullptr, &ret);
+    if (ret != CL_SUCCESS)
+      throw ERR_INT("clCreateContext() failed. Error Code: %d", ret); }
+  ~Context_impl() { if (_context) clReleaseContext(_context); }
+  Context_impl(Context_impl &&c_impl) : _id(c_impl._id),
+					_context(c_impl._context) {
+    c_impl._id      = nullptr;
+    c_impl._context = nullptr; }
+  Queue_impl gen_queue() const { return Queue_impl(_id, _context); }
+  Program_impl gen_program(const char *code) const {
+    assert(code); return Program_impl(code, _id, _context); }
+  MemPinned_impl gen_mem_pinned(const cl_mem_flags &mem_flags,
+				const cl_map_flags &map_flags, size_t size)
+    const {
+    Queue_impl q_impl(_id, _context);
+    return MemPinned_impl(_context, q_impl.get(), mem_flags, map_flags, size);
+  }
+  Memory_impl gen_memory(const cl_mem_flags &flags, size_t size) const {
+    return Memory_impl(_context, flags, size); }
+  bool ok() const { return _context; } };
+
+OCL::Context::Context() {};
+OCL::Context::~Context() {};
+OCL::Context::Context(Context_impl &&c_impl)
+  : _impl(new Context_impl(move(c_impl))) {}
+OCL::Context::Context(Context &&c) : _impl(move(c._impl)) {}
+OCL::Context &Context::operator=(Context &&c) {
+  assert(c.ok()); _impl = move(c._impl); return *this; }
+bool OCL::Context::ok() const { return _impl && _impl->ok(); }
+Queue OCL::Context::gen_queue() const { return Queue(_impl->gen_queue()); }
+Program OCL::Context::gen_program(const char *code) const {
+  return Program(_impl->gen_program(code)); }
+MemPinned OCL::Context::gen_mem_pin_hw_dr(size_t size) const {
+  return MemPinned(_impl->gen_mem_pinned(CL_MEM_READ_ONLY, CL_MAP_WRITE,
+					 size)); }
+MemPinned OCL::Context::gen_mem_pin_hr_dw(size_t size) const {
+  return MemPinned(_impl->gen_mem_pinned(CL_MEM_WRITE_ONLY, CL_MAP_READ,
+					 size)); }
+Memory OCL::Context::gen_mem_hw_dr(size_t size) const {
+  return Memory(_impl->gen_memory(CL_MEM_HOST_WRITE_ONLY | CL_MEM_READ_ONLY,
+				  size)); }
+Memory OCL::Context::gen_mem_hr_dw(size_t size) const {
+  return Memory(_impl->gen_memory(CL_MEM_HOST_READ_ONLY | CL_MEM_WRITE_ONLY,
+				  size)); }
+Memory OCL::Context::gen_mem_drw(size_t size) const {
+  return Memory(_impl->gen_memory(CL_MEM_HOST_NO_ACCESS | CL_MEM_READ_WRITE,
+				  size)); }
+
 class OCL::Device_impl {
   cl_device_id _id;
 public:
   explicit Device_impl(const cl_device_id &id) : _id(id) { assert(id); }
   ~Device_impl() {}
   Device_impl(Device_impl &&d_impl) : _id(d_impl._id) { assert(d_impl.ok()); }
-  Queue gen_queue() const { return Queue_impl(_id); }
+  Context_impl gen_context() const { return Context_impl(_id); }
   bool ok() const { return _id; }
   string gen_info_string(const cl_device_info &name) {
     size_t size;
@@ -411,8 +465,7 @@ public:
     cl_int ret = clGetDeviceInfo(_id, name, sizeof(T), &value, nullptr);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clGetDeviceInfo() failed. Error Code: %d", ret);
-    return value; }
-};
+    return value; } };
 
 class OCL::Platform_impl {
   cl_platform_id _id;
@@ -451,8 +504,7 @@ public:
     if (ret != CL_SUCCESS)
       throw ERR_INT("clGetPlatformInfo() failed. Error Code: %d", ret);
     
-    return string(value.get()); }
-};
+    return string(value.get()); } };
 
 OCL::Platform::Platform() {}
 OCL::Platform::~Platform() {}
@@ -500,7 +552,8 @@ OCL::Device::Device(Device_impl &&d_impl)
   : _impl(new Device_impl(move(d_impl))) {}
 Device &OCL::Device::operator=(Device &&d) {
   assert(d.ok()); _impl = move(d._impl); return *this; }
-Queue OCL::Device::gen_queue() const { return Queue(_impl->gen_queue()); }
+Context OCL::Device::gen_context() const {
+  return Context(_impl->gen_context()); }
 bool OCL::Device::ok() const { return _impl && _impl->ok(); }
 string OCL::Device::gen_info() const {
   stringstream ss;

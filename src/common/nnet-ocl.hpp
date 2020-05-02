@@ -19,49 +19,23 @@
 class FName;
 namespace NNAux {
   using uint = unsigned int;
-  constexpr uint nslot = 8U;
+  constexpr uint nslot = 2U;
 }
-
-class ManageSend {
-  using uchar = unsigned char;
-  using uint  = unsigned int;
-  double _time;
-  OCL::Memory _mem_work;
-  OCL::Event _event;
-
-public:
-  void start(const OCL::Queue &queue, uint maxsize_batch) noexcept;
-  void push(const OCL::Queue &queue, const void *p, size_t size)
-    const noexcept;
-  const OCL::Memory &get_work() const noexcept { return _mem_work; }
-};
 
 class ManageDecode {
   using uint = unsigned int;
   size_t _one_size_g[3],  _one_size_l[3];
   size_t _zero_size_g[3], _zero_size_l[3];
   size_t _fill_size_g[3], _fill_size_l[3];
-  OCL::Kernel _ker_zero_clear, _ker_plane_fill, _ker_set_one;
+  OCL::Kernel _ker_zero_clear[NNAux::nslot];
+  OCL::Kernel _ker_plane_fill[NNAux::nslot], _ker_set_one[NNAux::nslot];
   uint _nbatch, _nm;
 
 public:
-  void start(const OCL::Queue &queue, const OCL::Memory &mem_in,
-	     const OCL::Memory &mem_out, uint _index_block,
+  void start(const OCL::Context &context, OCL::MemPinned mem_in[NNAux::nslot],
+	     const OCL::Memory mem_out[NNAux::nslot], uint _index_block,
 	     uint maxsize_batch) noexcept;
-  void push(const OCL::Queue &queue, uint n_one) noexcept;
-};
-
-class ManageRecv {
-  using uint = unsigned int;
-  OCL::Memory _mem;
-  OCL::Event _event[NNAux::nslot];
-
-public:
-  void start(const OCL::Queue &queue, size_t size_max, uint nbatch) noexcept;
-  void push(const OCL::Queue &queue, void *p, size_t size,
-	    uint uslot) noexcept;
-  void wait(uint uslot) const noexcept;
-  const OCL::Memory &get() const noexcept { return _mem; }
+  void push(const OCL::Queue &queue, uint n_one, uint uslot) noexcept;
 };
 
 struct SgemmParam {
@@ -95,24 +69,23 @@ struct SgemmParam {
 
 class ManageComputeMatM {
   using uint = unsigned int;
-  OCL::Kernel _ker;
+  OCL::Kernel _ker[NNAux::nslot];
   size_t _size_g[3], _size_l[3];
-  uint _nbatch, _nm, _nn, _nk;
+  uint _nm, _nn, _nk;
 public:
-  ManageComputeMatM() noexcept {};
-  void start(const OCL::Queue &queue, uint nbatch, uint nm0, uint nn0,
+  void start(const OCL::Context &context, uint nbatch, uint nm0, uint nn0,
 	     uint nk0, const SgemmParam &param) noexcept;
-  void register_b(const OCL::Memory &mem) const noexcept;
-  void register_c(const OCL::Memory &mem) const noexcept;
-  void push(const OCL::Queue &queue, const OCL::Memory &mem_a) const noexcept;
-  uint get_nm() const noexcept { assert(_ker.ok()); return _nm; }
-  uint get_nn() const noexcept { assert(_ker.ok()); return _nn; }
-  uint get_nk() const noexcept { assert(_ker.ok()); return _nk; }
+  void set(const OCL::Memory &mem_a, const OCL::Memory mem_b[NNAux::nslot],
+	   const OCL::Memory mem_c[NNAux::nslot]) noexcept;
+  void push(const OCL::Queue &queue, uint uslot) const noexcept;
+  uint get_nm() const noexcept { return _nm; }
+  uint get_nn() const noexcept { return _nn; }
+  uint get_nk() const noexcept { return _nk; }
 };
 
 class ManageSgemm {
   using uint = unsigned int;
-  OCL::Memory mem_a, mem_b, mem_c;
+  OCL::Memory _mem_a, _mem_b, _mem_c;
   OCL::Kernel _ker_a, _ker_b, _ker_c, _ker_sgemm;
   double _time;
   size_t size_g[3], size_l[3];
@@ -121,9 +94,9 @@ class ManageSgemm {
   bool _done_load_a, _done_load_b, _do_transa, _do_transb, _do_transc;
 
 public:
-  void start(const OCL::Device &dev, const OCL::Queue &queue, bool transa,
-	     bool transb, bool do_transa, bool do_transb, bool do_transc,
-	     uint nm0, uint nn0, uint nk0, uint offa, uint lda,
+  void start(const OCL::Device &device, const OCL::Context &context,
+	     bool transa, bool transb, bool do_transa, bool do_transb,
+	     bool do_transc, uint nm0, uint nn0, uint nk0, uint offa, uint lda,
 	     uint offb, uint ldb, uint offc, uint ldc) noexcept;
   uint get_nm() const noexcept { return _nm; }
   uint get_nn() const noexcept { return _nn; }
@@ -131,10 +104,7 @@ public:
   void push(const OCL::Queue &queue) const noexcept;
   void register_a(const OCL::Memory &mem) const noexcept;
   void register_b(const OCL::Memory &mem) const noexcept;
-  void register_c(const OCL::Memory &mem) const noexcept;
-  void register_a0(const OCL::Memory &mem) const noexcept;
-  void register_b0(const OCL::Memory &mem) const noexcept;
-  void register_c0(const OCL::Memory &mem) const noexcept;
+  template <typename M> void register_c(const M &mem) const noexcept;
   void push_load_a(const OCL::Queue &queue) noexcept;
   void push_load_b(const OCL::Queue &queue) noexcept;
   std::string gen_info() const noexcept;
@@ -143,51 +113,49 @@ public:
 class ManageComputeMatV {
   using uint = unsigned int;
   size_t _size_g[3], _size_l[3];
-  OCL::Kernel _ker;
-  uint _nm;
+  OCL::Kernel _ker[NNAux::nslot];
 
 public:
-  ManageComputeMatV() noexcept : _nm(0) {}
-  void start(bool store_half, const OCL::Queue &queue,
-	     uint nch, uint nb, uint nn, uint nk,
-	     const OCL::Memory &mem_matV) noexcept;
-  void push(const OCL::Queue &queue, const OCL::Memory &mem_in) const noexcept;
+  void start(bool store_half, const OCL::Context &context, uint nch, uint nb,
+	     uint nn, uint nk, const OCL::Memory mem_in[NNAux::nslot],
+	     const OCL::Memory mem_matV[NNAux::nslot]) noexcept;
+  void push(const OCL::Queue &queue, uint uslot) const noexcept;
 };
 
 class ManageComputeMatA {
   using uint = unsigned int;
   size_t _size_g[3], _size_l[3];
-  OCL::Kernel _ker;
-  uint _nm;
+  OCL::Kernel _ker[NNAux::nslot];
 public:
-  ManageComputeMatA() noexcept : _nm(0) {}
-  void start(bool load_half, const OCL::Queue &queue, bool flag_join, uint nch,
-	     uint nb, uint nm, uint nn, uint nn_out,
-	     const OCL::Memory &mem_matM, const OCL::Memory &mem_bypass,
+  void start(bool load_half, const OCL::Context &context, bool flag_join,
+	     uint nch, uint nb, uint nm, uint nn, uint nn_out,
+	     const OCL::Memory mem_matM[NNAux::nslot],
+	     const OCL::Memory mem_bypass[NNAux::nslot],
+	     const OCL::Memory &mean, const OCL::Memory &sd_inv,
 	     const OCL::Memory &mem_output) noexcept;
-  void push(const OCL::Queue &queue, const OCL::Memory &mean,
-	    const OCL::Memory &sd_inv) const noexcept;
+  void push(const OCL::Queue &queue, uint nslot) const noexcept;
 };
 
 class ManageComputeMatAV {
   using uint = unsigned int;
   size_t _size_g[3], _size_l[3];
-  OCL::Kernel _ker;
+  OCL::Kernel _ker[NNAux::nslot];
 public:
-  void start(bool do_half, bool do_join, bool do_fork, const OCL::Queue &queue,
-	     uint nch, uint nb, uint nm, uint nn, uint nk,
-	     const OCL::Memory &mem_matM, const OCL::Memory &mem_matV,
-	     const OCL::Memory &mem_bypass) noexcept;
-  void push(const OCL::Queue &queue, const OCL::Memory &mean,
-	    const OCL::Memory &sd_inv) const noexcept;
+  void start(bool do_half, bool do_join, bool do_fork,
+	     const OCL::Context &context, uint nch, uint nb, uint nm, uint nn,
+	     uint nk, const OCL::Memory mem_matM[NNAux::nslot],
+	     const OCL::Memory mem_matV[NNAux::nslot],
+	     const OCL::Memory &mean, const OCL::Memory &sd_inv,
+	     const OCL::Memory *mem_bypass) noexcept;
+  void push(const OCL::Queue &queue, uint uslot) const noexcept;
 };
 
 class ManageTransformValue2 {
-  using uint  = unsigned int;
+  using uint = unsigned int;
   size_t _size_g[3], _size_l[3];
   OCL::Kernel _ker;
 public:
-  void start(const OCL::Queue &queue, uint nch, uint nb,
+  void start(const OCL::Context &context, uint nch, uint nb,
 	     const OCL::Memory &mem_in, uint offin, uint nn_out,
 	     const OCL::Memory &mem_out) noexcept;
   void push(const OCL::Queue &queue) const noexcept;
@@ -198,9 +166,9 @@ class ManageResizeBiasReLU {
   size_t _size_g[3], _size_l[3];
   OCL::Kernel _ker;
 public:
-  void start(const OCL::Queue &queue, uint nm, uint nn, uint ldin, uint ldout,
-	     const OCL::Memory &mem_bias, const OCL::Memory &mem_in,
-	     const OCL::Memory &mem_out) noexcept;
+  void start(const OCL::Context &context, uint nm, uint nn, uint ldin,
+	     uint ldout, const OCL::Memory &mem_bias,
+	     const OCL::Memory &mem_in, const OCL::Memory &mem_out) noexcept;
   void push(const OCL::Queue &queue) const noexcept;
 };
 
@@ -209,7 +177,7 @@ class ManageComputeBNReLU {
   size_t _size_g[3], _size_l[3];
   OCL::Kernel _ker;
 public:
-  void start(const OCL::Queue &queue, uint nch, uint nb, uint nn_in,
+  void start(const OCL::Context &context, uint nch, uint nb, uint nn_in,
 	     const OCL::Memory &mean, const OCL::Memory &sd_inv,
 	     const OCL::Memory &mem_in, const OCL::Memory &mem_out) noexcept;
   void push(const OCL::Queue &queue) const noexcept;
@@ -219,11 +187,11 @@ class ManageComputePolicy {
   using uint = unsigned int;
   OCL::Kernel _ker;
 public:
-  void start(const OCL::Queue &queue, uint nch_in, uint maxsize_batch,
-	     const OCL::Memory &mem_nnmove, const OCL::Memory &mem_weight,
-	     const OCL::Memory &mem_bias, const OCL::Memory &mem_in,
+  void start(const OCL::Context &context, uint nch_in, uint maxsize_batch,
+	     const OCL::Memory &mem_weight, const OCL::Memory &mem_bias,
 	     const OCL::Memory &mem_out) noexcept;
-  void push(const OCL::Queue &queue, uint ntot_moves, uint offin)
+  void push(const OCL::Queue &queue, const OCL::MemPinned &mem_in,
+	    const OCL::MemPinned &mem_out, uint ntot_moves, uint offin)
     const noexcept;
 };
 
@@ -251,29 +219,32 @@ class NNetOCL : public NNet {
 
   std::atomic<int64_t> _elapsed_wait_ff;
 
-  ManageSend _mng_send;
   ManageDecode _mng_decode;
-  ManageRecv _mng_recv;
-  ManageComputeMatM _mng_compute_matM_input, _mng_compute_matM;
+  ManageComputeMatM _mng_compute_matM_input;
+  std::unique_ptr<ManageComputeMatM []> _pmng_compute_matM;
   ManageSgemm _mng_head1, _mng_value2, _mng_value3;
   ManageComputeMatV _mng_compute_matV_input;
   ManageComputeMatA _mng_compute_matA_join;
   ManageComputeMatAV _mng_compute_matAV_input;
-  ManageComputeMatAV _mng_compute_matAV, _mng_compute_matAV_join;
+  std::unique_ptr<ManageComputeMatAV []> _pmng_compute_matAV;
   ManageComputeBNReLU _mng_compute_BNReLU;
   ManageTransformValue2 _mng_transform_value2;
   ManageResizeBiasReLU _mng_resize_bias_ReLU_value3;
   ManageComputePolicy _mng_compute_policy;
-  OCL::Device _cl_dev;
+  OCL::Device _device;
+  OCL::Context _context;
   OCL::Queue _queue;
+  OCL::Queue _queue_a[NNAux::nslot];
   OCL::Kernel _ker_zero_clear;
   OCL::Memory _cl_bypass, _cl_output, _cl_result, _cl_matM, _cl_matV;
-  OCL::Memory _cl_head1_wght, _cl_head1_mean, _cl_head1_sd_inv;
+  OCL::Memory _cl_head1_mean, _cl_head1_sd_inv;
   OCL::Memory _cl_policy2_wght, _cl_policy2_bias, _cl_value2_bias;
-  OCL::Memory _cl_value2_wght, _cl_value3_wght;
+  OCL::Memory _mem_var1[NNAux::nslot], _mem_var2[NNAux::nslot];
+  OCL::Memory _mem_var3[NNAux::nslot];
+  OCL::MemPinned _mem_in[NNAux::nslot];
+  OCL::MemPinned _mem_out[NNAux::nslot];
+  OCL::Event _event_read[NNAux::nslot];
   std::vector<CLResWght> _cl_reswghts;
-  std::unique_ptr<uchar []> _ptr_input[NNAux::nslot];
-  std::unique_ptr<float []> _ptr_result[NNAux::nslot];
   uint _slots_size_batch[NNAux::nslot];
   std::unique_ptr<uint []> _slots_sizes_nnmove[NNAux::nslot];
   float *_slots_probs[NNAux::nslot];
@@ -287,8 +258,10 @@ class NNetOCL : public NNet {
   row_t _value3_bias;
   bool _do_sleep;
   void worker_ocl() noexcept;
-  void load(bool use_half, const std::vector<std::pair<uint, row_t>> &wght)
-    noexcept;
+  void load(bool use_half, const std::vector<std::pair<uint, row_t>> &wght,
+	    const OCL::Memory &mem_head1_wght,
+	    const OCL::Memory &mem_value2_wght,
+	    const OCL::Memory &mem_value3_wght) noexcept;
 
 public:
   explicit NNetOCL() noexcept;
