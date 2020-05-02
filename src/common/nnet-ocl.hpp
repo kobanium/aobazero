@@ -19,7 +19,7 @@
 class FName;
 namespace NNAux {
   using uint = unsigned int;
-  constexpr uint nslot = 2U;
+  constexpr uint nslot = 8U;
 }
 
 class ManageDecode {

@@ -104,21 +104,21 @@ void NNetService::worker_push() noexcept {
     unique_lock<mutex> lock(_m_entries);
     _cv_entries_push.wait(lock, [&]{
 	if (_flag_quit) return true;
+
 	if (_entries_push.empty()) return false;
-	//if (1U < _entries_wait.size()) return false;
+	if (2U < _entries_wait.size()) return false;
 
 	if (_entries_wait.size() < 1U) return true;
 	if (_entries_push.front()->is_full()) return true;
 	return false; });
 
     if (_flag_quit) return;
+    _entries_push.front()->push_ff(*_pnnet);
     unique_ptr<Entry> p = move(_entries_push.front());
-    Entry *pe = p.get();
     _entries_push.pop_front();
     _entries_wait.push_back(move(p));
     lock.unlock();
-    _cv_entries_wait.notify_one();
-    pe->push_ff(*_pnnet); } }
+    _cv_entries_wait.notify_one(); } }
 
 
 void NNetService::worker_wait() noexcept {
