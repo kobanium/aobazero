@@ -113,11 +113,12 @@ void NNetService::worker_push() noexcept {
 
     if (_flag_quit) return;
     unique_ptr<Entry> p = move(_entries_push.front());
-    p->push_ff(*_pnnet);
+    Entry *pe = p.get();
     _entries_push.pop_front();
     _entries_wait.push_back(move(p));
     lock.unlock();
-    _cv_entries_wait.notify_one(); } }
+    _cv_entries_wait.notify_one();
+    pe->push_ff(*_pnnet); } }
 
 
 void NNetService::worker_wait() noexcept {
