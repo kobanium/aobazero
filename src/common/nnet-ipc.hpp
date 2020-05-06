@@ -7,7 +7,7 @@
 class SeqPRN {
   OSI::MMap _mmap;
 public:
-  explicit SeqPRN() noexcept;
+  explicit SeqPRN(bool flag_detach) noexcept;
   ~SeqPRN() noexcept { _mmap.close(); };
   const uint64_t *get_ptr() const noexcept {
     return static_cast<uint64_t *>(_mmap()); }

@@ -30,7 +30,10 @@ using uint = unsigned int;
 
 
 SeqPRNService::SeqPRNService() noexcept {
-  _mmap.open(Param::name_seq_prn, true, sizeof(uint64_t) * Param::len_seq_prn);
+  char fn[IOAux::maxlen_path + 256U];
+  uint pid = OSI::get_pid();
+  sprintf(fn, "%s.%07u", Param::name_seq_prn, pid);
+  _mmap.open(fn, true, sizeof(uint64_t) * Param::len_seq_prn);
   uint64_t *p = static_cast<uint64_t *>(_mmap());
   mt19937_64 mt(7);
   for (uint u = 0; u < Param::len_seq_prn; ++u) p[u] = mt(); }

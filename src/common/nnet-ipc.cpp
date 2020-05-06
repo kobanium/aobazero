@@ -9,9 +9,13 @@
 using ErrAux::die;
 using uint = unsigned int;
 
-SeqPRN::SeqPRN() noexcept {
-  _mmap.open(Param::name_seq_prn, false,
-	     sizeof(uint64_t) * Param::len_seq_prn); }
+SeqPRN::SeqPRN(bool flag_detach) noexcept {
+  char fn[IOAux::maxlen_path + 256U];
+  uint pid;
+  if (flag_detach) pid = OSI::get_pid();
+  else             pid = OSI::get_ppid();
+  sprintf(fn, "%s.%07u", Param::name_seq_prn, pid);
+  _mmap.open(fn, false, sizeof(uint64_t) * Param::len_seq_prn); }
 
 int NNetIPC::sem_wait(OSI::Semaphore &sem) noexcept {
   if (_flag_detach) sem.dec_wait();

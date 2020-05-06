@@ -95,7 +95,7 @@ void init_network()
 #ifdef NN_PARALLEL
 	if ( is_process_batch() ) {
 		p_nnet    = new NNetIPC(false);
-		p_seq_prn = new SeqPRN();
+		p_seq_prn = new SeqPRN(false);
 		if ( p_nnet->start(nNNetServiceNumber) == -1 ) {
 			PRT("Err. submit_block()\n"); debug();
 		}
