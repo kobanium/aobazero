@@ -28,7 +28,6 @@ using std::unique_ptr;
 using ErrAux::die;
 using uint = unsigned int;
 
-
 SeqPRNService::SeqPRNService() noexcept {
   char fn[IOAux::maxlen_path + 256U];
   uint pid = OSI::get_pid();
@@ -48,20 +47,6 @@ class Entry {
   uint _ubatch, _size_batch, _wait_id;
 
 public:
-  /*
-  Entry & operator=(Entry && e) noexcept {
-    if (this != &e) {
-      _input        = move(e._input);
-      _sizes_nnmove = move(e._sizes_nnmove);
-      _nnmoves      = move(e._nnmoves);
-      _probs        = move(e._probs);
-      _values       = move(e._values);
-      _ids          = move(e._ids);
-      _ubatch       = e._ubatch;
-      _size_batch   = e._size_batch;
-      _wait_id      = e._wait_id; }
-    return *this; }
-    Entry(Entry && e) noexcept { *this = move(e); } */
   explicit Entry(uint size_batch) noexcept :
   _input(new float [size_batch * NNAux::size_input]),
     _sizes_nnmove(new uint [size_batch]),
@@ -107,16 +92,16 @@ void NNetService::worker_push() noexcept {
     unique_lock<mutex> lock(_m_entries);
     _cv_entries_push.wait(lock, [&]{
 	if (_flag_quit) return true;
-
 	if (_entries_push.empty()) return false;
-	if (2U < _entries_wait.size()) return false;
-
 	if (_entries_wait.size() < 1U) return true;
 	if (_entries_push.front()->is_full()) return true;
 	return false; });
-
     if (_flag_quit) return;
+    lock.unlock();
+    
     _entries_push.front()->push_ff(*_pnnet);
+
+    lock.lock();
     unique_ptr<Entry> p = move(_entries_push.front());
     _entries_push.pop_front();
     _entries_wait.push_back(move(p));

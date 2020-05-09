@@ -31,45 +31,6 @@ using namespace ErrAux;
 constexpr char options[] = "-Werror -cl-std=CL1.2";
 //constexpr char options[] = "-Werror -cl-std=CL1.2 -cl-fast-relaxed-math";
 
-class OCL::Event_impl {
-  cl_event _event;
-
-public:
-  explicit Event_impl() : _event(nullptr) {}
-  ~Event_impl() { if (_event) clReleaseEvent(_event); }
-  Event_impl(Event_impl &&e_impl) : _event(e_impl._event) {
-    e_impl._event = nullptr; }
-  Event_impl &operator=(Event_impl &&e_impl) {
-    if (_event) release();
-    _event = e_impl._event;
-    e_impl._event = nullptr;
-    return *this; }
-  void release() {
-    cl_int ret = clReleaseEvent(_event);
-    if (ret != CL_SUCCESS)
-      throw ERR_INT("clReleaseEvent() failed. Error Code: %d", ret);
-    _event = nullptr; }
-  void wait() {
-    cl_int ret = clWaitForEvents(1, &_event);
-    if (ret != CL_SUCCESS)
-      throw ERR_INT("clwaitForEvents() failed. Error Code: %d", ret);
-    release(); }
-  cl_event *get() { return &_event; }
-  bool ok() const { return _event != nullptr; }
-  const cl_event *get() const { return &_event; }
-};
-  
-OCL::Event::Event() : _impl(new Event_impl) {}
-OCL::Event::~Event() {}
-OCL::Event::Event(Event &&e) : _impl(move(e._impl)) {}
-Event &OCL::Event::operator=(Event &&e) {
-  assert(e.ok()); _impl = move(e._impl); return *this; }
-Event_impl &OCL::Event::get() { return *_impl; }
-void OCL::Event::wait() const { return _impl->wait(); }
-bool OCL::Event::ok() const { return _impl && _impl->ok(); }
-const Event_impl &OCL::Event::get() const { return *_impl; }
-
-
 class OCL::Memory_impl {
   cl_mem _mem;
 public:
@@ -80,7 +41,11 @@ public:
     _mem = clCreateBuffer(context, flags, size, nullptr, &ret);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clCreateBuffer() failed. Error Code: %d", ret); }
-  Memory_impl(Memory_impl &&k) : _mem(k._mem) { k._mem = nullptr; }
+  Memory_impl(Memory_impl &&m_impl) { *this = move(m_impl); }
+  Memory_impl &operator=(Memory_impl &&m_impl) {
+    assert(m_impl.ok());
+    if (this != &m_impl) { _mem = m_impl._mem; m_impl._mem = nullptr; }
+    return *this; }
   ~Memory_impl() { if (_mem) clReleaseMemObject(_mem); }
   const cl_mem *get_p() const { return &_mem; }
   cl_mem get() const { return _mem; }
@@ -90,22 +55,24 @@ OCL::Memory::Memory() {}
 OCL::Memory::~Memory() {}
 OCL::Memory::Memory(Memory_impl &&m_impl)
   : _impl(new Memory_impl(move(m_impl))) {}
-OCL::Memory::Memory(Memory &&m) : _impl(move(m._impl)) {}
+OCL::Memory::Memory(Memory &&m) { *this = move(m); }
 Memory &OCL::Memory::operator=(Memory &&m) {
-  assert(m.ok()); _impl = move(m._impl); return *this; }
+  assert(m.ok()); if (this != &m) _impl = move(m._impl); return *this; }
 void OCL::Memory::clear() { _impl.reset(nullptr); }
 bool OCL::Memory::ok() const { return _impl && _impl->ok(); }
 const Memory_impl &OCL::Memory::get() const { return *_impl; }
 
 class OCL::MemPinned_impl {
+  cl_context _context;
+  cl_device_id _id;
   cl_mem _mem_device, _mem_pinned;
   void *_pointer;
 public:
-  explicit MemPinned_impl(const cl_context &context,
-			  const cl_command_queue &queue,
+  explicit MemPinned_impl(const cl_context &context, const cl_device_id &id,
 			  const cl_mem_flags &mem_flags,
-			  const cl_map_flags &map_flags, size_t size) {
-    assert(context);
+			  const cl_map_flags &map_flags, size_t size)
+    : _context(context), _id(id) {
+    assert(context && id);
     cl_int ret;
     _mem_pinned = clCreateBuffer(context, mem_flags | CL_MEM_ALLOC_HOST_PTR,
 				 size, nullptr, &ret);
@@ -117,37 +84,62 @@ public:
       clReleaseMemObject(_mem_pinned);
       throw ERR_INT("clCreateBuffer() failed. Error Code: %d", ret); }
 
-    _pointer = clEnqueueMapBuffer(queue, _mem_pinned, CL_TRUE, map_flags,
-				  0, size, 0, NULL, NULL, &ret);
+    cl_command_queue queue = clCreateCommandQueue(context, id, 0, &ret);
     if (ret != CL_SUCCESS) {
       clReleaseMemObject(_mem_pinned);
       clReleaseMemObject(_mem_device);
-      throw ERR_INT("clEnqueueMapBuffer() failed. Error Code: %d", ret); } }
-  MemPinned_impl(MemPinned_impl &&m)
-    : _mem_device(m._mem_device), _mem_pinned(m._mem_pinned),
-      _pointer(m._pointer) {
-    m._mem_device = m._mem_pinned = nullptr;
-    m._pointer = nullptr; }
+      throw ERR_INT("clCreateCommandQueue() failed. Error Code: %d", ret); }
+
+    _pointer = clEnqueueMapBuffer(queue, _mem_pinned, CL_TRUE, map_flags, 0,
+				  size, 0, NULL, NULL, &ret);
+    if (ret != CL_SUCCESS) {
+      clReleaseCommandQueue(queue);
+      clReleaseMemObject(_mem_pinned);
+      clReleaseMemObject(_mem_device);
+      throw ERR_INT("clEnqueueMapBuffer() failed. Error Code: %d", ret); }
+
+    if (clReleaseCommandQueue(queue) != CL_SUCCESS) {
+      clReleaseMemObject(_mem_pinned);
+      clReleaseMemObject(_mem_device);
+      throw ERR_INT("clReleaseCommandQueue() failed. Error Code: %d", ret); } }
+  MemPinned_impl(MemPinned_impl &&m_impl) { *this = move(m_impl); }
+  MemPinned_impl &operator=(MemPinned_impl &&m_impl) {
+    assert(m_impl.ok());
+    if (this != &m_impl) {
+      _context    = m_impl._context;
+      _id         = m_impl._id;
+      _mem_device = m_impl._mem_device;
+      _mem_pinned = m_impl._mem_pinned;
+      _pointer    = m_impl._pointer;
+      m_impl._id  = nullptr; }
+    return *this; }
   ~MemPinned_impl() {
-    if (_mem_device) clReleaseMemObject(_mem_device);
-    if (_mem_pinned) clReleaseMemObject(_mem_pinned); }
+    if (! _id) return;
+    cl_int ret;
+    cl_command_queue queue = clCreateCommandQueue(_context, _id, 0, &ret);
+    if (ret != CL_SUCCESS) return;
+
+    if (clEnqueueUnmapMemObject(queue, _mem_pinned, _pointer, 0, nullptr,
+				nullptr) != CL_SUCCESS) return;
+    if (clReleaseCommandQueue(queue) != CL_SUCCESS) return;
+    if (clReleaseMemObject(_mem_device) != CL_SUCCESS) return;
+    if (clReleaseMemObject(_mem_pinned) != CL_SUCCESS) return; }
   const cl_mem *get_p() const { return &_mem_device; }
   cl_mem get() const { return _mem_device; }
-  bool ok() const { return (_mem_device && _mem_pinned); }
+  bool ok() const { return (_mem_device && _mem_pinned && _pointer); }
   void *get_pointer() const { return _pointer; } };
 
 OCL::MemPinned::MemPinned() {}
 OCL::MemPinned::~MemPinned() {}
 OCL::MemPinned::MemPinned(MemPinned_impl &&m_impl)
   : _impl(new MemPinned_impl(move(m_impl))) {}
-OCL::MemPinned::MemPinned(MemPinned &&m) : _impl(move(m._impl)) {}
+OCL::MemPinned::MemPinned(MemPinned &&m) { *this = move(m); }
 MemPinned &OCL::MemPinned::operator=(MemPinned &&m) {
-  assert(m.ok()); _impl = move(m._impl); return *this; }
+  assert(m.ok()); if (this != &m) _impl = move(m._impl); return *this; }
 void OCL::MemPinned::clear() { _impl.reset(nullptr); }
 bool OCL::MemPinned::ok() const { return _impl && _impl->ok(); }
 const MemPinned_impl &OCL::MemPinned::get() const { return *_impl; }
-void *OCL::MemPinned::get_pointer() const {
-  return _impl->get_pointer(); }
+void *OCL::MemPinned::get_pointer() const { return _impl->get_pointer(); }
 
 class OCL::Kernel_impl {
   cl_kernel _kernel;
@@ -158,16 +150,22 @@ public:
     _kernel = clCreateKernel(program, name, &ret);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clCreateKernel() failed. Error Code %d", ret); }
-  Kernel_impl(Kernel_impl &&k) : _kernel(k._kernel) { k._kernel = nullptr; }
+  Kernel_impl(Kernel_impl &&k_impl) { *this = move(k_impl); }
+  Kernel_impl &operator=(Kernel_impl &&k_impl) {
+    assert(k_impl.ok());
+    if (this != &k_impl) {
+      _kernel = k_impl._kernel;
+      k_impl._kernel = nullptr; }
+    return *this; }
   ~Kernel_impl() { if (_kernel) clReleaseKernel(_kernel); }
   cl_kernel get() const { return _kernel; }
   void set_arg(uint index, size_t size, const void *value) const {
+    assert(value);
     cl_int ret = clSetKernelArg(_kernel, index, size, value);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clSetKernelArg() failed. Error Code: %d", ret); }
-  template <typename M>
-  void set_arg(uint index, const M &m) const {
-    set_arg(index, sizeof(cl_mem), m.get().get_p()); }
+  template <typename M> void set_arg(uint index, const M &m_impl) const {
+    assert(m_impl.ok()); set_arg(index, sizeof(cl_mem), m_impl.get_p()); }
   bool ok() const { return _kernel; }
   template <typename T>
   T gen_info(const cl_kernel_work_group_info &name) const {
@@ -181,18 +179,17 @@ OCL::Kernel::Kernel() {}
 OCL::Kernel::~Kernel() {}
 OCL::Kernel::Kernel(Kernel_impl &&k_impl)
   : _impl(new Kernel_impl(move(k_impl))) {}
-OCL::Kernel::Kernel(Kernel &&k) :  _impl(move(k._impl)) {}
-const Kernel_impl &OCL::Kernel::get() const { return *_impl; }
+OCL::Kernel::Kernel(Kernel &&k) { *this = move(k); }
 Kernel &OCL::Kernel::operator=(Kernel &&k) {
-  assert(k.ok()); _impl = move(k._impl); return *this; }
+  assert(k.ok()); if (this != &k) _impl = move(k._impl); return *this; }
+const Kernel_impl &OCL::Kernel::get() const { return *_impl; }
 bool OCL::Kernel::ok() const { return _impl && _impl->ok(); }
 void OCL::Kernel::set_arg(uint index, size_t size, const void *value) const {
-  return _impl->set_arg(index, size, value); }
+  assert(value); return _impl->set_arg(index, size, value); }
 template <typename M> void OCL::Kernel::set_arg(uint index, const M &m) const {
-  return _impl->set_arg(index, m); }
+  assert(m.ok()); return _impl->set_arg(index, m.get()); }
 template void OCL::Kernel::set_arg<>(uint index, const Memory &m) const;
 template void OCL::Kernel::set_arg<>(uint index, const MemPinned &m) const;
-
 string OCL::Kernel::gen_info() const {
   stringstream ss;
   ss << "    Max Work-Group Size: " << gen_work_group_size()   << "\n"
@@ -213,34 +210,39 @@ cl_ulong OCL::Kernel::gen_private_mem_size() const {
 class OCL::Program_impl {
   cl_program _pg;
 public:
-  explicit Program_impl(const char *code, cl_device_id dev,
-			cl_context context) {
+  explicit Program_impl(const char *code, cl_context context,
+			cl_device_id dev) {
     assert(code && dev && context);
     cl_int ret;
     _pg = clCreateProgramWithSource(context, 1, &code, nullptr, &ret);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clCreateProgramWithSource() failed. Error Code: %d", ret);
 
-    ret = clBuildProgram(_pg, 0, nullptr, options, nullptr, nullptr);
-    if (ret == CL_SUCCESS) return;
+    if (clBuildProgram(_pg, 0, nullptr, options, nullptr, nullptr)
+	== CL_SUCCESS) return;
 
     size_t size;
     ret = clGetProgramBuildInfo(_pg, dev, CL_PROGRAM_BUILD_LOG, 0, nullptr,
 				&size);
-    if (ret != CL_SUCCESS)
-      throw ERR_INT("cl_GetProgramBuildInfo() failed. Error Code: %d", ret);
+    if (ret != CL_SUCCESS) {
+      clReleaseProgram(_pg);
+      throw ERR_INT("cl_GetProgramBuildInfo() failed. Error Code: %d", ret); }
 
     unique_ptr<char []> log(new char [size]);
     ret = clGetProgramBuildInfo(_pg, dev, CL_PROGRAM_BUILD_LOG, size,
 				log.get(), nullptr);
-    if (ret != CL_SUCCESS)
-      throw ERR_INT("cl_GetProgramBuildInfo() failed. Error Code: %d", ret);
+    if (ret != CL_SUCCESS) {
+      clReleaseProgram(_pg);
+      throw ERR_INT("cl_GetProgramBuildInfo() failed. Error Code: %d", ret); }
+
     clReleaseProgram(_pg);
     throw ERR_INT("OpenCL Build Error\n%s", log.get()); }
 
-  Program_impl(Program_impl &&p_impl) : _pg(p_impl._pg) {
-    p_impl._pg  = nullptr; }
-
+  Program_impl(Program_impl &&p_impl) { *this = move(p_impl); }
+  Program_impl &operator=(Program_impl &&p_impl) {
+    assert(p_impl.ok());
+    if (this != &p_impl) { _pg = p_impl._pg; p_impl._pg = nullptr; }
+    return *this; }
   ~Program_impl() { if (_pg) clReleaseProgram(_pg); }
   bool ok() const { return _pg; }
   Kernel_impl gen_kernel(const char *name) const {
@@ -250,9 +252,9 @@ OCL::Program::Program() {}
 OCL::Program::~Program() {}
 OCL::Program::Program(Program_impl &&p_impl)
   : _impl(new Program_impl(move(p_impl))) {}
-OCL::Program::Program(Program &&p) : _impl(move(p._impl)) {}
+OCL::Program::Program(Program &&p) { *this = move(p); }
 Program &OCL::Program::operator=(Program &&p) {
-  assert(p.ok()); _impl = move(p._impl); return *this; }
+  assert(p.ok()); if (this != &p) _impl = move(p._impl); return *this; }
 const Program_impl &OCL::Program::get() const { return *_impl; }
 bool OCL::Program::ok() const { return _impl && _impl->ok(); }
 Kernel OCL::Program::gen_kernel(const char *name) const {
@@ -261,45 +263,30 @@ Kernel OCL::Program::gen_kernel(const char *name) const {
 class OCL::Queue_impl {
   cl_command_queue _queue;
 public:
-  Queue_impl(const cl_device_id &id, const cl_context &context)
-    : _queue(nullptr) {
+  Queue_impl(const cl_device_id &id, const cl_context &context) {
     assert(id && context);
     cl_int ret;
     _queue = clCreateCommandQueue(context, id, 0, &ret);
-    //_queue = clCreateCommandQueue(context, id,
-    //CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE,
-    //&ret);
-    if (ret != CL_SUCCESS)
-      throw ERR_INT("clReleaseContext() failed. Error Code: %d", ret); }
+     if (ret != CL_SUCCESS)
+      throw ERR_INT("clCreateCommandQueue() failed. Error Code: %d", ret); }
+  Queue_impl(Queue_impl &&q_impl) { *this = move(q_impl); }
+  Queue_impl &operator=(Queue_impl &&q_impl) {
+    assert(q_impl.ok());
+    if (this != &q_impl) {
+      _queue = q_impl._queue;
+      q_impl._queue = nullptr; }
+    return *this; }
   ~Queue_impl() {
     if (! _queue) return;
     clFinish(_queue);
     clReleaseCommandQueue(_queue); }
-  Queue_impl(Queue_impl &&q_impl) : _queue(q_impl._queue) {
-    q_impl._queue = nullptr; }
   const cl_command_queue &get() const { return _queue; }
   bool ok() const { return _queue; }
   void finish() const {
     cl_int ret = clFinish(_queue);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clFinish() failure. Error Code: %d", ret); }
-  void push_wait(const OCL::Queue_impl &q) const {
-    cl_event e;
-    cl_int ret = clEnqueueMarkerWithWaitList(q._queue, 0, nullptr, &e);
-    if (ret != CL_SUCCESS)
-      throw ERR_INT("clEnqueueMarkerWithWaitList() failed. Error Code: %d",
-		    ret);
-
-    ret = clFlush(q._queue);
-    if (ret != CL_SUCCESS)
-      throw ERR_INT("clFlush() failed. Error Code: %d", ret);
-
-    ret = clEnqueueMarkerWithWaitList(_queue, 1U, &e, nullptr);
-    if (ret != CL_SUCCESS)
-      throw ERR_INT("clEnqueueMarkerWithWaitList() failed. Error Code: %d",
-		    ret); }
-  void push_write(const MemPinned_impl &m_impl, size_t size)
-    const {
+  void push_write(const MemPinned_impl &m_impl, size_t size) const {
     assert(m_impl.ok());
     cl_int ret = clEnqueueWriteBuffer(_queue, m_impl.get(), CL_FALSE, 0,
 				      size, m_impl.get_pointer(), 0, nullptr,
@@ -313,41 +300,18 @@ public:
 				      size, p, 0, nullptr, nullptr);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clEnqueueWriteBuffer() failed. Error Code: %d", ret); }
-  void push_read(const MemPinned_impl &m_impl, size_t size, Event_impl &e_impl)
-    const {
+  void push_read(const MemPinned_impl &m_impl, size_t size) const {
     assert(m_impl.ok());
     cl_int ret = clEnqueueReadBuffer(_queue, m_impl.get(), CL_FALSE, 0, size,
 				     m_impl.get_pointer(), 0, nullptr,
-				     e_impl.get());
+				     nullptr);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clEnqueueReadBuffer() failed. Error Code: %d", ret); }
-  void push_read(const Memory_impl &m_impl, size_t size, void *p,
-		 Event_impl &e_impl) const {
-    assert(m_impl.ok() && p);
-    cl_int ret = clEnqueueReadBuffer(_queue, m_impl.get(), CL_FALSE, 0, size,
-				     p, 0, nullptr, e_impl.get());
-    if (ret != CL_SUCCESS)
-      throw ERR_INT("clEnqueueReadBuffer() failed. Error Code: %d", ret); }
-
   void push_kernel(const Kernel_impl &k_impl, size_t size_global) const {
-    assert(k_impl.ok() && 0 < size_global);
-    cl_int ret;
-    size_t size_local
-      = k_impl.gen_info<size_t>(CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE);
-    size_t size_g = (size_global / size_local) * size_local;
-
-    if (size_g) {
-      size_global -= size_g;
-      ret = clEnqueueNDRangeKernel(_queue, k_impl.get(), 1U, nullptr, &size_g,
-				   &size_local, 0, nullptr, nullptr);
-      if (ret != CL_SUCCESS)
-	throw ERR_INT("clEnqueNDRangeKernel() failed. Error Code: %d", ret); }
-    
-    if (size_global == 0) return;
-
-    ret = clEnqueueNDRangeKernel(_queue, k_impl.get(), 1U, &size_g,
-				 &size_global, &size_global, 0, nullptr,
-				 nullptr);
+    assert(k_impl.ok());
+    cl_int ret = clEnqueueNDRangeKernel(_queue, k_impl.get(), 1U, nullptr,
+					&size_global, nullptr, 0, nullptr,
+					nullptr);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clEnqueNDRangeKernel() failed. Error Code: %d", ret); }
 
@@ -362,23 +326,17 @@ public:
 OCL::Queue::Queue() {};
 OCL::Queue::~Queue() {};
 OCL::Queue::Queue(Queue_impl &&q_impl) : _impl(new Queue_impl(move(q_impl))) {}
-OCL::Queue::Queue(Queue &&q) : _impl(move(q._impl)) {}
+OCL::Queue::Queue(Queue &&q) { *this = move(q); }
 OCL::Queue &Queue::operator=(Queue &&q) {
-  assert(q.ok()); _impl = move(q._impl); return *this; }
+  assert(q.ok()); if (this != &q) _impl = move(q._impl); return *this; }
 bool OCL::Queue::ok() const { return _impl && _impl->ok(); }
 void OCL::Queue::finish() const { _impl->finish(); }
-void OCL::Queue::push_wait(const Queue &queue) const {
-  assert(queue.ok()); _impl->push_wait(*queue._impl); }
 void OCL::Queue::push_write(const MemPinned &m, size_t size)
   const { assert(m.ok()); _impl->push_write(m.get(), size); }
 void OCL::Queue::push_write(const Memory &m, size_t size, const void *p)
   const { assert(m.ok() && p); _impl->push_write(m.get(), size, p); }
-void OCL::Queue::push_read(const MemPinned &m, size_t size, Event &e)
-  const {
-  assert(m.ok()); _impl->push_read(m.get(), size, e.get()); }
-void OCL::Queue::push_read(const Memory &m, size_t size, void *p, Event &e)
-  const {
-  assert(m.ok() && p); _impl->push_read(m.get(), size, p, e.get()); }
+void OCL::Queue::push_read(const MemPinned &m, size_t size) const {
+  assert(m.ok()); _impl->push_read(m.get(), size); }
 void OCL::Queue::push_kernel(const Kernel &k, size_t size_global) const {
   assert(k.ok()); _impl->push_kernel(k.get(), size_global); }
 void OCL::Queue::push_ndrange_kernel(const Kernel &k, uint dim,
@@ -391,41 +349,45 @@ class OCL::Context_impl {
   cl_device_id _id;
   cl_context _context;
 public:
-  Context_impl(const cl_device_id &id) : _id(id), _context(nullptr) {
+  Context_impl(const cl_device_id &id) : _id(id) {
     assert(id);
     cl_int ret;
     _context = clCreateContext(nullptr, 1, &_id, nullptr, nullptr, &ret);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clCreateContext() failed. Error Code: %d", ret); }
-  ~Context_impl() { if (_context) clReleaseContext(_context); }
-  Context_impl(Context_impl &&c_impl) : _id(c_impl._id),
-					_context(c_impl._context) {
-    c_impl._id      = nullptr;
-    c_impl._context = nullptr; }
+  ~Context_impl() { if (_id) clReleaseContext(_context); }
+  Context_impl(Context_impl &&c_impl) { *this = move(c_impl); }
+  Context_impl &operator=(Context_impl &&c_impl) {
+    assert(c_impl.ok());
+    if (this != &c_impl) {
+      _id        = c_impl._id;
+      _context   = c_impl._context;
+      c_impl._id = nullptr; }
+    return *this; }
   Queue_impl gen_queue() const { return Queue_impl(_id, _context); }
   Program_impl gen_program(const char *code) const {
-    assert(code); return Program_impl(code, _id, _context); }
+    assert(code); return Program_impl(code, _context, _id); }
   MemPinned_impl gen_mem_pinned(const cl_mem_flags &mem_flags,
 				const cl_map_flags &map_flags, size_t size)
     const {
-    Queue_impl q_impl(_id, _context);
-    return MemPinned_impl(_context, q_impl.get(), mem_flags, map_flags, size);
-  }
+    return MemPinned_impl(_context, _id, mem_flags, map_flags, size); }
   Memory_impl gen_memory(const cl_mem_flags &flags, size_t size) const {
     return Memory_impl(_context, flags, size); }
-  bool ok() const { return _context; } };
+  bool ok() const { return (_id && _context); } };
 
 OCL::Context::Context() {};
 OCL::Context::~Context() {};
 OCL::Context::Context(Context_impl &&c_impl)
   : _impl(new Context_impl(move(c_impl))) {}
-OCL::Context::Context(Context &&c) : _impl(move(c._impl)) {}
+OCL::Context::Context(Context &&c) { *this = move(c); }
 OCL::Context &Context::operator=(Context &&c) {
-  assert(c.ok()); _impl = move(c._impl); return *this; }
+  assert(c.ok()); if (this != &c) _impl = move(c._impl); return *this; }
 bool OCL::Context::ok() const { return _impl && _impl->ok(); }
 Queue OCL::Context::gen_queue() const { return Queue(_impl->gen_queue()); }
 Program OCL::Context::gen_program(const char *code) const {
-  return Program(_impl->gen_program(code)); }
+  assert(code); return Program(_impl->gen_program(code)); }
+Program OCL::Context::gen_program(const std::string &code) const {
+  return Program(_impl->gen_program(code.c_str())); }
 MemPinned OCL::Context::gen_mem_pin_hw_dr(size_t size) const {
   return MemPinned(_impl->gen_mem_pinned(CL_MEM_READ_ONLY, CL_MAP_WRITE,
 					 size)); }
@@ -446,8 +408,6 @@ class OCL::Device_impl {
   cl_device_id _id;
 public:
   explicit Device_impl(const cl_device_id &id) : _id(id) { assert(id); }
-  ~Device_impl() {}
-  Device_impl(Device_impl &&d_impl) : _id(d_impl._id) { assert(d_impl.ok()); }
   Context_impl gen_context() const { return Context_impl(_id); }
   bool ok() const { return _id; }
   string gen_info_string(const cl_device_info &name) {
@@ -471,9 +431,6 @@ class OCL::Platform_impl {
   cl_platform_id _id;
 public:
   explicit Platform_impl(const cl_platform_id &id) : _id(id) { assert(id); }
-  Platform_impl(Platform_impl &&p_impl) : _id(p_impl._id) {
-    assert(p_impl.ok());
-    p_impl._id = nullptr; }
   bool ok() const { return _id; }
   vector<Device> gen_devices_all() const {
     cl_uint num_device;
@@ -492,7 +449,6 @@ public:
     for (cl_uint ud = 0; ud < num_device; ++ud)
       vec.emplace_back(Device_impl(devices[ud]));
     return vec; }
-
   string get_info(const cl_platform_info &name) {
     size_t size;
     cl_int ret = clGetPlatformInfo(_id, name, 0, nullptr, &size);
@@ -503,14 +459,76 @@ public:
     ret = clGetPlatformInfo(_id, name, size, value.get(), nullptr);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clGetPlatformInfo() failed. Error Code: %d", ret);
-    
     return string(value.get()); } };
+
+OCL::Device::Device() {}
+OCL::Device::~Device() {}
+OCL::Device::Device(Device_impl &&d_impl)
+  : _impl(new Device_impl(move(d_impl))) {}
+OCL::Device::Device(Device &&d) { *this = move(d); }
+Device &OCL::Device::operator=(Device &&d) {
+  assert(d.ok()); if (this != &d) _impl = move(d._impl); return *this; }
+Context OCL::Device::gen_context() const {
+  return Context(_impl->gen_context()); }
+bool OCL::Device::ok() const { return _impl && _impl->ok(); }
+string OCL::Device::gen_info() const {
+  stringstream ss;
+  ss << "  Type:                 " << gen_type() << "\n"
+     << "  Name:                 " << gen_name() << "\n"
+     << "  Driver Version:       " << gen_driver_version() << "\n"
+     << "  Compute Units:        " << gen_max_compute_units() << "\n"
+     << "  Max Work-Group Size:  " << gen_max_work_group_size() << "\n"
+     << "  Max Clock Freq (MHz): " << gen_max_clock_frequency() << "\n"
+     << "  Global Mem Size:      " << gen_global_mem_size() << "\n"
+     << "  Max Mem Alloc Size:   " << gen_max_mem_alloc_size() << "\n"
+     << "  Local Mem type:       " << gen_local_mem_type() << "\n"
+     << "  Local Mem Size:       " << gen_local_mem_size() << "\n";
+  return ss.str(); }
+Platform OCL::Device::gen_platform() const {
+  cl_platform_id id = _impl->gen_info<cl_platform_id>(CL_DEVICE_PLATFORM);
+  return Platform(Platform_impl(id)); }
+string OCL::Device::gen_type() const {
+  auto type = _impl->gen_info<cl_device_type>(CL_DEVICE_TYPE);
+  auto func = [](string &str, const char *p) {
+    if (str.size()) str += " "; str += p; };
+  string str;
+  if (type & CL_DEVICE_TYPE_CPU)         func(str, "CPU");
+  if (type & CL_DEVICE_TYPE_GPU)         func(str, "GPU");
+  if (type & CL_DEVICE_TYPE_ACCELERATOR) func(str, "ACCELERATOR");
+  if (type & CL_DEVICE_TYPE_DEFAULT)     func(str, "DEFAULT");
+  return str; }
+string OCL::Device::gen_local_mem_type() const {
+  auto type
+    = _impl->gen_info<cl_device_local_mem_type>(CL_DEVICE_LOCAL_MEM_TYPE);
+  if (type == CL_LOCAL)  return string("LOCAL");
+  if (type == CL_GLOBAL) return string("GLOBAL");
+  throw ERR_INT("bad local memory type");
+  return string(""); }
+string OCL::Device::gen_name() const {
+  return _impl->gen_info_string(CL_DEVICE_NAME); }
+string OCL::Device::gen_driver_version() const {
+  return _impl->gen_info_string(CL_DRIVER_VERSION); }
+uint OCL::Device::gen_max_compute_units() const {
+  return _impl->gen_info<cl_uint>(CL_DEVICE_MAX_COMPUTE_UNITS); }
+uint64_t OCL::Device::gen_global_mem_size() const {
+  return _impl->gen_info<cl_ulong>(CL_DEVICE_GLOBAL_MEM_SIZE); }
+uint64_t OCL::Device::gen_local_mem_size() const {
+  return _impl->gen_info<cl_ulong>(CL_DEVICE_LOCAL_MEM_SIZE); }
+uint64_t OCL::Device::gen_max_mem_alloc_size() const {
+  return _impl->gen_info<cl_ulong>(CL_DEVICE_MAX_MEM_ALLOC_SIZE); }
+size_t OCL::Device::gen_max_work_group_size() const {
+  return _impl->gen_info<size_t>(CL_DEVICE_MAX_WORK_GROUP_SIZE); }
+uint OCL::Device::gen_max_clock_frequency() const {
+  return _impl->gen_info<cl_uint>(CL_DEVICE_MAX_CLOCK_FREQUENCY); }
 
 OCL::Platform::Platform() {}
 OCL::Platform::~Platform() {}
 OCL::Platform::Platform(Platform_impl &&p_impl)
   : _impl(new Platform_impl(move(p_impl))) {}
-OCL::Platform::Platform(Platform &&p) : _impl(move(p._impl)) {}
+OCL::Platform::Platform(Platform &&p) { *this = move(p); }
+Platform &OCL::Platform::operator=(Platform &&p) {
+  assert(p.ok()); if (this != &p) _impl = move(p._impl); return *this; }
+bool OCL::Platform::ok() const { return (_impl && _impl->ok()); }
 vector<Device> OCL::Platform::gen_devices_all() const {
   return _impl->gen_devices_all(); }
 string OCL::Platform::gen_info() const {
@@ -544,65 +562,4 @@ vector<Platform> OCL::gen_platforms() {
   for (cl_uint up = 0; up < num_platform; ++up)
     vec.emplace_back(Platform_impl(platforms[up]));
   return vec; }
-
-OCL::Device::Device() {}
-OCL::Device::~Device() {}
-OCL::Device::Device(Device &&d) : _impl(move(d._impl)) {}
-OCL::Device::Device(Device_impl &&d_impl)
-  : _impl(new Device_impl(move(d_impl))) {}
-Device &OCL::Device::operator=(Device &&d) {
-  assert(d.ok()); _impl = move(d._impl); return *this; }
-Context OCL::Device::gen_context() const {
-  return Context(_impl->gen_context()); }
-bool OCL::Device::ok() const { return _impl && _impl->ok(); }
-string OCL::Device::gen_info() const {
-  stringstream ss;
-  ss << "  Type:                 " << gen_type() << "\n"
-     << "  Name:                 " << gen_name() << "\n"
-     << "  Driver Version:       " << gen_driver_version() << "\n"
-     << "  Compute Units:        " << gen_max_compute_units() << "\n"
-     << "  Max Work-Group Size:  " << gen_max_work_group_size() << "\n"
-     << "  Max Clock Freq (MHz): " << gen_max_clock_frequency() << "\n"
-     << "  Global Mem Size:      " << gen_global_mem_size() << "\n"
-     << "  Max Mem Alloc Size:   " << gen_max_mem_alloc_size() << "\n"
-     << "  Local Mem type:       " << gen_local_mem_type() << "\n"
-     << "  Local Mem Size:       " << gen_local_mem_size() << "\n";
-  return ss.str(); }
-Platform OCL::Device::gen_platform() const {
-  cl_platform_id id = _impl->gen_info<cl_platform_id>(CL_DEVICE_PLATFORM);
-  return Platform(Platform_impl(id)); }
-string OCL::Device::gen_type() const {
-  auto type = _impl->gen_info<cl_device_type>(CL_DEVICE_TYPE);
-  auto func = [](string &str, const char *p){
-    if (str.size()) str += " ";
-    str += p; };
-  string str;
-  if (type & CL_DEVICE_TYPE_CPU)         func(str, "CPU");
-  if (type & CL_DEVICE_TYPE_GPU)         func(str, "GPU");
-  if (type & CL_DEVICE_TYPE_ACCELERATOR) func(str, "ACCELERATOR");
-  if (type & CL_DEVICE_TYPE_DEFAULT)     func(str, "DEFAULT");
-  return str; }
-string OCL::Device::gen_local_mem_type() const {
-  auto type
-    = _impl->gen_info<cl_device_local_mem_type>(CL_DEVICE_LOCAL_MEM_TYPE);
-  if (type == CL_LOCAL)  return string("LOCAL");
-  if (type == CL_GLOBAL) return string("GLOBAL");
-  throw ERR_INT("bad local memory type");
-  return string(""); }
-string OCL::Device::gen_name() const {
-  return _impl->gen_info_string(CL_DEVICE_NAME); }
-string OCL::Device::gen_driver_version() const {
-  return _impl->gen_info_string(CL_DRIVER_VERSION); }
-uint OCL::Device::gen_max_compute_units() const {
-  return _impl->gen_info<cl_uint>(CL_DEVICE_MAX_COMPUTE_UNITS); }
-uint64_t OCL::Device::gen_global_mem_size() const {
-  return _impl->gen_info<cl_ulong>(CL_DEVICE_GLOBAL_MEM_SIZE); }
-uint64_t OCL::Device::gen_local_mem_size() const {
-  return _impl->gen_info<cl_ulong>(CL_DEVICE_LOCAL_MEM_SIZE); }
-uint64_t OCL::Device::gen_max_mem_alloc_size() const {
-  return _impl->gen_info<cl_ulong>(CL_DEVICE_MAX_MEM_ALLOC_SIZE); }
-size_t OCL::Device::gen_max_work_group_size() const {
-  return _impl->gen_info<size_t>(CL_DEVICE_MAX_WORK_GROUP_SIZE); }
-uint OCL::Device::gen_max_clock_frequency() const {
-  return _impl->gen_info<cl_uint>(CL_DEVICE_MAX_CLOCK_FREQUENCY); }
 #endif

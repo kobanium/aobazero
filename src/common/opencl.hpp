@@ -19,20 +19,7 @@ namespace OCL {
   class Memory_impl;
   class MemPinned_impl;
   class Kernel_impl;
-  class Event_impl;
   
-  class Event {
-    std::unique_ptr<Event_impl> _impl;
-  public:
-    explicit Event();
-    ~Event();
-    Event(Event &&e);
-    Event &operator=(Event &&event);
-    bool ok() const;
-    void wait() const;
-    Event_impl &get();
-    const Event_impl &get() const; };
-
   class Memory {
     std::unique_ptr<Memory_impl> _impl;
   public:
@@ -41,7 +28,6 @@ namespace OCL {
     Memory(Memory_impl &&m_impl);
     Memory(Memory &&m);
     Memory &operator=(Memory &&m);
-    Memory_impl &get();
     void clear();
     const Memory_impl &get() const;
     bool ok() const; };
@@ -54,7 +40,6 @@ namespace OCL {
     MemPinned(MemPinned_impl &&m_impl);
     MemPinned(MemPinned &&m);
     MemPinned &operator=(MemPinned &&m);
-    MemPinned_impl &get();
     void clear();
     const MemPinned_impl &get() const;
     void *get_pointer() const;
@@ -100,11 +85,9 @@ namespace OCL {
     Queue &operator=(Queue &&q);
     bool ok() const;
     void finish() const;
-    void push_wait(const Queue &queue) const;
     void push_write(const MemPinned &m, size_t size) const;
     void push_write(const Memory &m, size_t size, const void *p) const;
-    void push_read(const MemPinned &m, size_t size, Event &e) const;
-    void push_read(const Memory &m, size_t size, void *p, Event &e) const;
+    void push_read(const MemPinned &m, size_t size) const;
     void push_kernel(const Kernel &k, size_t size_global) const;
     void push_ndrange_kernel(const Kernel &k, uint dim, const size_t *size_g,
 			     const size_t *size_l) const; };
@@ -120,6 +103,7 @@ namespace OCL {
     bool ok() const;
     Queue gen_queue() const;
     Program gen_program(const char *code) const;
+    Program gen_program(const std::string &code) const;
     MemPinned gen_mem_pin_hw_dr(size_t size) const;
     MemPinned gen_mem_pin_hr_dw(size_t size) const;
     Memory gen_mem_hw_dr(size_t size) const;
@@ -130,8 +114,8 @@ namespace OCL {
     std::unique_ptr<Device_impl> _impl;
   public:
     explicit Device();
+    explicit Device(Device_impl &&d_impl);
     ~Device();
-    Device(Device_impl &&d_impl);
     Device(Device &&d);
     Device &operator=(Device &&d);
     Context gen_context() const;
@@ -157,6 +141,8 @@ namespace OCL {
     ~Platform();
     Platform(Platform_impl &&p_impl);
     Platform(Platform &&p);
+    Platform &operator=(Platform &&p);
+    bool ok() const;
     std::vector<Device> gen_devices_all() const;
     std::string gen_info() const;
     std::string gen_profile() const;
