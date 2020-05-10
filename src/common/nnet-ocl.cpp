@@ -66,7 +66,7 @@ static_assert(sizeof(float) == sizeof(ushort) * 2U,
 	      "sizeof(float) == sizeof(ushort) * 2U");
 
 constexpr char msg_bad_wght_dim[] = "bad weight dimension";
-constexpr char msg_build_error[]  = "OpenCL Build Error";
+constexpr char msg_opencl_error[] = "opencl";
 constexpr uint tune_sample_size   = 256U;
 constexpr uint size_wrap_wmma     = 32U;
 constexpr uint len_kernel         = 3U;
@@ -920,7 +920,7 @@ __kernel void test_wmma() {
     const size_t size_l[3] = { size_wrap_wmma, 1U, 1U };
     queue.push_ndrange_kernel(ker, 3, size_g, size_l); }
   catch (const ErrInt &e) {
-    if (! strstr(e.what(), msg_build_error)) throw;
+    if (! strstr(e.what(), msg_opencl_error)) throw;
     return false; }
   catch (...) { throw; }
   return true; }
@@ -1073,7 +1073,7 @@ static SgemmParam tune_compute_matM(bool use_wmma, const OCL::Device &device,
       elapsed = measure_compute_matM(context, param, nbatch, nm0, nn0, nk0,
 				     1U); }
     catch (const ErrInt &e) {
-      if (! strstr(e.what(), msg_build_error)) throw;
+      if (! strstr(e.what(), msg_opencl_error)) throw;
       elapsed = DBL_MAX; flag_error = true; }
     catch (...) { throw; }
 
@@ -1332,7 +1332,7 @@ void ManageSgemm::start(const OCL::Device &device, const OCL::Context &context,
     bool flag_error = false;
     try { elapsed = measure_sgemm(context, param, nm0, nn0, nk0, 1U); }
     catch (const ErrInt &e) {
-      if (! strstr(e.what(), msg_build_error)) throw;
+      if (! strstr(e.what(), msg_opencl_error)) throw;
       elapsed = DBL_MAX; flag_error = true; }
     catch (...) { throw; }
 
