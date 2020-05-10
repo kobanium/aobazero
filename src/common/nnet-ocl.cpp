@@ -6,6 +6,7 @@
 #include "nnet-ocl.hpp"
 #include <algorithm>
 #include <deque>
+#include <exception>
 #include <iostream>
 #include <sstream>
 #include <thread>
@@ -46,6 +47,7 @@ using std::sort;
 using std::string;
 using std::stringstream;
 using std::swap;
+using std::terminate;
 using std::thread;
 using std::tie;
 using std::to_string;
@@ -860,7 +862,7 @@ gen_code_compute_matM(uint nm0, uint nn0, uint nk0, const SgemmParam &param)
 		      param.nl, param.nl * param.nlfm); } }
 
 const string gen_code_sgemm(uint nm, uint nn, uint nk, const SgemmParam &param)
-  noexcept {
+{
   assert(0 < nm && 0 < nn && 0 < nk && param.ok());
   string str;
   if (param.npm == 1U && nn == 1U) {
@@ -883,7 +885,7 @@ const string gen_code_sgemm(uint nm, uint nn, uint nk, const SgemmParam &param)
     str += code_sgemm; }
   return str; }
 
-static bool test_wmma(const OCL::Context &context) noexcept {
+static bool test_wmma(const OCL::Context &context) {
   assert(context.ok());
   try {
     OCL::Queue queue     = context.gen_queue();
@@ -1007,7 +1009,7 @@ static double measure_compute_matM(const OCL::Context &context,
 
 static SgemmParam tune_compute_matM(bool use_wmma, const OCL::Device &device,
 				    const OCL::Context &context, uint nbatch,
-				    uint nm0, uint nn0, uint nk0) noexcept {
+				    uint nm0, uint nn0, uint nk0) {
   assert(device.ok() && context.ok());
   assert(0 < nbatch && 0 < nm0 && 0 < nn0 && 0 < nk0);
   deque<SgemmParam> params, params_candi;
@@ -1291,7 +1293,7 @@ public:
 void ManageSgemm::start(const OCL::Device &device, const OCL::Context &context,
 			uint nker, bool, bool, uint nm0, uint nn0, uint nk0,
 			uint offa, uint lda, uint offb, uint ldb, uint offc,
-			uint ldc) noexcept {
+			uint ldc) {
   assert(device.ok() && context.ok() && 0 < nm0 && 0 < nn0 && 0 < nk0);
   assert(0 < lda && 0 < ldb && 0 < ldc);
   deque<SgemmParam> params, params_candi;

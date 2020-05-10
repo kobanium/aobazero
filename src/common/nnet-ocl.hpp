@@ -96,7 +96,7 @@ class ManageSgemm {
 public:
   void start(const OCL::Device &device, const OCL::Context &context, uint nker,
 	     bool transa, bool transb, uint nm0, uint nn0, uint nk0, uint offa,
-	     uint lda, uint offb, uint ldb, uint offc, uint ldc) noexcept;
+	     uint lda, uint offb, uint ldb, uint offc, uint ldc);
   uint get_nm() const noexcept { return _nm; }
   uint get_nn() const noexcept { return _nn; }
   uint get_nk() const noexcept { return _nk; }
