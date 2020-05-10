@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 #include <climits>
+#include <cmath>
 #include <cstdint>
 using std::async;
 using std::cerr;

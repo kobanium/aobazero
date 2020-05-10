@@ -34,13 +34,13 @@ CentOS での手順を記します。
 
 > sudo yum install xz-devel zlib-devel
 
-- GCC 5.3.1 をインストール
+- GCC 7.3.1 をインストール
 
 > sudo yum -y install centos-release-scl
-> sudo yum -y install devtoolset-4
-> scl enable devtoolset-4 bash
+> sudo yum -y install devtoolset-7
+> scl enable devtoolset-7 bash
 
-GCC 5.3.1 が利用可能な環境で bash が起動します。
+GCC 7.3.1 が利用可能な環境で bash が起動します。
 
 - boost 1.58.0 をインストール
 
@@ -49,7 +49,7 @@ GCC 5.3.1 が利用可能な環境で bash が起動します。
 > gzip -dc boost_1_58_0.tar.gz | tar xvf -
 > cd boost_1_58_0
 > ./bootstrap.sh
-> ./b2 install -j[number of threads] --prefix=/[a path with write permission]/inst-dts4
+> ./b2 install -j[number of threads] --prefix=/[a path with write permission]/inst-dts7
 
 - OpenBLAS を使うならばこれをインストール
 
@@ -57,7 +57,7 @@ GCC 5.3.1 が利用可能な環境で bash が起動します。
 > git clone https://github.com/xianyi/OpenBLAS.git
 > cd OpenBLAS
 > make -j[number of threads]
-> sudo make install PREFIX=/[a path with write permission]/inst-dts4
+> make install PREFIX=/[a path with write permission]/inst-dts7
 
 - Intel MKL を使うならばこれをインストール
 
@@ -73,7 +73,7 @@ Intel 社が提供する情報に従ってインストールして下さい。
 コンンパイラとリンカのパスを設定します。
 
 Bourne Shell 系ならば
-> exprot CPLUS_INCLUDE_PATH=/path to inst-dts4/include:$CPLUS_INCLUDE_PATH
+> export CPLUS_INCLUDE_PATH=/path to inst-dts4/include:$CPLUS_INCLUDE_PATH
 > export LIBRARY_PATH=/path to inst-dits4/lib:$LIBRARY_PATH
 > export LD_RUN_PATH=/path to inst-dits4/lib:$LD_RUN_PATH
 

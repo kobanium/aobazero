@@ -28,17 +28,7 @@ static void out_platform_info(uint id, const Platform &pf) noexcept {
 
 static void out_device_info(uint id, const Device &dev) {
   cout << "- Device ID: " << id << "\n";
-  cout << dev.gen_info();
-
-  OCL::Context context = dev.gen_context();
-  OCL::Queue queue     = context.gen_queue();
-  OCL::Program pg      = context.gen_program(R"(
-__kernel void hw() { printf("  TEST-RUN:             OK\n"); })");
-  OCL::Kernel ker  = pg.gen_kernel("hw");
-  const size_t size_g[3] = { 1U, 1U, 1U };
-  const size_t size_l[3] = { 1U, 1U, 1U };
-  queue.push_ndrange_kernel(ker, 3, size_g, size_l);
-  queue.finish(); }
+  cout << dev.gen_info(); }
 
 int main() {
   uint platform_id = 0;

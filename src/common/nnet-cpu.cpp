@@ -8,6 +8,7 @@
 #  include <utility>
 #  include <vector>
 #  include <cassert>
+#  include <cmath>
 #  include <omp.h>
 #  if defined(USE_MKL)
 #    include <mkl.h>

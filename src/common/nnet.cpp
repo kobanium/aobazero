@@ -12,6 +12,7 @@
 #include <vector>
 #include <cassert>
 #include <climits>
+#include <cmath>
 using std::fill_n;
 using std::ifstream;
 using std::ios;
