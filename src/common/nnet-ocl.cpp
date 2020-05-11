@@ -2034,7 +2034,7 @@ string NNetOCL::reset(uint maxsize_batch,
     row_t mean = gen_mean(resnet_nout, wght[index + 1U].second.get(),
 			  wght[index + 2U].second.get());
     row_t sdinv= gen_sd_inv(resnet_nout, wght[index + 3U].second.get());
-    OCL::Memory cl_matU = gen_mem_init(context, sizeU, matU.get(), use_half);
+    OCL::Memory cl_matU = gen_mem_init(context, sizeU, matU.get(), use_wmma);
     OCL::Memory cl_mean = gen_mem_init(context, resnet_nout, mean.get());
     OCL::Memory cl_sdinv= gen_mem_init(context, resnet_nout, sdinv.get());
     _vec_reswghts.push_back({move(cl_matU), move(cl_mean), move(cl_sdinv)});
@@ -2042,7 +2042,7 @@ string NNetOCL::reset(uint maxsize_batch,
     index += 4U; }
 
   for (uint u = 0; u < NNAux::nslot; ++u) {
-    _mem_matV[u] = gen_mem_init(context, sizeV, 0.0f, use_half);
+    _mem_matV[u] = gen_mem_init(context, sizeV, 0.0f, use_wmma);
     _mem_var1[u] = gen_mem_init(context, size_output, 0.0f);
     _mem_var2[u] = gen_mem_init(context, size_output, 0.0f);
     _mem_var3[u] = gen_mem_init(context, size_output, 0.0f);
