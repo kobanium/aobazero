@@ -88,47 +88,49 @@ public:
   bool is_empty() const noexcept { return _ubatch == 0; } };
 
 void NNetService::worker_push() noexcept {
+  unique_ptr<Entry> pe;
   while (true) {
     unique_lock<mutex> lock(_m_entries);
     _cv_entries_push.wait(lock, [&]{
 	if (_flag_quit) return true;
 	if (_entries_push.empty()) return false;
+	if (16U < _entries_wait.size()) return false;
 	if (_entries_wait.size() < 1U) return true;
 	if (_entries_push.front()->is_full()) return true;
 	return false; });
     if (_flag_quit) return;
+    pe = move(_entries_push.front());
+    _entries_push.pop_front();
     lock.unlock();
     
-    _entries_push.front()->push_ff(*_pnnet);
+    pe->push_ff(*_pnnet);
 
     lock.lock();
-    unique_ptr<Entry> p = move(_entries_push.front());
-    _entries_push.pop_front();
-    _entries_wait.push_back(move(p));
+    _entries_wait.push_back(move(pe));
     lock.unlock();
     _cv_entries_wait.notify_one(); } }
-
 
 void NNetService::worker_wait() noexcept {
   SharedIPC *pipc[NNAux::maxnum_nipc];
   for (uint u = 0; u < _nipc; ++u)
     pipc[u] = static_cast<SharedIPC *>(_mmap_ipc[u]());
 
+  unique_ptr<Entry> pe;
   while (true) {
     unique_lock<mutex> lock(_m_entries);
     _cv_entries_wait.wait(lock, [&]{
 	return (0 < _entries_wait.size() || _flag_quit); });
     if (_flag_quit) return;
+    pe = move(_entries_wait.front());
+    _entries_wait.pop_front();
     lock.unlock();
-    _entries_wait.front()->wait_ff(*_pnnet, _sem_ipc, pipc);
+
+    pe->wait_ff(*_pnnet, _sem_ipc, pipc);
 
     lock.lock();
-    unique_ptr<Entry> p = move(_entries_wait.front());
-    _entries_wait.pop_front();
-    _entries_pool.push_back(move(p));
+    _entries_pool.push_back(move(pe));
     lock.unlock();
-    _cv_entries_push.notify_one();
-  } }
+    _cv_entries_push.notify_one(); } }
 
 void NNetService::worker_srv() noexcept {
   SharedService *pservice = static_cast<SharedService *>(_mmap_service());
