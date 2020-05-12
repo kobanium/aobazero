@@ -102,8 +102,7 @@ constexpr float bn_eps            = 1e-5f;
 	    << elapsed << " " << elapsed_sum / nelapsed << std::endl;
 */
 
-const string code_decode =
-  "#define NCH_FILL " + to_string(send_nch_fill) + R"(U
+const string code_decode = R"(
 __kernel __attribute__((reqd_work_group_size(128, 1, 1)))
 void zero_clear(__global float *p) {
   uint sq128 = get_global_id(0);
@@ -1691,8 +1690,8 @@ void ManageTransformValue2::start(const OCL::Context &context, uint nch,
   _size_g[2] = nch;
   string code =
     "#define NN_OUT " + to_string(nn_out) + "U\n"
-    "#define NCH    " + to_string(nch) + "U\n"
-    "#define NBATCH " + to_string(nb)  + "U\n" + code_transform_value2;
+    "#define NCH    " + to_string(nch)    + "U\n"
+    "#define NBATCH " + to_string(nb)     + "U\n" + code_transform_value2;
   OCL::Program pg = context.gen_program(code);
   for (uint u = 0; u < NNAux::nslot; ++u) {
     assert(mem_in[u].ok() && mem_out[u].ok());
@@ -1805,8 +1804,8 @@ static void compress_data(uint index_block, uint nb0, uint nb, const float *in,
 			  void *out, size_t &size_write, uint &n_one,
 			  uint &ntot_moves) noexcept {
   assert(in && sizes_nnmove && nnmoves && out);
-  float *pvalue = reinterpret_cast<float *>(out);
-  uint  *pindex = reinterpret_cast<uint *>(out) + index_block;
+  float *pvalue = static_cast<float *>(out);
+  uint  *pindex = static_cast<uint *>(out) + index_block;
   uint index;
   for (uint ub = 0; ub < nb; ++ub) {
     for (uint uposi = 0; uposi < 8U; ++uposi)
@@ -1822,7 +1821,7 @@ static void compress_data(uint index_block, uint nb0, uint nb, const float *in,
     *pindex++ = (361U * nb + ub) * NNAux::size_plane;
     *pvalue++ = (ub < nb0) ? in[index] : 0.0f; }
 
-  pindex = reinterpret_cast<uint *>(out) + index_block*2U;
+  pindex = static_cast<uint *>(out) + index_block*2U;
   n_one  = 0;
   for (uint ub = 0; ub < nb0; ++ub)
     for (uint uposi = 0; uposi < 8U; ++uposi)
@@ -1888,12 +1887,9 @@ string NNetOCL::reset(uint maxsize_batch,
   // (4*index + 2) mean value [nout]
   // (4*index + 3) standard deviation [nout]
   uint resnet_nout = wght[1].first;
-  uint maxsize_out = resnet_nout * NNAux::size_plane;
-  maxsize_out = max(maxsize_out, NNAux::nch_input * 128U + 32U);
-  maxsize_out = max(maxsize_out, 128U * resnet_nout);
-  _nres_block  = nrow_res / 4U;
-  uint nin = NNAux::nch_input;
-  uint index = 0;
+  uint nin         = NNAux::nch_input;
+  uint index       = 0;
+  _nres_block      = nrow_res / 4U;
   for (uint u = 0; u < 1U + nrow_res / 4U; ++u) {
     if (wght[index].first != resnet_nout * nin * size_kernel
 	|| wght[index + 1U].first != resnet_nout
@@ -1915,8 +1911,7 @@ string NNetOCL::reset(uint maxsize_batch,
   uint policy1_nout = wght[index + 1U].first;
   uint value1_nout  = wght[index + 7U].first;
   uint head1_nout   = policy1_nout + value1_nout;
-  nin         = resnet_nout;
-  maxsize_out = max(maxsize_out, head1_nout * NNAux::size_plane);
+  nin = resnet_nout;
   if (wght[index].first != policy1_nout * nin
       || wght[index + 2U].first != policy1_nout
       || wght[index + 3U].first != policy1_nout
@@ -1929,7 +1924,6 @@ string NNetOCL::reset(uint maxsize_batch,
   // index + 4: weight
   // index + 5: bias
   uint policy2_nin = policy1_nout;
-  maxsize_out = max(maxsize_out, NNAux::nch_out_policy * NNAux::size_plane);
   if (wght[index + 4U].first != NNAux::nch_out_policy * policy2_nin
       || wght[index + 5U].first != NNAux::nch_out_policy)
     die(ERR_INT(msg_bad_wght_dim));
@@ -1939,8 +1933,6 @@ string NNetOCL::reset(uint maxsize_batch,
   // index + 11: bias
   uint value2_nin  = value1_nout * NNAux::size_plane;
   uint value2_nout = wght[index + 11U].first;
-  maxsize_out = max(maxsize_out, value2_nin);
-  maxsize_out = max(maxsize_out, value2_nout);
   if (wght[index + 10U].first != value2_nout * value2_nin)
     die(ERR_INT(msg_bad_wght_dim));
 
@@ -1971,7 +1963,7 @@ string NNetOCL::reset(uint maxsize_batch,
   OCL::Context context = device.gen_context();
   if (use_half) {
     use_wmma = test_wmma(context);
-    lines << "  Wmma support:         " << (use_wmma ? "Yes\n" : "No\n"); }
+    lines << "  Wmma Support:         " << (use_wmma ? "Yes\n" : "No\n"); }
 
   for (uint u = 0; u < NNAux::nslot; ++u) _queue_a[u] = context.gen_queue();
 
@@ -2011,15 +2003,20 @@ string NNetOCL::reset(uint maxsize_batch,
 		    1U);
   lines << _mng_value3.gen_info() << "\n";
 
-  uint mmax, nmax, kmax;
-  mmax = max(_pmng_compute_matM[0].get_nm(), _pmng_compute_matM[1].get_nm());
-  nmax = max(_pmng_compute_matM[0].get_nn(), _pmng_compute_matM[1].get_nn());
-  kmax = max(_pmng_compute_matM[0].get_nk(), _pmng_compute_matM[1].get_nk());
-  uint sizeV = size_tile_in * kmax * nmax;
-  uint sizeM = size_tile_in * mmax * nmax;
-  uint size_output = maxsize_batch * maxsize_out;
-  size_output = max(size_output, _mng_head1.get_nk() * _mng_head1.get_nn());
-  size_output = max(size_output, sizeM);
+  uint size_input      = maxsize_batch * NNAux::nch_input * 128U + 32U;
+  uint size_bypass     = maxsize_batch * resnet_nout * 128U;
+  uint sizeV_input     = (_pmng_compute_matM[0].get_nk()
+			  * _pmng_compute_matM[0].get_nn() * size_tile_in);
+  uint sizeV           = (_pmng_compute_matM[1].get_nk()
+			  * _pmng_compute_matM[1].get_nn() * size_tile_in);
+  uint sizeM           = (_pmng_compute_matM[1].get_nm()
+			  * _pmng_compute_matM[1].get_nn() * size_tile_in);
+  uint size_resout     = _mng_head1.get_nk() * _mng_head1.get_nn();
+  uint size_head1_out  = _mng_head1.get_nm() * _mng_head1.get_nn();
+  uint size_BNReLU_out = maxsize_batch * head1_nout * 128U;
+  uint size_transform  = _mng_value2.get_nk() * _mng_value2.get_nn();
+  uint size_value2_out = _mng_value2.get_nm() * _mng_value2.get_nn();
+  uint size_value3_in  = _mng_value3.get_nm() * _mng_value3.get_nk();
 
   //
   // setup opencl memory buffers and kernels
@@ -2027,14 +2024,14 @@ string NNetOCL::reset(uint maxsize_batch,
   nin   = NNAux::nch_input;
   index = 0;
   for (uint u = 0; u < 1U + _nres_block; ++u) {
-    uint nm    = _pmng_compute_matM[u].get_nm();
-    uint nk    = _pmng_compute_matM[u].get_nk();
-    uint sizeU = size_tile_in * nm * nk;
-    row_t matU = gen_matU(resnet_nout, nin, wght[index].second.get(), nm, nk);
-    row_t mean = gen_mean(resnet_nout, wght[index + 1U].second.get(),
-			  wght[index + 2U].second.get());
-    row_t sdinv= gen_sd_inv(resnet_nout, wght[index + 3U].second.get());
-    OCL::Memory cl_matU = gen_mem_init(context, sizeU, matU.get(), use_half);
+    uint nm     = _pmng_compute_matM[u].get_nm();
+    uint nk     = _pmng_compute_matM[u].get_nk();
+    uint sizeU  = size_tile_in * nm * nk;
+    row_t matU  = gen_matU(resnet_nout, nin, wght[index].second.get(), nm, nk);
+    row_t mean  = gen_mean(resnet_nout, wght[index + 1U].second.get(),
+			   wght[index + 2U].second.get());
+    row_t sdinv = gen_sd_inv(resnet_nout, wght[index + 3U].second.get());
+    OCL::Memory cl_matU = gen_mem_init(context, sizeU, matU.get(), use_wmma);
     OCL::Memory cl_mean = gen_mem_init(context, resnet_nout, mean.get());
     OCL::Memory cl_sdinv= gen_mem_init(context, resnet_nout, sdinv.get());
     _vec_reswghts.push_back({move(cl_matU), move(cl_mean), move(cl_sdinv)});
@@ -2042,16 +2039,22 @@ string NNetOCL::reset(uint maxsize_batch,
     index += 4U; }
 
   for (uint u = 0; u < NNAux::nslot; ++u) {
-    _mem_matV[u] = gen_mem_init(context, sizeV, 0.0f, use_half);
-    _mem_var1[u] = gen_mem_init(context, size_output, 0.0f);
-    _mem_var2[u] = gen_mem_init(context, size_output, 0.0f);
-    _mem_var3[u] = gen_mem_init(context, size_output, 0.0f);
-    _mem_in[u]   = context.gen_mem_pin_hw_dr(sizeof(float) * NNAux::nch_input
-					     * NNAux::size_plane
-					     * maxsize_batch);
-    _mem_out[u]  = context.gen_mem_pin_hr_dw(sizeof(float)
-					     * (1U + NNAux::nmove)
-					     * maxsize_batch); }
+    _mem_input[u]      = gen_mem_init(context, size_input, 0.0f);
+    _mem_matV_input[u] = gen_mem_init(context, sizeV_input, 0.0f, use_wmma);
+    _mem_matV[u]       = gen_mem_init(context, sizeV, 0.0f, use_wmma);
+    _mem_matM[u]       = gen_mem_init(context, sizeM, 0.0f);
+    _mem_bypass[u]     = gen_mem_init(context, size_bypass, 0.0f);
+    _mem_resout[u]     = gen_mem_init(context, size_resout, 0.0f);
+    _mem_head1_out[u]  = gen_mem_init(context, size_head1_out, 0.0f);
+    _mem_BNReLU_out[u] = gen_mem_init(context, size_BNReLU_out, 0.0f);
+    _mem_transform[u]  = gen_mem_init(context, size_transform, 0.0f);
+    _mem_value2_out[u] = gen_mem_init(context, size_value2_out, 0.0f);
+    _mem_value3_in[u]  = gen_mem_init(context, size_value3_in, 0.0f);
+    _mem_in[u]         = context.gen_mem_pin_hw_dr(sizeof(uint)
+						   * 2048U * maxsize_batch);
+    _mem_out[u]        = context.gen_mem_pin_hr_dw(sizeof(float)
+						   * (1U + NNAux::nmove)
+						   * maxsize_batch); }
   
   row_t row = gen_head1_trans_weight(policy1_nout, value1_nout, resnet_nout,
 				     wght[index + 0U].second.get(),
@@ -2092,84 +2095,87 @@ string NNetOCL::reset(uint maxsize_batch,
 
 
   _pmng_compute_matAV.reset(new ManageComputeMatAV [_nres_block]);
-  _mng_decode.start(context, _mem_in, _mem_var1, _index_block, maxsize_batch);
+  _mng_decode.start(context, _mem_in, _mem_input, _index_block, maxsize_batch);
   _mng_compute_matV_first.start(use_wmma, context, NNAux::nch_input,
 				maxsize_batch,
 				_pmng_compute_matM[0].get_nn(),
 				_pmng_compute_matM[0].get_nk(),
-				_mem_var1, _mem_matV);
-  _pmng_compute_matM[0].set(_vec_reswghts[0].matU, _mem_matV, _mem_var1);
+				_mem_input, _mem_matV_input);
+  _pmng_compute_matM[0].set(_vec_reswghts[0].matU, _mem_matV_input, _mem_matM);
   _pmng_compute_matAV[0].start(use_wmma, false, true, context, resnet_nout,
 			       maxsize_batch, _pmng_compute_matM[1].get_nm(),
 			       _pmng_compute_matM[1].get_nn(),
 			       _pmng_compute_matM[1].get_nk(),
-			       _mem_var1, _mem_matV, _vec_reswghts[0].mean,
-			       _vec_reswghts[0].sd_inv, _mem_var2);
+			       _mem_matM, _mem_matV, _vec_reswghts[0].mean,
+			       _vec_reswghts[0].sd_inv, _mem_bypass);
   uint u = 1U;
   for (; u + 1U < _nres_block; u += 2U) {
-    _pmng_compute_matM[u].set(_vec_reswghts[u].matU, _mem_matV, _mem_var1);
+    _pmng_compute_matM[u].set(_vec_reswghts[u].matU, _mem_matV, _mem_matM);
     _pmng_compute_matAV[u].start(use_wmma, false, false, context, resnet_nout,
 				 maxsize_batch, _pmng_compute_matM[1].get_nm(),
 				 _pmng_compute_matM[1].get_nn(),
 				 _pmng_compute_matM[1].get_nk(),
-				 _mem_var1, _mem_matV, _vec_reswghts[u].mean,
+				 _mem_matM, _mem_matV, _vec_reswghts[u].mean,
 				 _vec_reswghts[u].sd_inv, nullptr);
 
-    _pmng_compute_matM[u+1].set(_vec_reswghts[u+1].matU, _mem_matV, _mem_var1);
+    _pmng_compute_matM[u+1].set(_vec_reswghts[u+1].matU, _mem_matV, _mem_matM);
     _pmng_compute_matAV[u+1].start(use_wmma, true, true, context,
 				   resnet_nout, maxsize_batch,
 				   _pmng_compute_matM[1].get_nm(),
 				   _pmng_compute_matM[1].get_nn(),
 				   _pmng_compute_matM[1].get_nk(),
-				   _mem_var1, _mem_matV,
+				   _mem_matM, _mem_matV,
 				   _vec_reswghts[u+1].mean,
-				   _vec_reswghts[u+1].sd_inv, _mem_var2); }
+				   _vec_reswghts[u+1].sd_inv, _mem_bypass); }
 
-  _pmng_compute_matM[u].set(_vec_reswghts[u].matU, _mem_matV, _mem_var1);
+  _pmng_compute_matM[u].set(_vec_reswghts[u].matU, _mem_matV, _mem_matM);
   _pmng_compute_matAV[u].start(use_wmma, false, false, context,
 			       resnet_nout, maxsize_batch,
 			       _pmng_compute_matM[1].get_nm(),
 			       _pmng_compute_matM[1].get_nn(),
 			       _pmng_compute_matM[1].get_nk(),
-			       _mem_var1, _mem_matV, _vec_reswghts[u].mean,
+			       _mem_matM, _mem_matV, _vec_reswghts[u].mean,
 			       _vec_reswghts[u].sd_inv, nullptr);
 
-  _pmng_compute_matM[u+1].set(_vec_reswghts[u+1].matU, _mem_matV, _mem_var1);
+  _pmng_compute_matM[u+1].set(_vec_reswghts[u+1].matU, _mem_matV, _mem_matM);
   _mng_compute_matA_last.start(use_wmma, context, true, resnet_nout,
 			       maxsize_batch, _pmng_compute_matM[1].get_nm(),
 			       _pmng_compute_matM[1].get_nn(),
-			       _mng_head1.get_nn(), _mem_var1, _mem_var2,
+			       _mng_head1.get_nn(), _mem_matM, _mem_bypass,
 			       _vec_reswghts[u+1].mean,
-			       _vec_reswghts[u+1].sd_inv, _mem_var3);
+			       _vec_reswghts[u+1].sd_inv, _mem_resout);
   
   _mng_head1.set_a_chg_dim(context, mem_head1_wght);
   _mng_head1.chg_dim_a_beforhand(context);
-  _mng_head1.set_array_b(_mem_var3);
-  _mng_head1.set_array_c(_mem_var1);
+  _mng_head1.set_array_b(_mem_resout);
+  _mng_head1.set_array_c(_mem_head1_out);
 
   _mng_compute_BNReLU.start(context, head1_nout, maxsize_batch,
 			    _mng_head1.get_nn(), _mem_head1_mean,
-			    _mem_head1_sd_inv, _mem_var1, _mem_var2);
+			    _mem_head1_sd_inv, _mem_head1_out,
+			    _mem_BNReLU_out);
 
   _mng_compute_policy.start(context, policy2_nin, maxsize_batch,
 			    _mem_in, _mem_policy2_wght, _mem_policy2_bias,
-			    _mem_var2, _mem_out);
+			    _mem_BNReLU_out, _mem_out);
 
   _mng_transform_value2.start(context, value1_nout, maxsize_batch,
-			      _mem_var2, policy1_nout * maxsize_batch * 128U,
-			      _mng_value2.get_nn(), _mem_var1);
+			      _mem_BNReLU_out,
+			      policy1_nout * maxsize_batch * 128U,
+			      _mng_value2.get_nn(), _mem_transform);
 
   _mng_value2.set_a_chg_dim(context, mem_value2_wght);
   _mng_value2.chg_dim_a_beforhand(context);
-  _mng_value2.set_array_b(_mem_var1);
-  _mng_value2.set_array_c(_mem_var2);
+  _mng_value2.set_array_b(_mem_transform);
+  _mng_value2.set_array_c(_mem_value2_out);
 
   _mng_resize_bias_ReLU_value3.start(context, value2_nout, maxsize_batch,
 				     _mng_value2.get_nn(),
 				     _mng_value3.get_nm(),
-				     _mem_value2_bias, _mem_var2, _mem_var1);
+				     _mem_value2_bias, _mem_value2_out,
+				     _mem_value3_in);
 
-  _mng_value3.set_array_a(_mem_var1);
+  _mng_value3.set_array_a(_mem_value3_in);
   _mng_value3.set_b_chg_dim(context, mem_value3_wght);
   _mng_value3.chg_dim_b_beforhand(context);
   _mng_value3.set_array_c_chg_dim(context, _mem_out);
