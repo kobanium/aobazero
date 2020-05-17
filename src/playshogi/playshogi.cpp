@@ -301,7 +301,7 @@ static string addup_result(const NodeType &type_term, const Color &turn,
 		 / static_cast<double>(ntot));
     double elo = 0.0;
     if ( wr != 0 && wr != 1.0 ) elo = -400.0 * log10(1.0 / wr - 1.0);
-//  if (1e-5 < wr) elo = -400.0 * log10(1.0 / wr - 1.0);
+    //  if (1e-5 < wr) elo = -400.0 * log10(1.0 / wr - 1.0);
 
     // 95% confidence interval
     // double ci = 1.96*sqrt(wr*(1.0 - wr)/static_cast<double>(ntot));
@@ -350,6 +350,7 @@ static string result_out(Color turn, uint result[][NodeType::ok_size][3],
 	 + result[turn.to_u()][SAux::illegal_wwin.to_u()][lose])
      << ")\n";
 
+  double ret_se = 0;
   // win 1 point, draw 0.5 point, lose 0 point
   if (2 <= ntot) {
     double deno  = 1.0 / static_cast<double>(ntot);
@@ -396,8 +397,7 @@ static void procedure_io(USIEngine &myself, USIEngine &opponent,
 static void node_update(USIEngine &myself, USIEngine &opponent,
 			Node<Param::maxlen_play_learn> &node, string &startpos,
 			string &record, char *line) noexcept {
-  assert(myself.ok() && opponent.ok() && node.ok() && line);
-  
+  assert(myself.ok() && opponent.ok() && node.ok() && line);  
   char *token = strtok(line, " ");
   if (token == nullptr) return;
   if (strcmp(token, "bestmove")) return;

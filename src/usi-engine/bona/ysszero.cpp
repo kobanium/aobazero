@@ -1,4 +1,4 @@
-﻿// 2019 Team AobaZero
+// 2019 Team AobaZero
 // This source code is in the public domain.
 #include "../config.h"
 
