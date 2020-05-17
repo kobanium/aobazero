@@ -553,7 +553,7 @@ class OSI::dirlock_impl {
 public:
   explicit dirlock_impl(const char *dname) noexcept {
     FName fn(dname);
-    fn.add_fname("lock");
+    fn.add_fname(".lock");
     int fd = open(fn.get_fname(), O_CREAT | O_RDWR, 0666);
     if (flock(fd, LOCK_EX | LOCK_NB) < 0 && errno == EWOULDBLOCK)
       die(ERR_INT("another instance is using %s", dname)); }
