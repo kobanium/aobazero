@@ -36,6 +36,8 @@ lr_policy: "step" # learning rate policy: drop the learning rate in "steps"
 gamma: 0.5        # drop the learning rate by a factor of 10
                   # (i.e., multiply it by a factor of gamma = 0.1)
 
+#iter_size: 32    # batch_size: 128 with iter_size: 32 and batch_size: 4096 with iter_size: 1 are equivalent. except batch normalization.
+
 stepsize:   10000000  # drop the learning rate every 100K iterations
 
 max_iter:   10010000  # train for 700K iterations total

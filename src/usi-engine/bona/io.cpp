@@ -399,7 +399,7 @@ out_board( const tree_t * restrict ptree, FILE *pf, unsigned int move,
 #if defined(YSS_ZERO)
 //  record_t *pr = &record_game;	// ’Êí‚Í‹ó‚Á‚ÛH
 //  fprintf( pf, "moves=%d, pr->games=%d,moves=%d,lines=%d\n",ptree->nrep, pr->games,pr->moves,pr->lines );
-  fprintf( pf, "moves=%3d, seq_hash=%016" PRIx64 ,ptree->nrep,ptree->sequence_hash );
+  fprintf( pf, "moves=%3d(%d), turn %c, seq_hash=%016" PRIx64 ,ptree->nrep+sfen_current_move_number,sfen_current_move_number, ach_turn[(root_turn)&1], ptree->sequence_hash );
   if ( ptree->nrep > 0 ) {
     const min_posi_t *p0 = &ptree->record_plus_ply_min_posi[ptree->nrep-0];
     const min_posi_t *p1 = &ptree->record_plus_ply_min_posi[ptree->nrep-1];
@@ -430,7 +430,7 @@ out_board( const tree_t * restrict ptree, FILE *pf, unsigned int move,
 		az = diff[0];
 	}
 //	fprintf( pf, "%d,02d%d%s\n",n,b0,a0,astr_table_piece[abs(p0->asquare[az])]);
-	fprintf( pf, ", %c%02d%d%s\n",ach_turn[(ptree->nrep+1)&1],b0,a0,astr_table_piece[abs(p0->asquare[az])]);
+	fprintf( pf, ", %c%02d%d%s\n",ach_turn[(root_turn+1)&1],b0,a0,astr_table_piece[abs(p0->asquare[az])]);
   }
   fprintf( pf, "\n");
 #endif

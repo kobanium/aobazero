@@ -12,6 +12,72 @@ namespace OSI {
   void handle_signal(void (*handler)(int)) noexcept;
   void prevent_multirun(const FName &fname) noexcept;
   char *strtok(char *str, const char *delim, char **saveptr) noexcept;
+  void binary2text(char *msg, uint &len, char &ch_last) noexcept;
+  bool has_parent() noexcept;
+  uint get_pid() noexcept;
+  uint get_ppid() noexcept;
+
+  class DirLock {
+    std::unique_ptr<class dirlock_impl> _impl;
+  public:
+    explicit DirLock(const char *dwght) noexcept;
+    ~DirLock() noexcept;
+  };
+
+  class Semaphore {
+    std::unique_ptr<class sem_impl> _impl;
+  public:
+    static void cleanup() noexcept;
+    explicit Semaphore() noexcept;
+    ~Semaphore() noexcept;
+    void open(const char *name, bool flag_create, uint value) noexcept;
+    void close() noexcept;
+    void inc() noexcept;
+    void dec_wait() noexcept;
+    int dec_wait_timeout(uint timeout) noexcept;
+    bool ok() const noexcept;
+  };
+
+  class MMap {
+    std::unique_ptr<class mmap_impl> _impl;
+  public:
+    static void cleanup() noexcept;
+    explicit MMap() noexcept;
+    ~MMap() noexcept;
+    void open(const char *name, bool flag_create, size_t size) noexcept;
+    void close() noexcept;
+    void *operator()() const noexcept;
+    bool ok() const noexcept;
+  };
+
+  class ReadHandle {
+    std::unique_ptr<class rh_impl> _impl;
+  public:
+    explicit ReadHandle() noexcept;
+    explicit ReadHandle(const class rh_impl &_impl) noexcept;
+    ReadHandle(ReadHandle &&rh) noexcept;
+    ReadHandle &operator=(ReadHandle &&rh) noexcept;
+    ~ReadHandle() noexcept;
+    void clear() noexcept;
+    bool ok() const noexcept;
+    unsigned int operator()(char *buf, uint size) const noexcept;
+  };
+
+  class ChildProcess {
+    std::unique_ptr<class cp_impl> _impl;
+  public:
+    explicit ChildProcess() noexcept;
+    ~ChildProcess() noexcept;
+    void open(const char *path, char * const argv[]) noexcept;
+    void close() noexcept;
+    ReadHandle gen_handle_in() const noexcept;
+    ReadHandle gen_handle_err() const noexcept;
+    uint get_pid() const noexcept;
+    void close_write() const noexcept;
+    bool is_closed() const noexcept;
+    bool ok() const noexcept;
+    size_t write(const char *msg, size_t n) const noexcept;
+  };
   
   class Pipe {
     std::unique_ptr<class Pipe_impl> _impl;

@@ -76,7 +76,8 @@ extern unsigned char ailast_one[512];
   #define DBG_EASY
 */
 
-#if defined(CSASHOGI)
+//#if defined(CSASHOGI)
+#if defined(CSASHOGI) || (defined(_WIN32) && defined(YSS_ZERO))
 #  define NO_STDOUT
 #  if ! defined(WIN32_PIPE)
 #    define WIN32_PIPE
@@ -1450,12 +1451,13 @@ int getCmdLineParam(int argc, char *argv[]);
 const char *get_cmd_line_ptr();
 void init_seqence_hash();
 const int SEQUENCE_HASH_SIZE = 512;	// 2^n.   別手順できた同一局面を区別するため
-extern uint64_t sequence_hash_from_to[SEQUENCE_HASH_SIZE][81][81][2];	// [from][to][promote]
-extern uint64_t sequence_hash_drop[SEQUENCE_HASH_SIZE][81][7];
+uint64_t get_sequence_hash_from_to(int moves, int from, int to, int promote);
+uint64_t get_sequence_hash_drop(int moves, int to, int piece);
 void PRT(const char *fmt, ...);
 void print_board(const tree_t * restrict ptree);
 void init_yss_zero();
 void init_state( const tree_t * restrict parent, tree_t * restrict child );
+extern int sfen_current_move_number;
 #endif
 
 #endif /* SHOGI_H */

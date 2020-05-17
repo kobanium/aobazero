@@ -52,6 +52,8 @@
 #include "Utils.h"
 #include "Zobrist.h"
 
+#include "bona/process_batch.h"
+
 using namespace Utils;
 #if 0
 static void license_blurb() {
@@ -487,8 +489,8 @@ static void parse_commandline(int argc, char *argv[]) {
 
 static void initialize_network() {
     auto network = std::make_unique<Network>();
-    auto playouts = std::min(cfg_max_playouts, cfg_max_visits);
-    network->initialize(playouts, cfg_weightsfile);
+//  auto playouts = std::min(cfg_max_playouts, cfg_max_visits);
+    network->initialize(/*playouts*/ 0, cfg_weightsfile);
 
     GTP::initialize(std::move(network));
 }
@@ -508,7 +510,7 @@ void init_global_objects() {
 
     Utils::create_z_table();
 
-    initialize_network();
+    if ( is_load_weight() ) initialize_network();
 }
 #if 0
 void benchmark(GameState& game) {

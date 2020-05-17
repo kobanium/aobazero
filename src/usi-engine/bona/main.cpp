@@ -53,7 +53,6 @@ main()
     out_error( "%s", str_error );
     return EXIT_SUCCESS;
   }
-  init_seqence_hash();
   init_yss_zero();
 //{ void test_dist_loop(); test_dist_loop(); exit(1); }
 #endif

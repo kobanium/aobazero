@@ -20,17 +20,14 @@ void ErrAux::die(const exception &e) noexcept {
 }
 
 ErrCLL::ErrCLL(int line, const char *fname, const char *func, int no)
-  noexcept {
-  assert(fname);
-  assert(func);
+noexcept {
+  assert(fname && func);
   snprintf(_buf, sizeof(_buf), "at line %d in %s: %s() failed (%d: %s)",
 	   line, fname, func, no, strerror(no));
 }
 
-ErrInt::ErrInt(int line, const char *fname, const char *fmt, ...)
-  noexcept {
-  assert(fname);
-  assert(fmt);
+ErrInt::ErrInt(int line, const char *fname, const char *fmt, ...) noexcept {
+  assert(fname && fmt);
   int len(snprintf(_buf, sizeof(_buf), "at line %d in %s: ", line, fname));
   va_list args;
   va_start(args, fmt);

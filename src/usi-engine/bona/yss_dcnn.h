@@ -21,21 +21,24 @@ typedef struct child {
 	float bias;			// policy
 } CHILD;
 
+#define CHILD_VEC
+
 typedef struct hash_shogi {
 	lock_yss_t entry_lock;		// lock for SMP
 	uint64 hashcode64;			// sequence hash
 	uint64 hash64pos;			// position hash, we check both hash key.
 	int deleted;	//
 	int games_sum;	// sum of children selected
-	int sort_done;	//
-//	int used;		// 
 	int col;		// color 1 or 2
 	int age;		//
 	float net_value;		// winrate from value network
-//	int   has_net_value;
 
 	int child_num;
+#ifdef CHILD_VEC
+	std::vector <CHILD> child;
+#else
 	CHILD child[SHOGI_MOVES_MAX];
+#endif
 } HASH_SHOGI;
 
 enum {
@@ -46,6 +49,7 @@ extern int fAddNoise;
 extern int fVisitCount;
 extern int fUSIMoveCount;
 extern int fPrtNetworkRawPath;
+extern int nNNetServiceNumber;
 
 extern std::string default_weights;
 #ifdef USE_OPENCL
@@ -66,13 +70,16 @@ void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *p
 double uct_tree(tree_t * restrict ptree, int sideToMove, int ply);
 int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf_move_count);
 void print_all_min_posi(tree_t * restrict ptree, int ply);
-int check_enter_input();
+//int check_enter_input();
+int check_stop_input();
 int is_ignore_stop();
 void send_latest_bestmove();
 void set_latest_bestmove(char *str);
 int is_send_usi_info(int nodes);
 void send_usi_info(tree_t * restrict ptree, int sideToMove, int ply, int nodes, int nps);
 void usi_newgame();
+int is_declare_win(tree_t * restrict ptree, int sideToMove);
+int is_declare_win_root(tree_t * restrict ptree, int sideToMove);
 
 // yss_net.cpp
 void init_network();
