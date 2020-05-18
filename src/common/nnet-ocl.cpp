@@ -501,15 +501,11 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
   uint ugm = get_group_id(1);
   uint ugn = get_group_id(0);
   uint ulm = get_local_id(1);
-  uint ul  = get_local_id(1)*SGEMM_NL*WRAP_SIZE + get_local_id(0);
   uint uln = get_local_id(0) / WRAP_SIZE;
-  uint ngk = NK / SGEMM_NLPTK;
+  uint ngk = NK / SGEMM_NTK;
   gA += ub*(OFFA/2U) + ugm*(SGEMM_NLPTM/2U);
   gB += ub*(OFFB/2U) + ugn*(SGEMM_NLPTN/2U);
   gC += ub*OFFC + ugm*SGEMM_NLPTM*NN + ugn*SGEMM_NLPTN;
-
-  __local uint lA[SGEMM_NLPTK*(SGEMM_NLPTM/2U)] __attribute__((aligned(32)));
-  __local uint lB[SGEMM_NLPTK*(SGEMM_NLPTN/2U)] __attribute__((aligned(32)));
 
 #if WMMA_ACCUMU16
   uint pD[SGEMM_NPM][SGEMM_NPN][4];
@@ -522,71 +518,55 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
     for (uint upn = 0; upn < SGEMM_NPN; ++upn)
       for (uint u = 0; u < 8U; ++u) pD[upm][upn][u] = 0;
 #endif
-
-  uint ulA1 = ul % (SGEMM_NLPTM/2U);
-  uint ulA2 = ul / (SGEMM_NLPTM/2U);
-  uint ulA3 = (SGEMM_NL*WRAP_SIZE) / (SGEMM_NPTM/2U);
-  uint ulB1 = ul % (SGEMM_NLPTN/2U);
-  uint ulB2 = ul / (SGEMM_NLPTN/2U);
-  uint ulB3 = (SGEMM_NL*WRAP_SIZE) / (SGEMM_NPTN/2U);
-
-  uint ldlA = SGEMM_NLPTM;
-  uint ldlB = SGEMM_NLPTN;
+  uint ldA = NM;
+  uint ldB = NN;
   for (uint ugk = 0; ugk < ngk; ++ugk) {
-    barrier(CLK_LOCAL_MEM_FENCE);
-    for (uint u = 0; u < SGEMM_NLPTK; u += ulA3)
-      lA[(u + ulA2)*(SGEMM_NLPTM/2U) + ulA1] = gA[(u + ulA2)*(NM/2U) + ulA1];
-    for (uint u = 0; u < SGEMM_NLPTK; u += ulB3)
-      lB[(u + ulB2)*(SGEMM_NLPTN/2U) + ulB1] = gB[(u + ulB2)*(NN/2U) + ulB1];
-    barrier(CLK_LOCAL_MEM_FENCE);
-
-    for (uint ulpk = 0; ulpk < SGEMM_NL*SGEMM_NPK; ++ulpk)
-      for (uint upm = 0; upm < SGEMM_NPM; ++upm)
-        for (uint upn = 0; upn < SGEMM_NPN; ++upn) {
+    for (uint upm = 0; upm < SGEMM_NPM; ++upm)
+      for (uint upn = 0; upn < SGEMM_NPN; ++upn) {
 #if WMMA_ACCUMU16
-          asm("{ .reg .b32 a<8>;\n"
-              "  .reg .b32 b<8>;\n"
-              "  wmma.load.a.sync.aligned.col" SGEMM_TDM ".shared.f16\n"
-              "    {a0, a1, a2, a3, a4, a5, a6, a7}, [%4], %5;\n"
-              "  wmma.load.b.sync.aligned.row" SGEMM_TDM ".shared.f16\n"
-              "    {b0, b1, b2, b3, b4, b5, b6, b7}, [%6], %7;\n"
-              "  wmma.mma.sync.aligned.col.row" SGEMM_TDM ".f16.f16\n"
-              "    {%0, %1, %2, %3},\n"
-              "    {a0, a1, a2, a3, a4, a5, a6, a7},\n"
-              "    {b0, b1, b2, b3, b4, b5, b6, b7},\n"
-              "    {%0, %1, %2, %3}; }"
-              : "+r"(pD[upm][upn][0]), "+r"(pD[upm][upn][1]),
-                "+r"(pD[upm][upn][2]), "+r"(pD[upm][upn][3])
-              : "l"(lA + ulpk*SGEMM_NTK*(SGEMM_NLPTM/2U)
-                       + ulm*(SGEMM_NPTM/2U) + upm*(SGEMM_NTM/2U)), "r"(ldlA),
-                "l"(lB + ulpk*SGEMM_NTK*(SGEMM_NLPTN/2U)
-                       + uln*(SGEMM_NPTN/2U) + upn*(SGEMM_NTN/2U)), "r"(ldlB)
-              : "memory");
+        asm("{ .reg .b32 a<8>;\n"
+            "  .reg .b32 b<8>;\n"
+            "  wmma.load.a.sync.aligned.col" SGEMM_TDM ".global.f16\n"
+            "    {a0, a1, a2, a3, a4, a5, a6, a7}, [%4], %5;\n"
+            "  wmma.load.b.sync.aligned.row" SGEMM_TDM ".global.f16\n"
+            "    {b0, b1, b2, b3, b4, b5, b6, b7}, [%6], %7;\n"
+            "  wmma.mma.sync.aligned.col.row" SGEMM_TDM ".f16.f16\n"
+            "    {%0, %1, %2, %3},\n"
+            "    {a0, a1, a2, a3, a4, a5, a6, a7},\n"
+            "    {b0, b1, b2, b3, b4, b5, b6, b7},\n"
+            "    {%0, %1, %2, %3}; }"
+            : "+r"(pD[upm][upn][0]), "+r"(pD[upm][upn][1]),
+              "+r"(pD[upm][upn][2]), "+r"(pD[upm][upn][3])
+            : "l"(gA + upm*SGEMM_NL*(SGEMM_NTM/2U) + ulm*(SGEMM_NTM/2U)),
+              "r"(ldA),
+              "l"(gB + upn*SGEMM_NL*(SGEMM_NTN/2U) + uln*(SGEMM_NTN/2U)),
+              "r"(ldB)
+            : "memory");
 #else
-          asm("{ .reg .b32 a<8>;\n"
-              "  .reg .b32 b<8>;\n"
-              "  wmma.load.a.sync.aligned.col" SGEMM_TDM ".shared.f16\n"
-              "    {a0, a1, a2, a3, a4, a5, a6, a7}, [%8], %9;\n"
-              "  wmma.load.b.sync.aligned.row" SGEMM_TDM ".shared.f16\n"
-              "    {b0, b1, b2, b3, b4, b5, b6, b7}, [%10], %11;\n"
-              "  wmma.mma.sync.aligned.col.row" SGEMM_TDM ".f32.f32\n"
-              "    {%0, %1, %2, %3, %4, %5, %6, %7},\n"
-              "    {a0, a1, a2, a3, a4, a5, a6, a7},\n"
-              "    {b0, b1, b2, b3, b4, b5, b6, b7},\n"
-              "    {%0, %1, %2, %3, %4, %5, %6, %7}; }"
-              : "+r"(pD[upm][upn][0]), "+r"(pD[upm][upn][1]),
-                "+r"(pD[upm][upn][2]), "+r"(pD[upm][upn][3]),
-                "+r"(pD[upm][upn][4]), "+r"(pD[upm][upn][5]),
-                "+r"(pD[upm][upn][6]), "+r"(pD[upm][upn][7])
-              : "l"(lA + ulpk*SGEMM_NTK*(SGEMM_NLPTM/2U)
-                       + ulm*(SGEMM_NPTM/2U) + upm*(SGEMM_NTM/2U)), "r"(ldlA),
-                "l"(lB + ulpk*SGEMM_NTK*(SGEMM_NLPTN/2U)
-                       + uln*(SGEMM_NPTN/2U) + upn*(SGEMM_NTN/2U)), "r"(ldlB)
-              : "memory");
+        asm("{ .reg .b32 a<8>;\n"
+            "  .reg .b32 b<8>;\n"
+            "  wmma.load.a.sync.aligned.col" SGEMM_TDM ".global.f16\n"
+            "    {a0, a1, a2, a3, a4, a5, a6, a7}, [%8], %9;\n"
+            "  wmma.load.b.sync.aligned.row" SGEMM_TDM ".global.f16\n"
+            "    {b0, b1, b2, b3, b4, b5, b6, b7}, [%10], %11;\n"
+            "  wmma.mma.sync.aligned.col.row" SGEMM_TDM ".f32.f32\n"
+            "    {%0, %1, %2, %3, %4, %5, %6, %7},\n"
+            "    {a0, a1, a2, a3, a4, a5, a6, a7},\n"
+            "    {b0, b1, b2, b3, b4, b5, b6, b7},\n"
+            "    {%0, %1, %2, %3, %4, %5, %6, %7}; }"
+            : "+r"(pD[upm][upn][0]), "+r"(pD[upm][upn][1]),
+              "+r"(pD[upm][upn][2]), "+r"(pD[upm][upn][3]),
+              "+r"(pD[upm][upn][4]), "+r"(pD[upm][upn][5]),
+              "+r"(pD[upm][upn][6]), "+r"(pD[upm][upn][7])
+            : "l"(gA + upm*SGEMM_NL*(SGEMM_NTM/2U) + ulm*(SGEMM_NTM/2U)),
+              "r"(ldA),
+              "l"(gB + upn*SGEMM_NL*(SGEMM_NTN/2U) + uln*(SGEMM_NTN/2U)),
+              "r"(ldB)
+            : "memory");
 #endif
-        }
-    gA += SGEMM_NLPTK*(NM/2U);
-    gB += SGEMM_NLPTK*(NN/2U); }
+      }
+    gA += SGEMM_NTK*(NM/2U);
+    gB += SGEMM_NTK*(NN/2U); }
 
   uint ldC = NN;
   for (uint upm = 0; upm < SGEMM_NPM; ++upm)
@@ -596,8 +576,8 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
           "     [%4], {%0, %1, %2, %3}, %5; }"
           :: "r"(pD[upm][upn][0]), "r"(pD[upm][upn][1]),
              "r"(pD[upm][upn][2]), "r"(pD[upm][upn][3]),
-             "l"(gC + (ulm*SGEMM_NPTM + upm*SGEMM_NTM)*NN
-                       + uln*SGEMM_NPTN + upn*SGEMM_NTN), "r"(ldC)
+             "l"(gC + upm*SGEMM_NL*SGEMM_NTM*NN + ulm*SGEMM_NTM*NN
+                    + upn*SGEMM_NL*SGEMM_NTN + uln*SGEMM_NTN), "r"(ldC)
           : "memory");
 #else
       asm("{  wmma.store.d.sync.aligned.row" SGEMM_TDM ".global.f32\n"
@@ -606,8 +586,8 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
              "r"(pD[upm][upn][2]), "r"(pD[upm][upn][3]),
              "r"(pD[upm][upn][4]), "r"(pD[upm][upn][5]),
              "r"(pD[upm][upn][6]), "r"(pD[upm][upn][7]),
-             "l"(gC + ulm*SGEMM_NPTM*NN + upm*SGEMM_NTM*NN
-                    + uln*SGEMM_NPTN + upn*SGEMM_NTN), "r"(ldC)
+             "l"(gC + upm*SGEMM_NL*SGEMM_NTM*NN + ulm*SGEMM_NTM*NN
+                    + upn*SGEMM_NL*SGEMM_NTN + uln*SGEMM_NTN), "r"(ldC)
           : "memory");
 #endif
 }
@@ -806,7 +786,7 @@ gen_code_compute_matM(uint nm0, uint nn0, uint nk0, const SgemmParam &param)
     uint ntk = 16U;
     uint nm = ceil_multi(nm0, param.nl * param.npm * param.ntm);
     uint nn = ceil_multi(nn0, param.nl * param.npn * param.ntn);
-    uint nk = ceil_multi(nk0, param.nl * param.npk * ntk);
+    uint nk = ceil_multi(nk0, param.nl * ntk);
     string str, str_tdm;
     if (param.ntm ==  8) str_tdm = R"(".m8n32k16")";
     if (param.ntm == 16) str_tdm = R"(".m16n16k16")";
@@ -822,16 +802,13 @@ gen_code_compute_matM(uint nm0, uint nn0, uint nk0, const SgemmParam &param)
     str += "#define SGEMM_NL      " + to_string(param.nl)       + "U\n";
     str += "#define SGEMM_NPM     " + to_string(param.npm)      + "U\n";
     str += "#define SGEMM_NPN     " + to_string(param.npn)      + "U\n";
-    str += "#define SGEMM_NPK     " + to_string(param.npk)      + "U\n";
     str += "#define SGEMM_NTM     " + to_string(param.ntm)      + "U\n";
     str += "#define SGEMM_NTN     " + to_string(param.ntn)      + "U\n";
     str += "#define SGEMM_NTK     " + to_string(ntk)            + "U\n";
     str += "#define SGEMM_NPTM    (SGEMM_NPM * SGEMM_NTM)\n";
     str += "#define SGEMM_NPTN    (SGEMM_NPN * SGEMM_NTN)\n";
-    str += "#define SGEMM_NPTK    (SGEMM_NPK * SGEMM_NTK)\n";
     str += "#define SGEMM_NLPTM   (SGEMM_NL * SGEMM_NPM * SGEMM_NTM)\n";
     str += "#define SGEMM_NLPTN   (SGEMM_NL * SGEMM_NPN * SGEMM_NTN)\n";
-    str += "#define SGEMM_NLPTK   (SGEMM_NL * SGEMM_NPK * SGEMM_NTK)\n";
     str += "#define SGEMM_TDM     " + str_tdm + "\n";
     str += code_compute_matM_wmma;
     return make_tuple(str, nm, nn, nk,
@@ -1047,20 +1024,16 @@ static SgemmParam tune_compute_matM(bool use_wmma, const OCL::Device &device,
     if      (nmax == 8U)  mmax = max(mmax, 32U);
     else if (nmax == 16U) mmax = max(mmax, 16U);
     uint ntm, ntn, ntk = 16U;
-    for (uint nl = 1U; nl <= 16U; nl *= 2U)
-      for (uint npm = 1U; npm <= 4U; npm *= 2U)
-	for (uint npn = 1U; npn <= 4U; npn *= 2U)
-	  for (uint npk = 1U; npk <= 4U; npk *= 2U)
-	    for (auto t : { /*make_tuple(32U, 8U),*/
-		make_tuple(16U, 16U) /*make_tuple(8U, 32U)*/ }) {
-	      tie(ntm, ntn) = t;
-	      if (mmax < nl*npm*ntm) continue;
-	      if (nmax < nl*npn*ntn) continue;
-	      if (kmax < nl*npk*ntk) continue;
-	      if (2U*nl*size_wrap_wmma < npm*ntm) continue;
-	      if (2U*nl*size_wrap_wmma < npn*ntn) continue;
-	      if (1U*nl*size_wrap_wmma < npn*ntn) continue;
-	      params.emplace_back(true, true, nl, npm, npn, npk, ntm, ntn); } }
+    for (uint nl = 1U; nl <= 8U; nl *= 2U)
+      for (uint npm = 1U; npm <= 8U; npm *= 2U)
+	for (uint npn = 1U; npn <= 8U; npn *= 2U)
+	  for (auto t : { /*make_tuple(32U, 8U),*/
+	      make_tuple(16U, 16U) /*make_tuple(8U, 32U)*/ }) {
+	    tie(ntm, ntn) = t;
+	    if (mmax < nl*npm*ntm) continue;
+	    if (nmax < nl*npn*ntn) continue;
+	    if (kmax < nl*ntk) continue;
+	    params.emplace_back(true, true, nl, npm, npn, ntm, ntn); } }
 
   double time_best = DBL_MAX;
   SgemmParam param_best;
@@ -1115,7 +1088,6 @@ string SgemmParam::gen_info() const noexcept {
     s += string("NL:")   + to_string(nl)  + string(" ");
     s += string("NPM:")  + to_string(npm) + string(" ");
     s += string("NPN:")  + to_string(npn) + string(" ");
-    s += string("NPK:")  + to_string(npk) + string(" ");
     s += string("NTM:")  + to_string(ntm) + string(" ");
     s += string("NTN:")  + to_string(ntn) + string(" (");
     s += to_string(static_cast<uint>(time)) + string("us)"); }

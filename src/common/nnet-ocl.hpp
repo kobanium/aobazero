@@ -47,9 +47,9 @@ struct SgemmParam {
   time(0.0), do_half(do_half_), do_wmma(false), nl(nl_), nlfm(nlfm_),
     npm(npm_), npn(npn_), npk(npk_) {}
   SgemmParam(bool do_half_, bool do_wmma_, uint nl_, uint npm_, uint npn_,
-	     uint npk_, uint ntm_, uint ntn_) noexcept :
-  time(0.0), do_half(do_half_), do_wmma(do_wmma_),
-    nl(nl_), npm(npm_), npn(npn_), npk(npk_), ntm(ntm_), ntn(ntn_) {}
+	     uint ntm_, uint ntn_) noexcept :
+  time(0.0), do_half(do_half_), do_wmma(do_wmma_), nl(nl_), npm(npm_),
+    npn(npn_), ntm(ntm_), ntn(ntn_) {}
   std::string gen_info() const noexcept;
   bool operator<=(const SgemmParam &p) const noexcept {
     if (do_wmma) {
