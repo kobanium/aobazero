@@ -323,6 +323,12 @@ void compute_matV_child(uint ch, uint ub, uint utile,
 )";
 
 const string code_compute_matA_child = R"(
+#ifdef LOAD_HALF
+float load(uint off, __global const half *p) { return vload_half(off, p); }
+#else
+float load(uint off, __global const float *p) { return p[off]; }
+#endif
+
 #ifdef DO_JOIN
 void func_BNReLU(__local float *f, uint off, float sd_inv, float mean,
                  float x) {
@@ -333,12 +339,21 @@ void func_BNReLU(__local float *f, uint off, float sd_inv, float mean,
   f[off] = max(0.0f, sd_inv * (x - mean)); }
 #endif
 
-void compute_matA_child(uint ub, uint utile, float mean, float sd_inv,
+void compute_matA_child(uint ch, uint ub, uint utile, float mean, float sd_inv,
                         float mm[LEN_TILE_IN][LEN_TILE_IN],
+                        __global const void *matM,
                         __local float *flout) {
+  for (uint uh = 0; uh < LEN_TILE_IN; ++uh)
+    for (uint uw = 0; uw < LEN_TILE_IN; ++uw)
+      mm[uh][uw] = load((uh*LEN_TILE_IN + uw)*NM*NN + ch*NN + ub*NTILE + utile,
+                        matM);
+
   uint uh  = utile / NTILE_W;
   uint uw  = utile % NTILE_W;
   flout   += ub*SIZE_PLANE + (uh*WIDTH + uw)*LEN_TILE_OUT;
+#ifdef DO_JOIN
+  barrier(CLK_LOCAL_MEM_FENCE);
+#endif
   func_BNReLU(flout, 0U*WIDTH + 0U, sd_inv, mean,
               + mm[0][0] + mm[0][1] + mm[0][2] + mm[0][3]
               + mm[1][0] + mm[1][1] + mm[1][2] + mm[1][3]
@@ -384,12 +399,6 @@ void compute_matA_child(uint ub, uint utile, float mean, float sd_inv,
 )";
 
 const string code_compute_matA = R"(
-#ifdef LOAD_HALF
-float load(uint off, __global const half *p) { return vload_half(off, p); }
-#else
-float load(uint off, __global const float *p) { return p[off]; }
-#endif
-
 __kernel __attribute__((reqd_work_group_size(NTILE, NB, 1)))
 void compute_matA_BNReLU(__global const void *matM,
                          __global const float *mean_array,
@@ -406,19 +415,10 @@ void compute_matA_BNReLU(__global const void *matM,
       = fbypass[ch*NB*256U + u*NB*16U + ub*NTILE + utile];
 #endif
 
-  uint uh = utile / NTILE_W;
-  uint uw = utile % NTILE_W;
-  float M[LEN_TILE_IN][LEN_TILE_IN];
-  for (uint uh = 0; uh < LEN_TILE_IN; ++uh)
-    for (uint uw = 0; uw < LEN_TILE_IN; ++uw)
-      M[uh][uw] = load((uh*LEN_TILE_IN + uw)*NM*NN + ch*NN + ub*NTILE + utile,
-                       matM);
   float mean   = mean_array[ch];
   float sd_inv = sd_inv_array[ch];
-#ifdef DO_JOIN
-  barrier(CLK_LOCAL_MEM_FENCE);
-#endif
-  compute_matA_child(ub, utile, mean, sd_inv, M, flout);
+  float M[LEN_TILE_IN][LEN_TILE_IN];
+  compute_matA_child(ch, ub, utile, mean, sd_inv, M, matM, flout);
 
   barrier(CLK_LOCAL_MEM_FENCE);
   for (uint u = 0; u < NTILE; ++u)
@@ -443,12 +443,6 @@ void compute_matV(__global const float *fin, __global void *matV) {
 )";
 
 const string code_compute_matAV = R"(
-#ifdef LOAD_HALF
-float load(uint off, __global const half *p) { return vload_half(off, p); }
-#else
-float load(uint off, __global const float *p) { return p[off]; }
-#endif
-
 __kernel __attribute__((reqd_work_group_size(NTILE, NB, 1)))
 void compute_matAV(__global const void *matM,
                    __global const float *mean_array,
@@ -467,17 +461,10 @@ void compute_matAV(__global const void *matM,
     flout[u*NB*NTILE + ub*NTILE + utile]
       = fbypass[ch*NB*256U + u*NB*16U + ub*NTILE + utile];
 #endif
-  float M[LEN_TILE_IN][LEN_TILE_IN];
-  for (uint uh = 0; uh < LEN_TILE_IN; ++uh)
-    for (uint uw = 0; uw < LEN_TILE_IN; ++uw)
-      M[uh][uw] = load((uh*LEN_TILE_IN + uw)*NM*NN + ch*NN + ub*NTILE + utile,
-                       matM);
   float mean   = mean_array[ch];
   float sd_inv = sd_inv_array[ch];
-#ifdef DO_JOIN
-  barrier(CLK_LOCAL_MEM_FENCE);
-#endif
-  compute_matA_child(ub, utile, mean, sd_inv, M, flout);
+  float M[LEN_TILE_IN][LEN_TILE_IN];
+  compute_matA_child(ch, ub, utile, mean, sd_inv, M, matM, flout);
 
   barrier(CLK_LOCAL_MEM_FENCE);
 #ifdef DO_FORK
