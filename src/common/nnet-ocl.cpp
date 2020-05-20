@@ -403,7 +403,7 @@ void compute_matA_BNReLU(__global const void *matM,
 #ifdef DO_JOIN
   for (uint u = 0; u < NTILE; ++u)
     flout[u*NB*NTILE + ub*NTILE + utile]
-      = fbypass[ch*NB*128U + u*NB*NTILE + ub*NTILE + utile];
+      = fbypass[ch*NB*256U + u*NB*16U + ub*NTILE + utile];
 #endif
 
   uint uh = utile / NTILE_W;
@@ -465,7 +465,7 @@ void compute_matAV(__global const void *matM,
 #ifdef DO_JOIN
   for (uint u = 0; u < NTILE; ++u)
     flout[u*NB*NTILE + ub*NTILE + utile]
-      = fbypass[ch*NB*128U + u*NB*NTILE + ub*NTILE + utile];
+      = fbypass[ch*NB*256U + u*NB*16U + ub*NTILE + utile];
 #endif
   float M[LEN_TILE_IN][LEN_TILE_IN];
   for (uint uh = 0; uh < LEN_TILE_IN; ++uh)
@@ -482,7 +482,7 @@ void compute_matAV(__global const void *matM,
   barrier(CLK_LOCAL_MEM_FENCE);
 #ifdef DO_FORK
   for (uint u = 0; u < NTILE; ++u)
-    fbypass[ch*NB*128U + u*NB*NTILE + ub*NTILE + utile]
+    fbypass[ch*NB*256U + u*NB*16U + ub*NTILE + utile]
       = flout[u*NB*NTILE + ub*NTILE + utile];
 #endif
   compute_matV_child(ch, ub, utile, M, flout, matV); }
@@ -1976,7 +1976,7 @@ string NNetOCL::reset(uint maxsize_batch,
   lines << _mng_value3.gen_info() << "\n";
 
   uint size_input      = maxsize_batch * NNAux::nch_input * 128U + 32U;
-  uint size_bypass     = maxsize_batch * resnet_nout * 128U;
+  uint size_bypass     = maxsize_batch * resnet_nout * 256U;
   uint sizeV_input     = (_pmng_compute_matM[0].get_nk()
 			  * _pmng_compute_matM[0].get_nn() * size_tile_in);
   uint sizeV           = (_pmng_compute_matM[1].get_nk()
