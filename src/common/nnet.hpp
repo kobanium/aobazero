@@ -10,7 +10,7 @@ namespace NNAux {
   using uint   = unsigned int;
   using row_t  = std::unique_ptr<float []>;
   using wght_t = std::vector<std::pair<uint, row_t>>;
-  constexpr uint maxnum_nipc    = 128U;
+  constexpr uint maxnum_nipc    = 256U;
   constexpr uint maxnum_nnet    = 64U;
   constexpr uint width          = 9U;
   constexpr uint height         = 9U;

@@ -67,26 +67,26 @@ static_assert(sizeof(float) == sizeof(uint), "sizeof(float) == sizeof(uint)");
 static_assert(sizeof(float) == sizeof(ushort) * 2U,
 	      "sizeof(float) == sizeof(ushort) * 2U");
 
-constexpr char msg_bad_wght_dim[] = "bad weight dimension";
-constexpr char msg_opencl_error[] = "opencl";
-constexpr uint tune_sample_size   = 256U;
-constexpr uint size_wrap_wmma     = 32U;
-constexpr uint len_kernel         = 3U;
-constexpr uint size_kernel        = len_kernel * len_kernel;
-constexpr uint len_tile_out       = 3U;
-constexpr uint len_tile_in        = 5U;
-constexpr uint size_tile_in       = len_tile_in * len_tile_in;
-constexpr uint ntile_h            = 3U;
-constexpr uint ntile_w            = 3U;
-constexpr uint ntile              = ntile_h * ntile_w;
-constexpr uint size_plane_in      = size_tile_in * ntile;
-constexpr uint pad                = 1U;
-constexpr uint send_size_ave      = 3000U;
-constexpr uint read_size_ave      = 400U;
-constexpr uint send_nch_fill      = 17U * 8U + 2U;
-constexpr uint size_align_local   = 32U;
-constexpr float bn_factor         = 1.0f / 999.982f;
-constexpr float bn_eps            = 1e-5f;
+constexpr char msg_bad_wght_dim[]    = "bad weight dimension";
+constexpr char msg_opencl_error[]    = "opencl";
+constexpr uint tune_sample_size_base = 256U;
+constexpr uint size_wrap_wmma        = 32U;
+constexpr uint len_kernel            = 3U;
+constexpr uint size_kernel           = len_kernel * len_kernel;
+constexpr uint len_tile_out          = 3U;
+constexpr uint len_tile_in           = 5U;
+constexpr uint size_tile_in          = len_tile_in * len_tile_in;
+constexpr uint ntile_h               = 3U;
+constexpr uint ntile_w               = 3U;
+constexpr uint ntile                 = ntile_h * ntile_w;
+constexpr uint size_plane_in         = size_tile_in * ntile;
+constexpr uint pad                   = 1U;
+constexpr uint send_size_ave         = 3000U;
+constexpr uint read_size_ave         = 400U;
+constexpr uint send_nch_fill         = 17U * 8U + 2U;
+constexpr uint size_align_local      = 32U;
+constexpr float bn_factor            = 1.0f / 999.982f;
+constexpr float bn_eps               = 1e-5f;
 
 /*
   static int64_t elapsed_sum = 0;
@@ -1067,7 +1067,7 @@ static SgemmParam tune_compute_matM(bool use_wmma, const OCL::Device &device,
     else ++it; }
 
   uint sample_size = max(2U, static_cast<uint>(100000.0 / time_best));
-  sample_size = min(sample_size, tune_sample_size);
+  sample_size = min(sample_size, tune_sample_size_base * 4U);
   if (1U < sample_size) {
     time_best = DBL_MAX;
     while (! params_candi.empty()) {
@@ -1325,7 +1325,7 @@ void ManageSgemm::start(const OCL::Device &device, const OCL::Context &context,
     else ++it; }
   
   uint sample_size = max(2U, static_cast<uint>(100000.0 / time));
-  sample_size = min(sample_size, tune_sample_size);
+  sample_size = min(sample_size, tune_sample_size_base);
   if (1U < sample_size) {
     time = DBL_MAX;
     while (! params_candi.empty()) {
