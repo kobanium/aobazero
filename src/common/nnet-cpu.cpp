@@ -1,6 +1,8 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
-#if defined(USE_OPENBLAS) || defined(USE_MKL)
+#if ! defined(USE_OPENBLAS) && ! defined(USE_MKL)
+#  error "no blas support"
+#else
 #  include "err.hpp"
 #  include "iobase.hpp"
 #  include "nnet-cpu.hpp"
@@ -56,7 +58,7 @@ void NNetCPU::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
 		    int thread_num) noexcept {
   assert(0 < maxsize_batch);
   if (thread_num == -1) thread_num = omp_get_max_threads();
-  omp_set_num_threads(thread_num);
+  _thread_num = thread_num;
 
 #if defined(USE_MKL)
 #  if ! defined(__INTEL_COMPILER) && defined(__linux__) && ! defined(__MIC__)
@@ -64,8 +66,6 @@ void NNetCPU::reset(uint maxsize_batch, const vector<pair<uint, row_t>> &wght,
     die(ERR_INT("mkl_set_interface_layer() failed."));
 #  endif
   mkl_set_num_threads(thread_num);
-#elif defined(USE_OPENBLAS)
-  openblas_set_num_threads(1);
 #endif
 
   _maxsize_batch = maxsize_batch;
@@ -591,6 +591,12 @@ uint NNetCPU::push_ff(uint size_batch, const float *input,
 		      const uint *sizes_nnmove, const ushort *nnmoves,
 		      float *probs, float *values) noexcept {
   assert(input && sizes_nnmove && nnmoves && probs && values);
+
+  omp_set_num_threads(_thread_num);
+#if defined(USE_OPENBLAS)
+  openblas_set_num_threads(1);
+#endif
+
   if (size_batch == 0 || _maxsize_batch < size_batch)
     die(ERR_INT("size_batch == 0"));
   
@@ -664,6 +670,7 @@ uint NNetCPU::push_ff(uint size_batch, const float *input,
   swap(f1, f2);
   for (uint ub = 0; ub < size_batch; ++ub)
     copy_n(_value2_bias.get(), _value2_nout, f2 + ub * _value2_nout);
+
   cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
 	      size_batch, _value2_nout, _value2_nin,
 	      1.0f, f1, _value2_nin, _value2_weight.get(), _value2_nin,

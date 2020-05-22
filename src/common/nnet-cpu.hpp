@@ -1,10 +1,12 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
 #pragma once
-#if defined(USE_OPENBLAS) || defined(USE_MKL)
-#include "nnet.hpp"
-#include <memory>
-#include <vector>
+#if ! defined(USE_OPENBLAS) && ! defined(USE_MKL)
+#  error "no blas support"
+#else
+#  include "nnet.hpp"
+#  include <memory>
+#  include <vector>
 
 class NNetCPU : public NNet {
   using uint   = unsigned int;
@@ -13,6 +15,7 @@ class NNetCPU : public NNet {
   struct ResWght { row_t matU, mean, sd_inv; };
   row_t _fslot[3];
 
+  int _thread_num;
   uint _maxsize_batch, _maxsize_out;
   uint _conv3x3_nin_max, _conv3x3_nout_max;
   uint _resnet_nout;
