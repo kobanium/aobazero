@@ -765,6 +765,26 @@ static uint ceil_power2(uint u) noexcept {
   for (u0 = 1U; u0 < u; u0 *= 2U) assert(u0 <= UINT_MAX / 2U);
   return u0; }
 
+static bool is_bs_allowed(uint bs) noexcept {
+  uint major = bs / 7U;
+  uint minor = bs % 7U;
+  if (major == 0 && 0 < minor) return true;
+  if (0 < major && minor == 0) return true;
+  return false; }
+
+static uint bs_to_len_n(uint bs) noexcept {
+  assert(is_bs_allowed(bs));
+  uint major = bs / 7U;
+  uint minor = bs % 7U;
+  if (major == 0) return minor * ntile;
+  return (major - 1U) * 64U + 7U * ntile; }
+
+static uint ub_to_index_n(uint ub) noexcept {
+  assert(is_bs_allowed(bs));
+  uint major = ub / 7U;
+  uint minor = ub % 7U;
+  return major * 64U + minor * ntile; }
+
 static tuple<string, uint, uint, uint, size_t, size_t, size_t, size_t>
 gen_code_compute_matM(uint nm0, uint nn0, uint nk0, const SgemmParam &param)
   noexcept {
