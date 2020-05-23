@@ -203,7 +203,7 @@ void store(float f, uint off, __global half *p) { vstore_half(f, off, p); }
 void store(float f, uint off, __global float *p) { p[off] = f; }
 #endif
 
-void compute_matV_child(uint ch, uint ub, uint utile,
+void compute_matV_child(uint ch, uint ub, uint utile, uint dim_n_offset,
                         float md[LEN_TILE_IN][LEN_TILE_IN],
                         __local const float *flin, __global void *matV) {
   uint uh = utile / NTILE_W;
@@ -221,105 +221,105 @@ void compute_matV_child(uint ch, uint ub, uint utile,
         - x2(md[1][0]) + x1(md[1][1]) + x2(md[1][2]) - x1(md[1][3])
         - x4(md[2][0]) + x2(md[2][1]) + x4(md[2][2]) - x2(md[2][3])
         + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]),
-        (0U*LEN_TILE_IN + 0U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (0U*LEN_TILE_IN + 0U)*NK*NN + dim_n_offset, matV);
   store(- x4(md[1][0]) + x2(md[1][1]) + x4(md[1][2]) - x2(md[1][3])
         - x2(md[2][0]) + x1(md[2][1]) + x2(md[2][2]) - x1(md[2][3])
         + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]),
-        (1U*LEN_TILE_IN + 0U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (1U*LEN_TILE_IN + 0U)*NK*NN + dim_n_offset, matV);
   store(+ x4(md[1][0]) - x2(md[1][1]) - x4(md[1][2]) + x2(md[1][3])
         - x6(md[2][0]) + x3(md[2][1]) + x6(md[2][2]) - x3(md[2][3])
         + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]),
-        (2U*LEN_TILE_IN + 0U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (2U*LEN_TILE_IN + 0U)*NK*NN + dim_n_offset, matV);
   store(- x2(md[1][0]) + x1(md[1][1]) + x2(md[1][2]) - x1(md[1][3])
         + x2(md[3][0]) - x1(md[3][1]) - x2(md[3][2]) + x1(md[3][3]),
-        (3U*LEN_TILE_IN + 0U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (3U*LEN_TILE_IN + 0U)*NK*NN + dim_n_offset, matV);
   store(+ x4(md[1][0]) - x2(md[1][1]) - x4(md[1][2]) + x2(md[1][3])
         - x2(md[2][0]) + x1(md[2][1]) + x2(md[2][2]) - x1(md[2][3])
         - x4(md[3][0]) + x2(md[3][1]) + x4(md[3][2]) - x2(md[3][3])
         + x2(md[4][0]) - x1(md[4][1]) - x2(md[4][2]) + x1(md[4][3]),
-        (4U*LEN_TILE_IN + 0U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (4U*LEN_TILE_IN + 0U)*NK*NN + dim_n_offset, matV);
 
   store(- x4(md[0][1]) - x2(md[0][2]) + x2(md[0][3])
         + x2(md[1][1]) + x1(md[1][2]) - x1(md[1][3])
         + x4(md[2][1]) + x2(md[2][2]) - x2(md[2][3])
         - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]),
-        (0U*LEN_TILE_IN + 1U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (0U*LEN_TILE_IN + 1U)*NK*NN + dim_n_offset, matV);
   store(+ x4(md[1][1]) + x2(md[1][2]) - x2(md[1][3])
         + x2(md[2][1]) + x1(md[2][2]) - x1(md[2][3])
         - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]),
-        (1U*LEN_TILE_IN + 1U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (1U*LEN_TILE_IN + 1U)*NK*NN + dim_n_offset, matV);
   store(- x4(md[1][1]) - x2(md[1][2]) + x2(md[1][3])
         + x6(md[2][1]) + x3(md[2][2]) - x3(md[2][3])
         - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]),
-        (2U*LEN_TILE_IN + 1U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (2U*LEN_TILE_IN + 1U)*NK*NN + dim_n_offset, matV);
   store(+ x2(md[1][1]) + x1(md[1][2]) - x1(md[1][3])
         - x2(md[3][1]) - x1(md[3][2]) + x1(md[3][3]),
-        (3U*LEN_TILE_IN + 1U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (3U*LEN_TILE_IN + 1U)*NK*NN + dim_n_offset, matV);
   store(- x4(md[1][1]) - x2(md[1][2]) + x2(md[1][3])
         + x2(md[2][1]) + x1(md[2][2]) - x1(md[2][3])
         + x4(md[3][1]) + x2(md[3][2]) - x2(md[3][3])
         - x2(md[4][1]) - x1(md[4][2]) + x1(md[4][3]),
-        (4U*LEN_TILE_IN + 1U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (4U*LEN_TILE_IN + 1U)*NK*NN + dim_n_offset, matV);
 
   store(+ x4(md[0][1]) - x6(md[0][2]) + x2(md[0][3])
         - x2(md[1][1]) + x3(md[1][2]) - x1(md[1][3])
         - x4(md[2][1]) + x6(md[2][2]) - x2(md[2][3])
         + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]),
-        (0U*LEN_TILE_IN + 2U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (0U*LEN_TILE_IN + 2U)*NK*NN + dim_n_offset, matV);
   store(- x4(md[1][1]) + x6(md[1][2]) - x2(md[1][3])
         - x2(md[2][1]) + x3(md[2][2]) - x1(md[2][3])
         + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]),
-        (1U*LEN_TILE_IN + 2U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (1U*LEN_TILE_IN + 2U)*NK*NN + dim_n_offset, matV);
   store(+ x4(md[1][1]) - x6(md[1][2]) + x2(md[1][3])
         - x6(md[2][1]) + x9(md[2][2]) - x3(md[2][3])
         + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]),
-        (2U*LEN_TILE_IN + 2U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (2U*LEN_TILE_IN + 2U)*NK*NN + dim_n_offset, matV);
   store(- x2(md[1][1]) + x3(md[1][2]) - x1(md[1][3])
         + x2(md[3][1]) - x3(md[3][2]) + x1(md[3][3]),
-        (3U*LEN_TILE_IN + 2U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (3U*LEN_TILE_IN + 2U)*NK*NN + dim_n_offset, matV);
   store(+ x4(md[1][1]) - x6(md[1][2]) + x2(md[1][3])
         - x2(md[2][1]) + x3(md[2][2]) - x1(md[2][3])
         - x4(md[3][1]) + x6(md[3][2]) - x2(md[3][3])
         + x2(md[4][1]) - x3(md[4][2]) + x1(md[4][3]),
-        (4U*LEN_TILE_IN + 2U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (4U*LEN_TILE_IN + 2U)*NK*NN + dim_n_offset, matV);
 
   store(- x2(md[0][1]) + x2(md[0][3]) + x1(md[1][1]) - x1(md[1][3])
         + x2(md[2][1]) - x2(md[2][3]) - x1(md[3][1]) + x1(md[3][3]),
-        (0U*LEN_TILE_IN + 3U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (0U*LEN_TILE_IN + 3U)*NK*NN + dim_n_offset, matV);
   store(+ x2(md[1][1]) - x2(md[1][3]) + x1(md[2][1]) - x1(md[2][3])
         - x1(md[3][1]) + x1(md[3][3]),
-        (1U*LEN_TILE_IN + 3U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (1U*LEN_TILE_IN + 3U)*NK*NN + dim_n_offset, matV);
   store(- x2(md[1][1]) + x2(md[1][3]) + x3(md[2][1]) - x3(md[2][3])
         - x1(md[3][1]) + x1(md[3][3]),
-        (2U*LEN_TILE_IN + 3U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (2U*LEN_TILE_IN + 3U)*NK*NN + dim_n_offset, matV);
   store(+ x1(md[1][1]) - x1(md[1][3]) - x1(md[3][1]) + x1(md[3][3]),
-        (3U*LEN_TILE_IN + 3U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (3U*LEN_TILE_IN + 3U)*NK*NN + dim_n_offset, matV);
   store(- x2(md[1][1]) + x2(md[1][3]) + x1(md[2][1]) - x1(md[2][3])
         + x2(md[3][1]) - x2(md[3][3]) - x1(md[4][1]) + x1(md[4][3]),
-        (4U*LEN_TILE_IN + 3U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (4U*LEN_TILE_IN + 3U)*NK*NN + dim_n_offset, matV);
 
   store(+ x4(md[0][1]) - x2(md[0][2]) - x4(md[0][3]) + x2(md[0][4])
         - x2(md[1][1]) + x1(md[1][2]) + x2(md[1][3]) - x1(md[1][4])
         - x4(md[2][1]) + x2(md[2][2]) + x4(md[2][3]) - x2(md[2][4])
         + x2(md[3][1]) - x1(md[3][2]) - x2(md[3][3]) + x1(md[3][4]),
-        (0U*LEN_TILE_IN + 4U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (0U*LEN_TILE_IN + 4U)*NK*NN + dim_n_offset, matV);
   store(- x4(md[1][1]) + x2(md[1][2]) + x4(md[1][3]) - x2(md[1][4])
         - x2(md[2][1]) + x1(md[2][2]) + x2(md[2][3]) - x1(md[2][4])
         + x2(md[3][1]) - x1(md[3][2]) - x2(md[3][3]) + x1(md[3][4]),
-        (1U*LEN_TILE_IN + 4U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (1U*LEN_TILE_IN + 4U)*NK*NN + dim_n_offset, matV);
   store(+ x4(md[1][1]) - x6(md[2][1]) + x2(md[3][1])
         - x2(md[1][2]) + x3(md[2][2]) - x1(md[3][2])
         - x4(md[1][3]) + x6(md[2][3]) - x2(md[3][3])
         + x2(md[1][4]) - x3(md[2][4]) + x1(md[3][4]),
-        (2U*LEN_TILE_IN + 4U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (2U*LEN_TILE_IN + 4U)*NK*NN + dim_n_offset, matV);
   store(- x2(md[1][1]) + x2(md[3][1]) + x1(md[1][2]) - x1(md[3][2])
         + x2(md[1][3]) - x2(md[3][3]) - x1(md[1][4]) + x1(md[3][4]),
-        (3U*LEN_TILE_IN + 4U)*NK*NN + ch*NN + ub*NTILE + utile, matV);
+        (3U*LEN_TILE_IN + 4U)*NK*NN + dim_n_offset, matV);
   store(+ x4(md[1][1]) - x2(md[1][2]) - x4(md[1][3]) + x2(md[1][4])
         - x2(md[2][1]) + x1(md[2][2]) + x2(md[2][3]) - x1(md[2][4])
         - x4(md[3][1]) + x2(md[3][2]) + x4(md[3][3]) - x2(md[3][4])
         + x2(md[4][1]) - x1(md[4][2]) - x2(md[4][3]) + x1(md[4][4]),
-        (4U*LEN_TILE_IN + 4U)*NK*NN + ch*NN + ub*NTILE + utile, matV); }
+        (4U*LEN_TILE_IN + 4U)*NK*NN + dim_n_offset, matV); }
 )";
 
 const string code_compute_matA_child = R"(
@@ -339,14 +339,14 @@ void func_BNReLU(__local float *f, uint off, float sd_inv, float mean,
   f[off] = max(0.0f, sd_inv * (x - mean)); }
 #endif
 
-void compute_matA_child(uint ch, uint ub, uint utile, float mean, float sd_inv,
+void compute_matA_child(uint ch, uint ub, uint utile, uint dim_n_offset,
+                        float mean, float sd_inv,
                         float mm[LEN_TILE_IN][LEN_TILE_IN],
                         __global const void *matM,
                         __local float *flout) {
   for (uint uh = 0; uh < LEN_TILE_IN; ++uh)
     for (uint uw = 0; uw < LEN_TILE_IN; ++uw)
-      mm[uh][uw] = load((uh*LEN_TILE_IN + uw)*NM*NN + ch*NN + ub*NTILE + utile,
-                        matM);
+      mm[uh][uw] = load((uh*LEN_TILE_IN + uw)*NM*NN + dim_n_offset, matM);
 
   uint uh  = utile / NTILE_W;
   uint uw  = utile % NTILE_W;
@@ -399,7 +399,7 @@ void compute_matA_child(uint ch, uint ub, uint utile, float mean, float sd_inv,
 )";
 
 const string code_compute_matA = R"(
-__kernel __attribute__((reqd_work_group_size(NTILE, NB, 1)))
+__kernel __attribute__((reqd_work_group_size(NTILE, NBWS, 1)))
 void compute_matA_BNReLU(__global const void *matM,
                          __global const float *mean_array,
                          __global const float *sd_inv_array,
@@ -411,39 +411,51 @@ void compute_matA_BNReLU(__global const void *matM,
   __local float flout[NB*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
 #ifdef DO_JOIN
   for (uint u = 0; u < NTILE; ++u)
-    flout[u*NB*NTILE + ub*NTILE + utile]
-      = fbypass[ch*NB*256U + u*NB*16U + ub*NTILE + utile];
+    flout[ub*SIZE_PLANE + u*NTILE + utile]
+      = fbypass[ch*NB*256U + ub*SIZE_PLANE + u*NTILE + utile];
 #endif
 
+  uint ub_major = ub / 7U;
+  uint ub_minor = ub % 7U;
+  uint dim_n_offset = ch*NN + ub_major*64U + ub_minor*NTILE + utile;
   float mean   = mean_array[ch];
   float sd_inv = sd_inv_array[ch];
   float M[LEN_TILE_IN][LEN_TILE_IN];
-  compute_matA_child(ch, ub, utile, mean, sd_inv, M, matM, flout);
+  compute_matA_child(ch, ub, utile, dim_n_offset, mean, sd_inv, M, matM,
+                     flout);
 
   barrier(CLK_LOCAL_MEM_FENCE);
   for (uint u = 0; u < NTILE; ++u)
-    fout[ch*NN_OUT + u*NB*NTILE + ub*NTILE + utile]
-      = flout[u*NB*NTILE + ub*NTILE + utile]; }
+//    fout[ch*NN_OUT + u*NB*NTILE + ub*NTILE + utile]
+//      = flout[u*NB*NTILE + ub*NTILE + utile];
+    fout[ch*NN_OUT + ub*SIZE_PLANE + u*NTILE + utile]
+      = flout[ub*SIZE_PLANE + u*NTILE + utile];
+}
 )";
 
 const string code_compute_matV = R"(
-__kernel __attribute__((reqd_work_group_size(NTILE, NB, 1)))
+__kernel __attribute__((reqd_work_group_size(NTILE, NBWS, 1)))
 void compute_matV(__global const float *fin, __global void *matV) {
   uint utile = get_global_id(0);
   uint ub    = get_global_id(1);
   uint ch    = get_global_id(2);
   __local float flin[NB*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
   for (uint u = 0; u < 9U; ++u)
-    flin[u*NB*NTILE + ub*NTILE + utile]
-      = fin[ch*NB*SIZE_PLANE + u*NB*NTILE + ub*NTILE + utile];
+    //flin[u*NB*NTILE + ub*NTILE + utile]
+    //  = fin[ch*NB*SIZE_PLANE + u*NB*NTILE + ub*NTILE + utile];
+    flin[ub*SIZE_PLANE + u*NTILE + utile]
+      = fin[ch*NB*SIZE_PLANE + ub*SIZE_PLANE + u*NTILE + utile];
 
+  uint ub_major = ub / 7U;
+  uint ub_minor = ub % 7U;
+  uint dim_n_offset = ch*NN + ub_major*64U + ub_minor*NTILE + utile;
   float M[LEN_TILE_IN][LEN_TILE_IN];
   barrier(CLK_LOCAL_MEM_FENCE);
-  compute_matV_child(ch, ub, utile, M, flin, matV); }
+  compute_matV_child(ch, ub, utile, dim_n_offset, M, flin, matV); }
 )";
 
 const string code_compute_matAV = R"(
-__kernel __attribute__((reqd_work_group_size(NTILE, NB, 1)))
+__kernel __attribute__((reqd_work_group_size(NTILE, NBWS, 1)))
 void compute_matAV(__global const void *matM,
                    __global const float *mean_array,
                    __global const float *sd_inv_array,
@@ -452,27 +464,34 @@ void compute_matAV(__global const void *matM,
 #else
                    __global float *matV) {
 #endif
-  uint utile = get_global_id(0);
-  uint ub    = get_global_id(1);
-  uint ch    = get_global_id(2);
+  uint utile    = get_global_id(0);
+  uint ub       = get_global_id(1);
+  uint ch       = get_global_id(2);
+  //uint ub_major = get_group_id(1);
+  //uint ub_minor = get_local_id(1);
   __local float flout[NB*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
 #ifdef DO_JOIN
   for (uint u = 0; u < NTILE; ++u)
-    flout[u*NB*NTILE + ub*NTILE + utile]
-      = fbypass[ch*NB*256U + u*NB*16U + ub*NTILE + utile];
+    flout[ub*SIZE_PLANE + u*NTILE + utile]
+      = fbypass[ch*NB*256U + ub*SIZE_PLANE + u*NTILE + utile];
 #endif
-  float mean   = mean_array[ch];
-  float sd_inv = sd_inv_array[ch];
+
+  uint ub_major = ub / 7U;
+  uint ub_minor = ub % 7U;
+  uint dim_n_offset = ch*NN + ub_major*64U + ub_minor*NTILE + utile;
+  float mean        = mean_array[ch];
+  float sd_inv      = sd_inv_array[ch];
   float M[LEN_TILE_IN][LEN_TILE_IN];
-  compute_matA_child(ch, ub, utile, mean, sd_inv, M, matM, flout);
+  compute_matA_child(ch, ub, utile, dim_n_offset, mean, sd_inv, M, matM,
+                     flout);
 
   barrier(CLK_LOCAL_MEM_FENCE);
 #ifdef DO_FORK
   for (uint u = 0; u < NTILE; ++u)
-    fbypass[ch*NB*256U + u*NB*16U + ub*NTILE + utile]
-      = flout[u*NB*NTILE + ub*NTILE + utile];
+    fbypass[ch*NB*256U + ub*SIZE_PLANE + u*NTILE + utile]
+      = flout[ub*SIZE_PLANE + u*NTILE + utile];
 #endif
-  compute_matV_child(ch, ub, utile, M, flout, matV); }
+  compute_matV_child(ch, ub, utile, dim_n_offset, M, flout, matV); }
 )";
 
 const string code_compute_matM_wmma = R"(
@@ -778,12 +797,19 @@ static uint bs_to_len_n(uint bs) noexcept {
   uint minor = bs % 7U;
   if (major == 0) return minor * ntile;
   return (major - 1U) * 64U + 7U * ntile; }
-
+/*
 static uint ub_to_index_n(uint ub) noexcept {
   assert(is_bs_allowed(bs));
   uint major = ub / 7U;
   uint minor = ub % 7U;
   return major * 64U + minor * ntile; }
+*/
+static uint bs_to_AV_work_size(uint bs) noexcept {
+  assert(is_bs_allowed(bs));
+  uint major = bs / 14U;
+  uint minor = bs % 14U;
+  if (major == 0) return minor;
+  return 7U; }
 
 static tuple<string, uint, uint, uint, size_t, size_t, size_t, size_t>
 gen_code_compute_matM(uint nm0, uint nn0, uint nk0, const SgemmParam &param)
@@ -1443,9 +1469,9 @@ void ManageComputeMatV::start(bool store_half, const OCL::Context &context,
 			      const OCL::Memory mem_in[NNAux::nslot],
 			      const OCL::Memory mem_matV[NNAux::nslot])
   noexcept {
-  assert(context.ok());
+  assert(context.ok() && is_bs_allowed(nb));
   _size_l[0] = ntile;
-  _size_l[1] = nb;
+  _size_l[1] = bs_to_AV_work_size(nb);
   _size_l[2] = 1U;
   _size_g[0] = ntile;
   _size_g[1] = nb;
@@ -1453,9 +1479,10 @@ void ManageComputeMatV::start(bool store_half, const OCL::Context &context,
 
   string code;
   if (store_half) code += "#define STORE_HALF\n";
-  code += ("#define NB " + to_string(nb) + "U\n"
-	   "#define NK " + to_string(nk) + "U\n"
-	   "#define NN " + to_string(nn) + "U\n"
+  code += ("#define NBWS " + to_string(_size_l[1]) + "U\n"
+	   "#define NB   " + to_string(nb) + "U\n"
+	   "#define NK   " + to_string(nk) + "U\n"
+	   "#define NN   " + to_string(nn) + "U\n"
 	   + code_common + code_compute_matV_child + code_compute_matV);
   OCL::Program pg = context.gen_program(code);
   for (uint u = 0; u < NNAux::nslot; ++u) {
@@ -1478,9 +1505,9 @@ void ManageComputeMatA::start(bool load_half, const OCL::Context &context,
 			      const OCL::Memory &sd_inv,
 			      const OCL::Memory mem_out[NNAux::nslot])
   noexcept {
-  assert(context.ok() && mean.ok() && sd_inv.ok());
+  assert(context.ok() && mean.ok() && sd_inv.ok() && is_bs_allowed(nb));
   _size_l[0] = ntile;
-  _size_l[1] = nb;
+  _size_l[1] = bs_to_AV_work_size(nb);
   _size_l[2] = 1U;
   _size_g[0] = ntile;
   _size_g[1] = nb;
@@ -1493,7 +1520,8 @@ void ManageComputeMatA::start(bool load_half, const OCL::Context &context,
   (void)load_half;
 #endif
   if (flag_join) code += "#define DO_JOIN\n";
-  code += ("#define NB     " + to_string(nb) + "\n"
+  code += ("#define NBWS   " + to_string(_size_l[1]) + "U\n"
+	   "#define NB     " + to_string(nb) + "\n"
 	   "#define NM     " + to_string(nm) + "\n"
 	   "#define NN     " + to_string(nn) + "\n"
 	   "#define NN_OUT " + to_string(nn_out) + "\n"
@@ -1522,9 +1550,9 @@ void ManageComputeMatAV::start(bool do_half, bool do_join, bool do_fork,
 			       const OCL::Memory &mean,
 			       const OCL::Memory &sd_inv,
 			       const OCL::Memory *mem_bypass) noexcept {
-  assert(context.ok() && mean.ok() && sd_inv.ok());
+  assert(context.ok() && mean.ok() && sd_inv.ok() && is_bs_allowed(nb));
   _size_l[0] = ntile;
-  _size_l[1] = nb;
+  _size_l[1] = bs_to_AV_work_size(nb);
   _size_l[2] = 1U;
   _size_g[0] = ntile;
   _size_g[1] = nb;
@@ -1537,10 +1565,11 @@ void ManageComputeMatAV::start(bool do_half, bool do_join, bool do_fork,
   if (do_half) code += "#define STORE_HALF\n";
   if (do_join) code += "#define DO_JOIN\n";
   if (do_fork) code += "#define DO_FORK\n";
-  code += ("#define NB " + to_string(nb) + "U\n"
-	   "#define NM " + to_string(nm) + "U\n"
-	   "#define NN " + to_string(nn) + "U\n"
-	   "#define NK " + to_string(nk) + "U\n"
+  code += ("#define NBWS " + to_string(_size_l[1]) + "U\n"
+	   "#define NB   " + to_string(nb) + "U\n"
+	   "#define NM   " + to_string(nm) + "U\n"
+	   "#define NN   " + to_string(nn) + "U\n"
+	   "#define NK   " + to_string(nk) + "U\n"
 	   + code_common + code_compute_matV_child
 	   + code_compute_matA_child + code_compute_matAV);
   OCL::Program pg = context.gen_program(code);
@@ -1849,6 +1878,8 @@ string NNetOCL::reset(uint maxsize_batch,
   //
   // compute weight dimension
   //
+  if (! is_bs_allowed(maxsize_batch))
+    die(ERR_INT("bad batch size %u", maxsize_batch));
   _maxsize_batch = maxsize_batch;
   _index_block   = ceil_multi(maxsize_batch * send_nch_fill, 32U);
   constexpr uint nrow_input = 4U;
@@ -1951,16 +1982,16 @@ string NNetOCL::reset(uint maxsize_batch,
   //
   SgemmParam param_matM
     = tune_compute_matM(use_wmma, device, context, size_tile_in,
-			resnet_nout, maxsize_batch * ntile, resnet_nout);
+			resnet_nout, bs_to_len_n(maxsize_batch), resnet_nout);
   lines << "  Matrix M:             ";
   lines << param_matM.gen_info() << "\n";
   _pmng_compute_matM.reset(new ManageComputeMatM [_nres_block + 1U]);
   _pmng_compute_matM[0].start(context, size_tile_in, resnet_nout,
-			      maxsize_batch * ntile, NNAux::nch_input,
+			      bs_to_len_n(maxsize_batch), NNAux::nch_input,
 			      param_matM);
   for (uint u = 1U; u < _nres_block + 1U; ++u)
     _pmng_compute_matM[u].start(context, size_tile_in, resnet_nout,
-				maxsize_batch * ntile, resnet_nout,
+				bs_to_len_n(maxsize_batch), resnet_nout,
 				param_matM);
 
   lines << "  Head 1:               ";
@@ -1987,9 +2018,9 @@ string NNetOCL::reset(uint maxsize_batch,
   uint sizeV_input     = (_pmng_compute_matM[0].get_nk()
 			  * _pmng_compute_matM[0].get_nn() * size_tile_in);
   uint sizeV           = (_pmng_compute_matM[1].get_nk()
-			  * _pmng_compute_matM[1].get_nn() * size_tile_in);
-  uint sizeM           = (_pmng_compute_matM[1].get_nm()
-			  * _pmng_compute_matM[1].get_nn() * size_tile_in);
+			  * _pmng_compute_matM[0].get_nn() * size_tile_in);
+  uint sizeM           = (_pmng_compute_matM[0].get_nm()
+			  * _pmng_compute_matM[0].get_nn() * size_tile_in);
   uint size_resout     = _mng_head1.get_nk() * _mng_head1.get_nn();
   uint size_head1_out  = _mng_head1.get_nm() * _mng_head1.get_nn();
   uint size_BNReLU_out = maxsize_batch * head1_nout * 128U;
