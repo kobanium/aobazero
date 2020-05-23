@@ -487,21 +487,27 @@ deque<string> PlayManager::manage_play(bool has_conn) noexcept {
 
   Child::wait(1000U);
   for (auto &e : _engines) {
+    bool flag_eof = false;
     if (e->has_line_err()) {
       char line[65536];
-      if (e->getline_err(line, sizeof(line)) == 0)
-	die(ERR_INT("An engine (%s) terminates.", e->get_fp()));
-      e->out_log(line); }
+      if (e->getline_err(line, sizeof(line)) == 0) flag_eof = true;
+      else e->out_log(line); }
       
     if (e->has_line_in()) {
       char line[65536];
-      if (e->getline_in(line, sizeof(line)) == 0)
-	die(ERR_INT("An engine (%s) terminates.", e->get_fp()));
-      e->out_log(line);
-      string s = e->update(line, _moves_eid0);
-      if (!s.empty()) {
-	_ngen_records += 1U;
-	recs.push_back(move(s)); } }
+      if (e->getline_in(line, sizeof(line)) == 0) flag_eof = true;
+      else {
+	e->out_log(line);
+	string s = e->update(line, _moves_eid0);
+	if (!s.empty()) {
+	  _ngen_records += 1U;
+	  recs.push_back(move(s)); } } }
+
+    if (flag_eof) {
+      char line[65536];
+      while (0 < e->getline_err(line, sizeof(line))) e->out_log(line);
+      while (0 < e->getline_in (line, sizeof(line))) e->out_log(line);
+      die(ERR_INT("An engine (%s) terminates.", e->get_fp())); }
 
     if (! e->is_usistart()) e->start_usi();
     if (has_conn && e->is_ready() && ! e->is_playing()) e->start_newgame(); }
