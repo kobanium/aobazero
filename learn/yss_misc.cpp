@@ -1131,7 +1131,7 @@ int print_time()
 {
 	int year,month,day,week,hour,minute,second;
 	int timer = get_localtime(&year, &month, &day, &week, &hour, &minute, &second);
-	PRT("%4d-%02d-%02d %02d:%02d:%02d\n", year, month, day, hour, minute, second);
+	PRT("%4d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, minute, second);
 	return timer;
 }
 

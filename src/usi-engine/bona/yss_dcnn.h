@@ -5,6 +5,7 @@
 #define INCLUDE_YSS_DCNN_H_GUARD
 
 #include "lock.h"
+#include <atomic>
 
 const int B_SIZE = 9;
 const int DCNN_CHANNELS = 362;
@@ -24,7 +25,9 @@ typedef struct child {
 #define CHILD_VEC
 
 typedef struct hash_shogi {
-	lock_yss_t entry_lock;		// lock for SMP
+	lock_yss_t entry_lock;		// lock
+//	std::atomic<bool> lock;//{false};	// can't resize(N). atomic is non-moveable.
+
 	uint64 hashcode64;			// sequence hash
 	uint64 hash64pos;			// position hash, we check both hash key.
 	int deleted;	//
@@ -50,11 +53,10 @@ extern int fVisitCount;
 extern int fUSIMoveCount;
 extern int fPrtNetworkRawPath;
 extern int nNNetServiceNumber;
+extern int nDrawMove;
 
 extern std::string default_weights;
-#ifdef USE_OPENCL
 extern std::vector<int> default_gpus;
-#endif
 
 extern int usi_go_count;
 extern int usi_bestmove_count;
@@ -80,9 +82,11 @@ void send_usi_info(tree_t * restrict ptree, int sideToMove, int ply, int nodes, 
 void usi_newgame();
 int is_declare_win(tree_t * restrict ptree, int sideToMove);
 int is_declare_win_root(tree_t * restrict ptree, int sideToMove);
+int get_thread_id(tree_t * restrict ptree);
 
 // yss_net.cpp
 void init_network();
+void replace_network(const char *token);
 void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *p_data);
 void prt_dcnn_data(float (*data)[B_SIZE][B_SIZE],int c,int turn_n);
 void prt_dcnn_data_table(float (*data)[B_SIZE][B_SIZE]);

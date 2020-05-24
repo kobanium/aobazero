@@ -24,7 +24,6 @@ clang:
 		LDFLAGS='$(LDFLAGS) -flto -fuse-linker-plugin' \
 		$(PROGRAM)
 
-#DYNAMIC_LIBS = -lboost_program_options -lpthread -lz
 DYNAMIC_LIBS = -lboost_system -lboost_filesystem -lboost_program_options -lpthread -lz -llzma -lrt
 LIBS =
 
@@ -51,23 +50,19 @@ endif
 # CPU_ONLY = 1 for cpu version.
 CPU_ONLY = 0
 
-#CXXFLAGS += -I.
-#CXXFLAGS += -I. -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING
-#CXXFLAGS += -I. -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING -DUSE_CPU_ONLY
-#CXXFLAGS += -I. -I../batched_play/src/common -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING -DUSE_CPU_ONLY -DUSE_OPENBLAS
-
 ifeq ($(CPU_ONLY), 1)
-CXXFLAGS += -I. -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING -DUSE_CPU_ONLY
-else
-CXXFLAGS += -I. -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING -DUSE_OPENCL -DUSE_OPENCL_AOBA
+CXXFLAGS += -DUSE_CPU_ONLY
 endif
-
+CXXFLAGS += -I. -I../common -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING
+CXXFLAGS += -fopenmp
+LDFLAGS  += -fopenmp
 
 CPPFLAGS += -MD -MP
 
 bases  = Network Leela Utils Zobrist GTP Random SMP OpenCL OpenCLScheduler NNCache Tuner CPUPipe
 ifneq ($(CPU_ONLY), 1)
-bases += nnet-ipc osi err xzi iobase
+bases += iobase xzi err shogibase osi nnet nnet-cpu nnet-ocl nnet-srv opencl nnet-ipc
+
 endif
 bases += $(addprefix bona/, data main io proce utility ini attack book makemove unmake time csa valid bitop iterate searchr search quiesrch evaluate swap hash root next movgenex genevasn gencap gennocap gendrop mate1ply rand learn1 learn2 evaldiff problem ponder thread sckt debug mate3 genchk phash dfpn dfpnhash ysszero yss_net)
 
@@ -81,7 +76,7 @@ deps    = $(addsuffix .d,   $(bases))
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c -o $@ $<
 
 %.o : ../common/%.cpp
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c -o $@ $<
+	$(CXX) $(CXXFLAGS) -DUSE_OPENBLAS -DUSE_OPENCL_AOBA $(CPPFLAGS) -c -o $@ $<
 
 $(PROGRAM): $(objects)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS) $(DYNAMIC_LIBS)

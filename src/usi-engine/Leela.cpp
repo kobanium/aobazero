@@ -64,7 +64,7 @@ static void license_blurb() {
         "under certain conditions; see the COPYING file for details.\n\n",
         PROGRAM_VERSION);
 }
-#endif
+
 static void calculate_thread_count_cpu(boost::program_options::variables_map & vm) {
     // If we are CPU-based, there is no point using more than the number of CPUs/
     auto cfg_max_threads = std::min(SMP::get_num_cpus(), size_t{MAX_CPUS});
@@ -132,6 +132,8 @@ static void calculate_thread_count_gpu(boost::program_options::variables_map & v
 
 }
 #endif
+#endif
+
 #if 0
 static void parse_commandline(int argc, char *argv[]) {
     namespace po = boost::program_options;
@@ -487,7 +489,7 @@ static void parse_commandline(int argc, char *argv[]) {
 }
 #endif
 
-static void initialize_network() {
+void initialize_network() {
     auto network = std::make_unique<Network>();
 //  auto playouts = std::min(cfg_max_playouts, cfg_max_visits);
     network->initialize(/*playouts*/ 0, cfg_weightsfile);

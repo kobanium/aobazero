@@ -1,4 +1,4 @@
-// 2019 Team AobaZero
+﻿// 2019 Team AobaZero
 // This source code is in the public domain.
 #include "../config.h"
 
@@ -45,6 +45,7 @@ int fUsiInfo = 0;
 
 int nLimitUctLoop = 100;
 double dLimitSec = 0;
+int nDrawMove = 0;		// 引き分けになる手数。0でなし。floodgateは256, 選手権は321
 
 std::vector <HASH_SHOGI> hash_shogi_table;
 const int HASH_SHOGI_TABLE_SIZE_MIN = 1024*4*4;
@@ -461,6 +462,7 @@ void hash_shogi_table_reset()
 		HASH_SHOGI *pt = &hash_shogi_table[i];
 		pt->deleted = 1;
 		LockInit(pt->entry_lock);
+//		pt->lock = false;
 #ifdef CHILD_VEC
 		std::vector<CHILD>().swap(pt->child);	// memory free hack for vector. 
 #endif
@@ -559,6 +561,102 @@ void hash_half_del(tree_t * restrict ptree, int sideToMove)
 		if ( age_minus==0 ) { PRT("age_minus=0\n"); debug(); }
 	}
 }
+
+#if 0
+template<class T>
+void atomic_lock(std::atomic<T> &f) {
+	T old = f.load();
+	while (!f.compare_exchange_weak(old, old + 1));
+}
+template<class T>
+void atomic_unlock(std::atomic<T> &f) {
+	f.store(0);
+}
+
+//std::atomic<bool> lock_stream = false;
+
+void ttas_lock(std::atomic<bool> &f)
+{
+	do {	// Test and Test-And-Set
+		while ( f.load() ) continue;
+	} while ( f.exchange(true) );
+}
+void ttas_sleep_lock(std::atomic<bool> &f)
+{
+	int min_delay = 100;
+	int max_delay = 1600;
+	int limit = min_delay;
+	do {
+		if ( f.load() ) {
+			int delay = rand_m521() % limit;
+			limit *= 2;
+			if ( limit > max_delay ) limit = max_delay;
+			std::this_thread::sleep_for(std::chrono::nanoseconds(delay));
+			continue;
+		}
+	} while ( f.exchange(true) );
+}
+void ttas_unlock(std::atomic<bool> &f)
+{
+	f.store(false);
+}
+
+
+HASH_SHOGI* HashShogiReadLock(tree_t * restrict ptree, int sideToMove)
+{
+research_empty_block:
+	int n,first_n,loop = 0;
+
+	uint64 hash64pos  = get_marge_hash(ptree, sideToMove);
+	uint64 hashcode64 = ptree->sequence_hash;
+//	PRT("ReadLock hash=%016" PRIx64 "\n",hashcode64);
+
+	n = (int)hashcode64 & Hash_Shogi_Mask;
+	first_n = n;
+	const int TRY_MAX = 8;
+
+	HASH_SHOGI *pt_first = NULL;
+
+	for (;;) {
+		HASH_SHOGI *pt = &hash_shogi_table[n];
+
+//		Lock(pt->entry_lock);		// Lockをかけっぱなしにするように
+		ttas_sleep_lock(pt->lock);
+		if ( pt->deleted == 0 ) {
+			if ( hashcode64 == pt->hashcode64 && hash64pos == pt->hash64pos ) {
+				return pt;
+			}
+		} else {
+			if ( pt_first == NULL ) pt_first = pt;
+		}
+		ttas_unlock(pt->lock);
+//		UnLock(pt->entry_lock);
+
+		// 違う局面だった
+		if ( loop == REHASH_SHOGI ) break;	// 見つからず
+		if ( loop >= TRY_MAX && pt_first ) break;	// 妥協。TRY_MAX回探してなければ未登録扱い。
+		n = (rehash[loop++] + first_n ) & Hash_Shogi_Mask;
+	}
+	if ( pt_first ) {
+		// 検索中に既にpt_firstが使われてしまっていることもありうる。もしくは同時に同じ場所を選んでしまうケースも。
+		ttas_sleep_lock(pt_first->lock);
+//		Lock(pt_first->entry_lock);
+		if ( pt_first->deleted == 0 ) {	// 先に使われてしまった！
+//			UnLock(pt_first->entry_lock);
+			ttas_unlock(pt_first->lock);
+			goto research_empty_block;
+		}
+		ttas_unlock(pt_first->lock);
+		return pt_first;	// 最初にみつけた削除済みの場所を利用
+	}
+	int sum = 0;
+	for (int i=0;i<Hash_Shogi_Table_Size;i++) { sum = hash_shogi_table[i].deleted; PRT("%d",hash_shogi_table[i].deleted); }
+	PRT("\nno child hash Err loop=%d,hash_shogi_use=%d,first_n=%d,del_sum=%d(%.1f%%)\n",loop,hash_shogi_use,first_n,sum, 100.0*sum/Hash_Shogi_Table_Size); debug(); return NULL;
+}
+#endif
+
+
+
 
 HASH_SHOGI* HashShogiReadLock(tree_t * restrict ptree, int sideToMove)
 {
@@ -685,6 +783,15 @@ int inc_uct_count()
 int is_main_thread(tree_t * restrict ptree)
 {
 	return ( ptree == &tlp_atree_work[0] );
+}
+int get_thread_id(tree_t * restrict ptree)
+{
+	int i;
+	for (i=0; i<(int)cfg_num_threads; i++) {
+		if ( ptree == &tlp_atree_work[i] ) return i;
+	}
+	DEBUG_PRT("Err. get_thread_id()\n");
+	return -1;
 }
 int is_limit_sec()
 {
@@ -885,8 +992,8 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		fclose(fp);
 	}
 
-	PRT("%.2f sec, c=%d,net_v=%.3f,h_use=%d,po=%d,%.0f/s,ave_ply=%.1f/%d (%d/%d),Noise=%d,mt=%d,b=%d\n",
-		ct,phg->child_num,phg->net_value,hash_shogi_use,loop,(double)loop/ct,ave_reached_ply,max_r_ply,ptree->nrep,nVisitCount,fAddNoise,thread_max,cfg_batch_size );
+	PRT("%.2f sec, c=%d,net_v=%.3f,h_use=%d,po=%d,%.0f/s,ave_ply=%.1f/%d (%d/%d),Noise=%d,g=%d,mt=%d,b=%d\n",
+		ct,phg->child_num,phg->net_value,hash_shogi_use,loop,(double)loop/ct,ave_reached_ply,max_r_ply,ptree->nrep,nVisitCount,fAddNoise,default_gpus.size(),thread_max,cfg_batch_size );
 
 	return best_move;
 }
@@ -1165,6 +1272,14 @@ select_again:
 		}
 	}
 #endif
+	if ( nDrawMove ) {
+		int d = ptree->nrep + ply - 1 + 1 + sfen_current_move_number;
+		if ( d >= nDrawMove ) {
+			win = 0;
+			skip_search = 1;
+//			PRT("nDrawMove=%d over. ply=%d,moves=%d,%s\n",nDrawMove,ply,d,str_CSA_move(pc->move));
+		}
+	}
 
 	if ( ply >= PLY_MAX-10 ) { PRT("depth over=%d\n",ply); debug(); }
 
@@ -1320,9 +1435,9 @@ int getCmdLineParam(int argc, char *argv[])
 			cfg_random_temp = nf;
 			continue;
 		}
-		if ( strstr(q,"--never_pass") ) {
-//			fNeverPassTillEnd = n;
-//			PRT("fNeverPassTillEnd=%d\n",fNeverPassTillEnd);
+		if ( strstr(p,"-drawmove") ) {
+			PRT("nDrawMove=%d\n",n);
+			nDrawMove = n;
 			continue;
 		}
 		if ( strstr(p,"-p") ) {
@@ -1345,8 +1460,9 @@ int getCmdLineParam(int argc, char *argv[])
 		}
 		if ( strstr(p,"-e") ) {
 			PRT("nNNetServiceNumber=%d\n",n);
-			if ( n < 0 ) DEBUG_PRT("Err.  nNNetServiceNumber.\n");
+			if ( n < 0 ) DEBUG_PRT("Err. nNNetServiceNumber.\n");
 			nNNetServiceNumber = n;
+			default_gpus.push_back(n);
 		}
 #endif
 		if ( strstr(p,"-t") ) {
