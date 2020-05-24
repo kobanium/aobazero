@@ -165,8 +165,7 @@ void compute_BNReLU(__global const float *mean, __global const float *sd_inv,
   float a = sd_inv[ch];
   float b = mean[ch];
   fout[ch*NB*128U + ub*128U + sq]
-    = max(0.0f, a*(fin[ch*NN_IN + ub*SIZE_PLANE + sq] - b));
-}
+    = max(0.0f, a*(fin[ch*NN_IN + ub*SIZE_PLANE + sq] - b)); }
 )";
 
 const string code_common =
@@ -203,14 +202,13 @@ void store(float f, uint off, __global half *p) { vstore_half(f, off, p); }
 void store(float f, uint off, __global float *p) { p[off] = f; }
 #endif
 
-void compute_matV_child(uint ch, uint ub, uint utile, uint dim_n_offset,
+void compute_matV_child(uint utile, uint dim_n_offset,
                         float md[LEN_TILE_IN][LEN_TILE_IN],
                         __local const float *flin, __global void *matV) {
   uint uh = utile / NTILE_W;
   uint uw = utile % NTILE_W;
   int y0  = uh*LEN_TILE_OUT - PAD;
   int x0  = uw*LEN_TILE_OUT - PAD;
-  flin   += ub * SIZE_PLANE;
   for (int y = 0; y < LEN_TILE_IN; ++y)
     for (int x = 0; x < LEN_TILE_IN; ++x) {
       if (0 <= y0 + y && y0 + y < HEIGHT && 0 <= x0 + x && x0 + x < WIDTH)
@@ -339,9 +337,8 @@ void func_BNReLU(__local float *f, uint off, float sd_inv, float mean,
   f[off] = max(0.0f, sd_inv * (x - mean)); }
 #endif
 
-void compute_matA_child(uint ch, uint ub, uint utile, uint dim_n_offset,
-                        float mean, float sd_inv,
-                        float mm[LEN_TILE_IN][LEN_TILE_IN],
+void compute_matA_child(uint utile, uint dim_n_offset, float mean,
+                        float sd_inv, float mm[LEN_TILE_IN][LEN_TILE_IN],
                         __global const void *matM,
                         __local float *flout) {
   for (uint uh = 0; uh < LEN_TILE_IN; ++uh)
@@ -350,7 +347,7 @@ void compute_matA_child(uint ch, uint ub, uint utile, uint dim_n_offset,
 
   uint uh  = utile / NTILE_W;
   uint uw  = utile % NTILE_W;
-  flout   += ub*SIZE_PLANE + (uh*WIDTH + uw)*LEN_TILE_OUT;
+  flout   += (uh*WIDTH + uw)*LEN_TILE_OUT;
 #ifdef DO_JOIN
   barrier(CLK_LOCAL_MEM_FENCE);
 #endif
@@ -406,30 +403,29 @@ void compute_matA_BNReLU(__global const void *matM,
                          __global const float *fbypass,
                          __global float *fout) {
   uint utile = get_global_id(0);
-  uint ub    = get_global_id(1);
   uint ch    = get_global_id(2);
-  __local float flout[NB*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
+  uint ng    = get_num_groups(1);
+  uint ug    = get_group_id(1);
+  uint ub1   = get_local_id(1);
+  __local float flout[NBWS*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
 #ifdef DO_JOIN
   for (uint u = 0; u < NTILE; ++u)
-    flout[ub*SIZE_PLANE + u*NTILE + utile]
-      = fbypass[ch*NB*256U + ub*SIZE_PLANE + u*NTILE + utile];
+    flout[u*NBWS*NTILE + ub1*NTILE + utile]
+      = fbypass[ch*ng*NTILE*BLOCK_SIZE + ug*NTILE*BLOCK_SIZE
+                + u*BLOCK_SIZE + ub1*NTILE + utile];
 #endif
 
-  uint ub_major = ub / 7U;
-  uint ub_minor = ub % 7U;
-  uint dim_n_offset = ch*NN + ub_major*64U + ub_minor*NTILE + utile;
+  uint dim_n_offset = ch*NN + ug*NB_PARTITION + ub1*NTILE + utile;
   float mean   = mean_array[ch];
   float sd_inv = sd_inv_array[ch];
   float M[LEN_TILE_IN][LEN_TILE_IN];
-  compute_matA_child(ch, ub, utile, dim_n_offset, mean, sd_inv, M, matM,
-                     flout);
+  compute_matA_child(utile, dim_n_offset, mean, sd_inv, M, matM,
+                     flout + ub1*SIZE_PLANE);
 
   barrier(CLK_LOCAL_MEM_FENCE);
   for (uint u = 0; u < NTILE; ++u)
-//    fout[ch*NN_OUT + u*NB*NTILE + ub*NTILE + utile]
-//      = flout[u*NB*NTILE + ub*NTILE + utile];
-    fout[ch*NN_OUT + ub*SIZE_PLANE + u*NTILE + utile]
-      = flout[ub*SIZE_PLANE + u*NTILE + utile];
+    fout[ch*NN_OUT + (ug*NBWS + ub1)*SIZE_PLANE + u*NTILE + utile]
+      = flout[ub1*SIZE_PLANE + u*NTILE + utile];
 }
 )";
 
@@ -437,21 +433,19 @@ const string code_compute_matV = R"(
 __kernel __attribute__((reqd_work_group_size(NTILE, NBWS, 1)))
 void compute_matV(__global const float *fin, __global void *matV) {
   uint utile = get_global_id(0);
-  uint ub    = get_global_id(1);
   uint ch    = get_global_id(2);
-  __local float flin[NB*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
+  uint ug    = get_group_id(1);
+  uint ub1   = get_local_id(1);
+  __local float flin[NBWS*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
   for (uint u = 0; u < 9U; ++u)
-    //flin[u*NB*NTILE + ub*NTILE + utile]
-    //  = fin[ch*NB*SIZE_PLANE + u*NB*NTILE + ub*NTILE + utile];
-    flin[ub*SIZE_PLANE + u*NTILE + utile]
-      = fin[ch*NB*SIZE_PLANE + ub*SIZE_PLANE + u*NTILE + utile];
+    flin[ub1*SIZE_PLANE + u*NTILE + utile]
+      = fin[ch*NB*SIZE_PLANE + ug*NBWS*SIZE_PLANE + ub1*SIZE_PLANE
+            + u*NTILE + utile];
 
-  uint ub_major = ub / 7U;
-  uint ub_minor = ub % 7U;
-  uint dim_n_offset = ch*NN + ub_major*64U + ub_minor*NTILE + utile;
+  uint dim_n_offset = ch*NN + ug*NB_PARTITION + ub1*NTILE + utile;
   float M[LEN_TILE_IN][LEN_TILE_IN];
   barrier(CLK_LOCAL_MEM_FENCE);
-  compute_matV_child(ch, ub, utile, dim_n_offset, M, flin, matV); }
+  compute_matV_child(utile, dim_n_offset, M, flin + ub1*SIZE_PLANE, matV); }
 )";
 
 const string code_compute_matAV = R"(
@@ -464,34 +458,34 @@ void compute_matAV(__global const void *matM,
 #else
                    __global float *matV) {
 #endif
-  uint utile    = get_global_id(0);
-  uint ub       = get_global_id(1);
-  uint ch       = get_global_id(2);
-  //uint ub_major = get_group_id(1);
-  //uint ub_minor = get_local_id(1);
-  __local float flout[NB*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
+  uint utile = get_global_id(0);
+  uint ch    = get_global_id(2);
+  uint ng    = get_num_groups(1);
+  uint ug    = get_group_id(1);
+  uint ub1   = get_local_id(1);
+  __local float flout[NBWS*SIZE_PLANE] __attribute__((aligned(SIZE_ALIGN)));
 #ifdef DO_JOIN
   for (uint u = 0; u < NTILE; ++u)
-    flout[ub*SIZE_PLANE + u*NTILE + utile]
-      = fbypass[ch*NB*256U + ub*SIZE_PLANE + u*NTILE + utile];
+    flout[u*NBWS*NTILE + ub1*NTILE + utile]
+      = fbypass[ch*ng*NTILE*BLOCK_SIZE + ug*NTILE*BLOCK_SIZE
+                + u*BLOCK_SIZE + ub1*NTILE + utile];
 #endif
 
-  uint ub_major = ub / 7U;
-  uint ub_minor = ub % 7U;
-  uint dim_n_offset = ch*NN + ub_major*64U + ub_minor*NTILE + utile;
+  uint dim_n_offset = ch*NN + ug*NB_PARTITION + ub1*NTILE + utile;
   float mean        = mean_array[ch];
   float sd_inv      = sd_inv_array[ch];
   float M[LEN_TILE_IN][LEN_TILE_IN];
-  compute_matA_child(ch, ub, utile, dim_n_offset, mean, sd_inv, M, matM,
-                     flout);
+  compute_matA_child(utile, dim_n_offset, mean, sd_inv, M, matM,
+                     flout + ub1*SIZE_PLANE);
 
   barrier(CLK_LOCAL_MEM_FENCE);
 #ifdef DO_FORK
   for (uint u = 0; u < NTILE; ++u)
-    fbypass[ch*NB*256U + ub*SIZE_PLANE + u*NTILE + utile]
-      = flout[ub*SIZE_PLANE + u*NTILE + utile];
+    fbypass[ch*ng*NTILE*BLOCK_SIZE + ug*NTILE*BLOCK_SIZE
+            + u*BLOCK_SIZE + ub1*NTILE + utile]
+      = flout[u*NBWS*NTILE + ub1*NTILE + utile];
 #endif
-  compute_matV_child(ch, ub, utile, dim_n_offset, M, flout, matV); }
+  compute_matV_child(utile, dim_n_offset, M, flout + ub1*SIZE_PLANE, matV); }
 )";
 
 const string code_compute_matM_wmma = R"(
@@ -546,8 +540,7 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
             : "l"(gA + upm*SGEMM_NL*(SGEMM_NTM/2U) + ulm*(SGEMM_NTM/2U)),
               "r"(ldA),
               "l"(gB + upn*SGEMM_NL*(SGEMM_NTN/2U) + uln*(SGEMM_NTN/2U)),
-              "r"(ldB)
-            : "memory");
+              "r"(ldB));
 #else
         asm("{ .reg .b32 a<8>;\n"
             "  .reg .b32 b<8>;\n"
@@ -567,8 +560,7 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
             : "l"(gA + upm*SGEMM_NL*(SGEMM_NTM/2U) + ulm*(SGEMM_NTM/2U)),
               "r"(ldA),
               "l"(gB + upn*SGEMM_NL*(SGEMM_NTN/2U) + uln*(SGEMM_NTN/2U)),
-              "r"(ldB)
-            : "memory");
+              "r"(ldB));
 #endif
       }
     gA += SGEMM_NTK*(NM/2U);
@@ -583,8 +575,7 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
           :: "r"(pD[upm][upn][0]), "r"(pD[upm][upn][1]),
              "r"(pD[upm][upn][2]), "r"(pD[upm][upn][3]),
              "l"(gC + upm*SGEMM_NL*SGEMM_NTM*NN + ulm*SGEMM_NTM*NN
-                    + upn*SGEMM_NL*SGEMM_NTN + uln*SGEMM_NTN), "r"(ldC)
-          : "memory");
+                    + upn*SGEMM_NL*SGEMM_NTN + uln*SGEMM_NTN), "r"(ldC));
 #else
       asm("{  wmma.store.d.sync.aligned.row" SGEMM_TDM ".global.f32\n"
           "     [%8], {%0, %1, %2, %3, %4, %5, %6, %7}, %9; }"
@@ -593,8 +584,7 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
              "r"(pD[upm][upn][4]), "r"(pD[upm][upn][5]),
              "r"(pD[upm][upn][6]), "r"(pD[upm][upn][7]),
              "l"(gC + upm*SGEMM_NL*SGEMM_NTM*NN + ulm*SGEMM_NTM*NN
-                    + upn*SGEMM_NL*SGEMM_NTN + uln*SGEMM_NTN), "r"(ldC)
-          : "memory");
+                    + upn*SGEMM_NL*SGEMM_NTN + uln*SGEMM_NTN), "r"(ldC));
 #endif
 }
 )";
@@ -784,32 +774,42 @@ static uint ceil_power2(uint u) noexcept {
   for (u0 = 1U; u0 < u; u0 *= 2U) assert(u0 <= UINT_MAX / 2U);
   return u0; }
 
+constexpr uint batch_bundle_size =  7U;
+constexpr uint AV_align          = 64U;
+
+static uint partition_len_n() noexcept {
+  return ceil_multi(batch_bundle_size*ntile, AV_align); }
+
 static bool is_bs_allowed(uint bs) noexcept {
-  uint major = bs / 7U;
-  uint minor = bs % 7U;
+  uint major = bs / batch_bundle_size;
+  uint minor = bs % batch_bundle_size;
   if (major == 0 && 0 < minor) return true;
   if (0 < major && minor == 0) return true;
   return false; }
 
-static uint bs_to_len_n(uint bs) noexcept {
+static uint len_n(uint bs) noexcept {
   assert(is_bs_allowed(bs));
-  uint major = bs / 7U;
-  uint minor = bs % 7U;
+  uint major = bs / batch_bundle_size;
+  uint minor = bs % batch_bundle_size;
   if (major == 0) return minor * ntile;
-  return (major - 1U) * 64U + 7U * ntile; }
-/*
-static uint ub_to_index_n(uint ub) noexcept {
+  return (major - 1U) * partition_len_n() + batch_bundle_size * ntile; }
+
+static uint AV_local_size(uint bs) noexcept {
   assert(is_bs_allowed(bs));
-  uint major = ub / 7U;
-  uint minor = ub % 7U;
-  return major * 64U + minor * ntile; }
-*/
-static uint bs_to_AV_work_size(uint bs) noexcept {
-  assert(is_bs_allowed(bs));
-  uint major = bs / 14U;
-  uint minor = bs % 14U;
+  uint major = bs / batch_bundle_size;
+  uint minor = bs % batch_bundle_size;
   if (major == 0) return minor;
-  return 7U; }
+  return batch_bundle_size; }
+
+static uint AV_num_groups(uint bs) noexcept {
+  assert(is_bs_allowed(bs));
+  uint major = bs / batch_bundle_size;
+  if (major == 0) return 1U;
+  return major; }
+
+static uint AV_block_size(uint bs) noexcept {
+  assert(is_bs_allowed(bs));
+  return ceil_multi(AV_local_size(bs) * ntile, AV_align); }
 
 static tuple<string, uint, uint, uint, size_t, size_t, size_t, size_t>
 gen_code_compute_matM(uint nm0, uint nn0, uint nk0, const SgemmParam &param)
@@ -1471,7 +1471,7 @@ void ManageComputeMatV::start(bool store_half, const OCL::Context &context,
   noexcept {
   assert(context.ok() && is_bs_allowed(nb));
   _size_l[0] = ntile;
-  _size_l[1] = bs_to_AV_work_size(nb);
+  _size_l[1] = AV_local_size(nb);
   _size_l[2] = 1U;
   _size_g[0] = ntile;
   _size_g[1] = nb;
@@ -1479,10 +1479,12 @@ void ManageComputeMatV::start(bool store_half, const OCL::Context &context,
 
   string code;
   if (store_half) code += "#define STORE_HALF\n";
-  code += ("#define NBWS " + to_string(_size_l[1]) + "U\n"
-	   "#define NB   " + to_string(nb) + "U\n"
-	   "#define NK   " + to_string(nk) + "U\n"
-	   "#define NN   " + to_string(nn) + "U\n"
+  code += ("#define NBWS         " + to_string(AV_local_size(nb)) + "U\n"
+	   "#define BLOCK_SIZE   " + to_string(AV_block_size(nb)) + "U\n"
+	   "#define NB_PARTITION " + to_string(partition_len_n()) + "U\n"
+	   "#define NB           " + to_string(nb) + "U\n"
+	   "#define NK           " + to_string(nk) + "U\n"
+	   "#define NN           " + to_string(nn) + "U\n"
 	   + code_common + code_compute_matV_child + code_compute_matV);
   OCL::Program pg = context.gen_program(code);
   for (uint u = 0; u < NNAux::nslot; ++u) {
@@ -1507,7 +1509,7 @@ void ManageComputeMatA::start(bool load_half, const OCL::Context &context,
   noexcept {
   assert(context.ok() && mean.ok() && sd_inv.ok() && is_bs_allowed(nb));
   _size_l[0] = ntile;
-  _size_l[1] = bs_to_AV_work_size(nb);
+  _size_l[1] = AV_local_size(nb);
   _size_l[2] = 1U;
   _size_g[0] = ntile;
   _size_g[1] = nb;
@@ -1520,11 +1522,13 @@ void ManageComputeMatA::start(bool load_half, const OCL::Context &context,
   (void)load_half;
 #endif
   if (flag_join) code += "#define DO_JOIN\n";
-  code += ("#define NBWS   " + to_string(_size_l[1]) + "U\n"
-	   "#define NB     " + to_string(nb) + "\n"
-	   "#define NM     " + to_string(nm) + "\n"
-	   "#define NN     " + to_string(nn) + "\n"
-	   "#define NN_OUT " + to_string(nn_out) + "\n"
+  code += ("#define NBWS         " + to_string(AV_local_size(nb)) + "U\n"
+	   "#define BLOCK_SIZE   " + to_string(AV_block_size(nb)) + "U\n"
+	   "#define NB_PARTITION " + to_string(partition_len_n()) + "U\n"
+	   "#define NB           " + to_string(nb) + "\n"
+	   "#define NM           " + to_string(nm) + "\n"
+	   "#define NN           " + to_string(nn) + "\n"
+	   "#define NN_OUT       " + to_string(nn_out) + "\n"
 	   + code_common + code_compute_matA_child + code_compute_matA);
 
   OCL::Program pg = context.gen_program(code);
@@ -1552,7 +1556,7 @@ void ManageComputeMatAV::start(bool do_half, bool do_join, bool do_fork,
 			       const OCL::Memory *mem_bypass) noexcept {
   assert(context.ok() && mean.ok() && sd_inv.ok() && is_bs_allowed(nb));
   _size_l[0] = ntile;
-  _size_l[1] = bs_to_AV_work_size(nb);
+  _size_l[1] = AV_local_size(nb);
   _size_l[2] = 1U;
   _size_g[0] = ntile;
   _size_g[1] = nb;
@@ -1565,13 +1569,15 @@ void ManageComputeMatAV::start(bool do_half, bool do_join, bool do_fork,
   if (do_half) code += "#define STORE_HALF\n";
   if (do_join) code += "#define DO_JOIN\n";
   if (do_fork) code += "#define DO_FORK\n";
-  code += ("#define NBWS " + to_string(_size_l[1]) + "U\n"
-	   "#define NB   " + to_string(nb) + "U\n"
-	   "#define NM   " + to_string(nm) + "U\n"
-	   "#define NN   " + to_string(nn) + "U\n"
-	   "#define NK   " + to_string(nk) + "U\n"
-	   + code_common + code_compute_matV_child
-	   + code_compute_matA_child + code_compute_matAV);
+  code += ("#define NBWS         " + to_string(AV_local_size(nb)) + "U\n"
+	   "#define BLOCK_SIZE   " + to_string(AV_block_size(nb)) + "U\n"
+	   "#define NB_PARTITION " + to_string(partition_len_n()) + "U\n"
+	   "#define NB           " + to_string(nb) + "U\n"
+	   "#define NM           " + to_string(nm) + "U\n"
+	   "#define NN           " + to_string(nn) + "U\n"
+	   "#define NK           " + to_string(nk) + "U\n"
+	   + code_common + code_compute_matV_child + code_compute_matA_child
+	   + code_compute_matAV);
   OCL::Program pg = context.gen_program(code);
   for (uint u = 0; u < NNAux::nslot; ++u) {
     assert(mem_matM[u].ok() && mem_matV[u].ok());
@@ -1982,16 +1988,16 @@ string NNetOCL::reset(uint maxsize_batch,
   //
   SgemmParam param_matM
     = tune_compute_matM(use_wmma, device, context, size_tile_in,
-			resnet_nout, bs_to_len_n(maxsize_batch), resnet_nout);
+			resnet_nout, len_n(maxsize_batch), resnet_nout);
   lines << "  Matrix M:             ";
   lines << param_matM.gen_info() << "\n";
   _pmng_compute_matM.reset(new ManageComputeMatM [_nres_block + 1U]);
   _pmng_compute_matM[0].start(context, size_tile_in, resnet_nout,
-			      bs_to_len_n(maxsize_batch), NNAux::nch_input,
+			      len_n(maxsize_batch), NNAux::nch_input,
 			      param_matM);
   for (uint u = 1U; u < _nres_block + 1U; ++u)
     _pmng_compute_matM[u].start(context, size_tile_in, resnet_nout,
-				bs_to_len_n(maxsize_batch), resnet_nout,
+				len_n(maxsize_batch), resnet_nout,
 				param_matM);
 
   lines << "  Head 1:               ";
@@ -2014,7 +2020,8 @@ string NNetOCL::reset(uint maxsize_batch,
   lines << _mng_value3.gen_info() << "\n";
 
   uint size_input      = maxsize_batch * NNAux::nch_input * 128U + 32U;
-  uint size_bypass     = maxsize_batch * resnet_nout * 256U;
+  uint size_bypass     = (AV_block_size(maxsize_batch) * ntile
+			  * AV_num_groups(maxsize_batch) * resnet_nout);
   uint sizeV_input     = (_pmng_compute_matM[0].get_nk()
 			  * _pmng_compute_matM[0].get_nn() * size_tile_in);
   uint sizeV           = (_pmng_compute_matM[1].get_nk()
