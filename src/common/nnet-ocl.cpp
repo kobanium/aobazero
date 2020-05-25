@@ -1089,8 +1089,6 @@ static SgemmParam tune_compute_matM(bool use_wmma, const OCL::Device &device,
 	    if (mmax < nl*npm*ntm) continue;
 	    if (nmax < nl*npn*ntn) continue;
 	    if (kmax < nl*ntk) continue;
-	    if (2U*size_wrap_wmma < npm*ntm) continue;
-	    if (2U*size_wrap_wmma < npn*ntn) continue;
 	    params.emplace_back(true, true, nl, npm, npn, ntm, ntn); } }
 
   double time_best = DBL_MAX;
