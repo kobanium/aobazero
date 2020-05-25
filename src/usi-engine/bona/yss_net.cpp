@@ -363,6 +363,7 @@ static  auto network = std::make_unique<Network>();
 
 void replace_network(const char *token)
 {
+	if ( ! is_load_weight() ) return;
 	cfg_weightsfile = token;
 	GTP::s_network.reset();
 	initialize_network();
