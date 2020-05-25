@@ -497,14 +497,16 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
 #else
                   __global float *gC) {
 #endif
-  uint ub  = get_global_id(2);
-  uint ugm = get_group_id(1);
-  uint ugn = get_group_id(0);
-  uint ulm = get_local_id(1);
-  uint uln = get_local_id(0) / WRAP_SIZE;
-  uint ngk = NK / SGEMM_NTK;
-  gA += ub*(OFFA/2U) + ugm*(SGEMM_NLPTM/2U);
-  gB += ub*(OFFB/2U) + ugn*(SGEMM_NLPTN/2U);
+  uint ub    = get_global_id(2);
+  uint ugm   = get_group_id(1);
+  uint ugn   = get_group_id(0);
+  uint ulm   = get_local_id(1);
+  uint uln   = get_local_id(0) / WRAP_SIZE;
+  uint ul    = ulm*SGEMM_NL + uln;
+  uint ulane = get_local_id(0) % WRAP_SIZE;
+  uint ngk   = NK / SGEMM_NTK;
+  gA += ub*(OFFA/2U) + ugm*(SGEMM_NLPTM/2U) + ulm*(SGEMM_NPTM/2U);
+  gB += ub*(OFFB/2U) + ugn*(SGEMM_NLPTN/2U) + uln*(SGEMM_NPTN/2U);
   gC += ub*OFFC + ugm*SGEMM_NLPTM*NN + ugn*SGEMM_NLPTN;
 
 #if WMMA_ACCUMU16
@@ -518,55 +520,74 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
     for (uint upn = 0; upn < SGEMM_NPN; ++upn)
       for (uint u = 0; u < 8U; ++u) pD[upm][upn][u] = 0;
 #endif
-  uint ldA = NM;
-  uint ldB = NN;
+  uint ldgA = NM;
+  uint ldgB = NN;
+  __local uint la[SGEMM_NPM][8][SGEMM_NL*SGEMM_NL][WRAP_SIZE]
+               __attribute__((aligned(32)));
+  __local uint lb[SGEMM_NPN][8][SGEMM_NL*SGEMM_NL][WRAP_SIZE]
+               __attribute__((aligned(32)));
   for (uint ugk = 0; ugk < ngk; ++ugk) {
+
+    for (uint upm = 0; upm < SGEMM_NPM; ++upm)
+      asm("{ wmma.load.a.sync.aligned.col" SGEMM_TDM ".global.f16\n"
+          "    {%0, %1, %2, %3, %4, %5, %6, %7}, [%8], %9; }"
+          : "=r"(la[upm][0][ul][ulane]), "=r"(la[upm][1][ul][ulane]),
+            "=r"(la[upm][2][ul][ulane]), "=r"(la[upm][3][ul][ulane]),
+            "=r"(la[upm][4][ul][ulane]), "=r"(la[upm][5][ul][ulane]),
+            "=r"(la[upm][6][ul][ulane]), "=r"(la[upm][7][ul][ulane])
+          : "l"(gA + upm*(SGEMM_NTM/2U)), "r"(ldgA) : "memory");
+
+    for (uint upn = 0; upn < SGEMM_NPN; ++upn)
+      asm("{ wmma.load.b.sync.aligned.row" SGEMM_TDM ".global.f16\n"
+          "    {%0, %1, %2, %3, %4, %5, %6, %7}, [%8], %9; }"
+          : "=r"(lb[upn][0][ul][ulane]), "=r"(lb[upn][1][ul][ulane]),
+            "=r"(lb[upn][2][ul][ulane]), "=r"(lb[upn][3][ul][ulane]),
+            "=r"(lb[upn][4][ul][ulane]), "=r"(lb[upn][5][ul][ulane]),
+            "=r"(lb[upn][6][ul][ulane]), "=r"(lb[upn][7][ul][ulane])
+          : "l"(gB + upn*(SGEMM_NTN/2U)), "r"(ldgB) : "memory");
+
     for (uint upm = 0; upm < SGEMM_NPM; ++upm)
       for (uint upn = 0; upn < SGEMM_NPN; ++upn) {
 #if WMMA_ACCUMU16
-        asm("{ .reg .b32 a<8>;\n"
-            "  .reg .b32 b<8>;\n"
-            "  wmma.load.a.sync.aligned.col" SGEMM_TDM ".global.f16\n"
-            "    {a0, a1, a2, a3, a4, a5, a6, a7}, [%4], %5;\n"
-            "  wmma.load.b.sync.aligned.row" SGEMM_TDM ".global.f16\n"
-            "    {b0, b1, b2, b3, b4, b5, b6, b7}, [%6], %7;\n"
-            "  wmma.mma.sync.aligned.col.row" SGEMM_TDM ".f16.f16\n"
+        asm("{ wmma.mma.sync.aligned.col.row" SGEMM_TDM ".f16.f16\n"
             "    {%0, %1, %2, %3},\n"
-            "    {a0, a1, a2, a3, a4, a5, a6, a7},\n"
-            "    {b0, b1, b2, b3, b4, b5, b6, b7},\n"
+            "    {%4, %5, %6, %7, %8, %9, %10, %11},\n"
+            "    {%12, %13, %14, %15, %16, %17, %18, %19},\n"
             "    {%0, %1, %2, %3}; }"
             : "+r"(pD[upm][upn][0]), "+r"(pD[upm][upn][1]),
               "+r"(pD[upm][upn][2]), "+r"(pD[upm][upn][3])
-            : "l"(gA + upm*SGEMM_NL*(SGEMM_NTM/2U) + ulm*(SGEMM_NTM/2U)),
-              "r"(ldA),
-              "l"(gB + upn*SGEMM_NL*(SGEMM_NTN/2U) + uln*(SGEMM_NTN/2U)),
-              "r"(ldB));
+            : "r"(la[upm][0][ul][ulane]), "r"(la[upm][1][ul][ulane]),
+              "r"(la[upm][2][ul][ulane]), "r"(la[upm][3][ul][ulane]),
+              "r"(la[upm][4][ul][ulane]), "r"(la[upm][5][ul][ulane]),
+              "r"(la[upm][6][ul][ulane]), "r"(la[upm][7][ul][ulane]),
+              "r"(lb[upn][0][ul][ulane]), "r"(lb[upn][1][ul][ulane]),
+              "r"(lb[upn][2][ul][ulane]), "r"(lb[upn][3][ul][ulane]),
+              "r"(lb[upn][4][ul][ulane]), "r"(lb[upn][5][ul][ulane]),
+              "r"(lb[upn][6][ul][ulane]), "r"(lb[upn][7][ul][ulane]));
 #else
-        asm("{ .reg .b32 a<8>;\n"
-            "  .reg .b32 b<8>;\n"
-            "  wmma.load.a.sync.aligned.col" SGEMM_TDM ".global.f16\n"
-            "    {a0, a1, a2, a3, a4, a5, a6, a7}, [%8], %9;\n"
-            "  wmma.load.b.sync.aligned.row" SGEMM_TDM ".global.f16\n"
-            "    {b0, b1, b2, b3, b4, b5, b6, b7}, [%10], %11;\n"
-            "  wmma.mma.sync.aligned.col.row" SGEMM_TDM ".f32.f32\n"
+        asm("{ wmma.mma.sync.aligned.col.row" SGEMM_TDM ".f32.f32\n"
             "    {%0, %1, %2, %3, %4, %5, %6, %7},\n"
-            "    {a0, a1, a2, a3, a4, a5, a6, a7},\n"
-            "    {b0, b1, b2, b3, b4, b5, b6, b7},\n"
+            "    {%8, %9, %10, %11, %12, %13, %14, %15},\n"
+            "    {%16, %17, %18, %19, %20, %21, %22, %23},\n"
             "    {%0, %1, %2, %3, %4, %5, %6, %7}; }"
             : "+r"(pD[upm][upn][0]), "+r"(pD[upm][upn][1]),
               "+r"(pD[upm][upn][2]), "+r"(pD[upm][upn][3]),
               "+r"(pD[upm][upn][4]), "+r"(pD[upm][upn][5]),
               "+r"(pD[upm][upn][6]), "+r"(pD[upm][upn][7])
-            : "l"(gA + upm*SGEMM_NL*(SGEMM_NTM/2U) + ulm*(SGEMM_NTM/2U)),
-              "r"(ldA),
-              "l"(gB + upn*SGEMM_NL*(SGEMM_NTN/2U) + uln*(SGEMM_NTN/2U)),
-              "r"(ldB));
+            : "r"(la[upm][0][ul][ulane]), "r"(la[upm][1][ul][ulane]),
+              "r"(la[upm][2][ul][ulane]), "r"(la[upm][3][ul][ulane]),
+              "r"(la[upm][4][ul][ulane]), "r"(la[upm][5][ul][ulane]),
+              "r"(la[upm][6][ul][ulane]), "r"(la[upm][7][ul][ulane]),
+              "r"(lb[upn][0][ul][ulane]), "r"(lb[upn][1][ul][ulane]),
+              "r"(lb[upn][2][ul][ulane]), "r"(lb[upn][3][ul][ulane]),
+              "r"(lb[upn][4][ul][ulane]), "r"(lb[upn][5][ul][ulane]),
+              "r"(lb[upn][6][ul][ulane]), "r"(lb[upn][7][ul][ulane]));
 #endif
-      }
+    }
     gA += SGEMM_NTK*(NM/2U);
     gB += SGEMM_NTK*(NN/2U); }
 
-  uint ldC = NN;
+  uint ldgC = NN;
   for (uint upm = 0; upm < SGEMM_NPM; ++upm)
     for (uint upn = 0; upn < SGEMM_NPN; ++upn)
 #if WMMA_ACCUMU16
@@ -574,8 +595,9 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
           "     [%4], {%0, %1, %2, %3}, %5; }"
           :: "r"(pD[upm][upn][0]), "r"(pD[upm][upn][1]),
              "r"(pD[upm][upn][2]), "r"(pD[upm][upn][3]),
-             "l"(gC + upm*SGEMM_NL*SGEMM_NTM*NN + ulm*SGEMM_NTM*NN
-                    + upn*SGEMM_NL*SGEMM_NTN + uln*SGEMM_NTN), "r"(ldC));
+             "l"(gC + ulm*SGEMM_NPTM*NN + upm*SGEMM_NTM*NN
+                    + uln*SGEMM_NPTN + upn*SGEMM_NTN), "r"(ldgC)
+          : "memory");
 #else
       asm("{  wmma.store.d.sync.aligned.row" SGEMM_TDM ".global.f32\n"
           "     [%8], {%0, %1, %2, %3, %4, %5, %6, %7}, %9; }"
@@ -583,8 +605,9 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
              "r"(pD[upm][upn][2]), "r"(pD[upm][upn][3]),
              "r"(pD[upm][upn][4]), "r"(pD[upm][upn][5]),
              "r"(pD[upm][upn][6]), "r"(pD[upm][upn][7]),
-             "l"(gC + upm*SGEMM_NL*SGEMM_NTM*NN + ulm*SGEMM_NTM*NN
-                    + upn*SGEMM_NL*SGEMM_NTN + uln*SGEMM_NTN), "r"(ldC));
+             "l"(gC + ulm*SGEMM_NPTM*NN + upm*SGEMM_NTM*NN
+                    + uln*SGEMM_NPTN + upn*SGEMM_NTN), "r"(ldgC)
+          : "memory");
 #endif
 }
 )";
@@ -1057,7 +1080,7 @@ static SgemmParam tune_compute_matM(bool use_wmma, const OCL::Device &device,
     if      (nmax == 8U)  mmax = max(mmax, 32U);
     else if (nmax == 16U) mmax = max(mmax, 16U);
     uint ntm, ntn, ntk = 16U;
-    for (uint nl = 1U; nl <= 8U; nl *= 2U)
+    for (uint nl = 1U; nl <= 4U; nl *= 2U)
       for (uint npm = 1U; npm <= 8U; npm *= 2U)
 	for (uint npn = 1U; npn <= 8U; npn *= 2U)
 	  for (auto t : { /*make_tuple(32U, 8U),*/
@@ -1066,6 +1089,8 @@ static SgemmParam tune_compute_matM(bool use_wmma, const OCL::Device &device,
 	    if (mmax < nl*npm*ntm) continue;
 	    if (nmax < nl*npn*ntn) continue;
 	    if (kmax < nl*ntk) continue;
+	    if (2U*size_wrap_wmma < npm*ntm) continue;
+	    if (2U*size_wrap_wmma < npn*ntn) continue;
 	    params.emplace_back(true, true, nl, npm, npn, ntm, ntn); } }
 
   double time_best = DBL_MAX;

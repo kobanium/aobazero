@@ -60,7 +60,7 @@ using uchar  = unsigned char;
 using namespace ErrAux;
 using namespace SAux;
 
-constexpr double epsilon = 1e-2;
+constexpr double epsilon = 5e-2;
 
 static uint   value_n       = 0;
 static double value_sum_e   = 0.0;
