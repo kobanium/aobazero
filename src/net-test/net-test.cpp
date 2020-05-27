@@ -17,6 +17,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <random>
 #include <set>
 #include <sstream>
 #include <string>
@@ -41,9 +42,11 @@ using std::lock_guard;
 using std::map;
 using std::max;
 using std::move;
+using std::mt19937;
 using std::mutex;
 using std::set;
 using std::setw;
+using std::shuffle;
 using std::string;
 using std::stringstream;
 using std::terminate;
@@ -72,20 +75,23 @@ static double policy_sum_e  = 0.0;
 static double policy_sum_se = 0.0;
 static double policy_max_e  = 0.0;
 
+static int opt_repeat_num   =  1;
 static int opt_thread_num   = -1;
 static int opt_device_id    = -1;
 static uint opt_batch_size  = 1;
 static bool opt_use_half    = false;
 static bool opt_mode_cpu    = false;
 static bool opt_mode_opencl = true;
+static bool opt_verbose     = false;
 static string opt_str_wght;
 
 static string gen_usage(const char *cmd) noexcept {
   stringstream ss;
-  ss << "Usage: " << cmd
-     << " [-i opencl] [-u device-id] [-b batch-size] [-h] weight\n";
-  ss << "       " << cmd
-     << " [-i cpublas] [-t thread-num] [-b batch-size] weight\n";
+  ss << "Usage: \n"
+     << cmd << " [-i opencl] [-r repeat-num] [-u device-id] [-b batch-size]"
+    " [-v] [-h] weight\n"
+     << cmd << " [-i cpublas] [-r repeat-num] [-t thread-num] [-b batch-size]"
+    " [-v] weight\n";
   return ss.str(); }
 
 static double absolute_error(double f1, double f2) noexcept {
@@ -97,7 +103,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
   char *endptr;
 
   while (! flag_err) {
-    int opt = Opt::get(argc, argv, "b:i:t:u:h");
+    int opt = Opt::get(argc, argv, "b:i:t:u:r:vh");
     if (opt < 0) break;
 
     long l;
@@ -110,6 +116,13 @@ static int get_options(int argc, const char * const *argv) noexcept {
 	opt_mode_cpu    = false;
 	opt_mode_opencl = true; }
       else flag_err = true;
+      break;
+
+    case 'r': 
+      l = strtol(Opt::arg, &endptr, 10);
+      if (endptr == Opt::arg || *endptr != '\0' || l < 1 || l == LONG_MAX)
+	flag_err = true;
+      opt_repeat_num = static_cast<int>(l);
       break;
 
     case 't': 
@@ -134,6 +147,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
       break;
 
     case 'h': opt_use_half = true;  break;
+    case 'v': opt_verbose  = true;  break;
     default: flag_err = true; break; } }
 
   if (!flag_err && Opt::ind < argc) {
@@ -153,24 +167,23 @@ class Entry {
 public:
   vector<float> input;
   vector<ushort> nnmoves;
-  explicit Entry() noexcept {}
+  explicit Entry() noexcept : _size_nnmove(0) {}
   explicit Entry(uint no, uint size_nnmove, double value_answer,
 		 map<string, double> &&policy_answers,
 		 map<ushort, string> &&nnmove2str) noexcept :
     _no(no), _size_nnmove(size_nnmove), _value_answer(value_answer),
     _policy_answers(move(policy_answers)), _nnmove2str(move(nnmove2str)) {}
-  explicit Entry(const Entry &) = default;
-  Entry &operator=(Entry &&entry) noexcept {
-    _no             = entry._no;
-    _size_nnmove    = entry._size_nnmove;
-    _value_answer   = entry._value_answer;
-    _policy_answers = move(entry._policy_answers);
-    _nnmove2str     = move(entry._nnmove2str);
-    input           = move(entry.input);
-    nnmoves         = move(entry.nnmoves); }
+  Entry(const Entry &e) = default;
+  Entry &operator=(const Entry &e) = default;
+  Entry(Entry &&e) = default;
+  Entry &operator=(Entry &&e) = default;
+
   uint get_size_nnmove() const noexcept { return _size_nnmove; }
   uint get_no() const noexcept { return _no; }
-  bool ok() const noexcept { return _size_nnmove == _policy_answers.size(); }
+  bool ok() const noexcept {
+    if (_size_nnmove == _policy_answers.size()) return true;
+    cout << _size_nnmove << endl;
+    cout << _policy_answers.size() << endl; }
   void compare(const float *probs, float value) const noexcept {
     assert(probs);
     
@@ -241,9 +254,10 @@ class QueueTest {
 	ts.data[index].compare(ts.probs.get() + index * SAux::maxsize_moves,
 			       ts.values[index]);
 
-      for (uint index = 0; index < ts.nentry; ++index)
-	cout << setw(5) << ts.data[index].get_no();
-      cout << " OK" << endl;
+      if (opt_verbose) {
+	for (uint index = 0; index < ts.nentry; ++index)
+	  cout << setw(5) << ts.data[index].get_no();
+	cout << " OK" << endl; }
       _nelapsed += 1U; } }
 
   void flush() noexcept {
@@ -304,8 +318,8 @@ public:
 
     (void)device_id;
     (void)use_half; }
-  
-  void push(Entry &entry) noexcept {
+
+  void push(Entry &&entry) noexcept {
     assert(entry.ok());
     _data[_npush] = move(entry);
     if (++_npush == _nbatch) flush(); }
@@ -451,8 +465,14 @@ int main(int argc, char **argv) {
   vector<Entry> vec_entry = f_vec_entry.get();
   cout << "Finish reading " << vec_entry.size() << " entries" << endl;
 
+  for (int i = 0; i < opt_repeat_num; ++i) {
+    vector<Entry> vec_tmp = vec_entry;
+    for (Entry &e : vec_tmp) vec_entry.push_back(move(e)); }
+  mt19937 mt(7);
+  shuffle(vec_entry.begin(), vec_entry.end(), mt);
+
   steady_clock::time_point start = steady_clock::now();
-  for (Entry &entry : vec_entry) queue_test.push(entry);
+  for (Entry &entry : vec_entry) queue_test.push(move(entry));
   queue_test.end();
   steady_clock::time_point end   = steady_clock::now();
   int64_t elapsed  = duration_cast<microseconds>(end - start).count();

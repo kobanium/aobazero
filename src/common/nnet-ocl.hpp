@@ -40,27 +40,27 @@ struct SgemmParam {
   using uint = unsigned int;
   double time;
   bool do_half, do_wmma;
-  uint nl, nlfm, npm, npn, npk, ntm, ntn;
+  uint nl, nlfm, nlm, nln, npm, npn, npk, ntm, ntn;
   SgemmParam() noexcept {}
   SgemmParam(bool do_half_, uint nl_, uint nlfm_, uint npm_, uint npn_,
 	     uint npk_) noexcept :
   time(0.0), do_half(do_half_), do_wmma(false), nl(nl_), nlfm(nlfm_),
     npm(npm_), npn(npn_), npk(npk_) {}
-  SgemmParam(bool do_half_, bool do_wmma_, uint nl_, uint npm_, uint npn_,
-	     uint ntm_, uint ntn_) noexcept :
-  time(0.0), do_half(do_half_), do_wmma(do_wmma_), nl(nl_), npm(npm_),
-    npn(npn_), ntm(ntm_), ntn(ntn_) {}
+  SgemmParam(bool do_half_, bool do_wmma_, uint nlm_, uint nln_, uint npm_,
+             uint npn_, uint npk_, uint ntm_, uint ntn_) noexcept :
+  time(0.0), do_half(do_half_), do_wmma(do_wmma_), nlm(nlm_), nln(nln_),
+    npm(npm_), npn(npn_), npk(npk_), ntm(ntm_), ntn(ntn_) {}
   std::string gen_info() const noexcept;
   bool operator<=(const SgemmParam &p) const noexcept {
     if (do_wmma) {
-      return (nl <= p.nl && npm <= p.npm && npn <= p.npn && npk <= p.npk
-	      && ntm <= p.ntm && ntn <= p.ntn); }
+      return (nlm <= p.nlm && nln <= p.nln && npm <= p.npm && npn <= p.npn
+	      && npk <= p.npk && ntm <= p.ntm && ntn <= p.ntn); }
     return (nl <= p.nl && nlfm <= p.nlfm && npm <= p.npm && npn <= p.npn
 	    && npk <= p.npk); }
   bool ok() const noexcept {
     if (do_wmma) {
-      return (0.0 <= time && 0 < nl && 0 < npm && 0 < npn && 0 < npk
-	      && 0 < ntm && 0 < ntn); }
+      return (0.0 <= time && 0 < nlm && 0 < nln && 0 < npm && 0 < npn
+	      && 0 < npk && 0 < ntm && 0 < ntn); }
     return (0.0 <= time && 0 < nl && 0 < nlfm && 0 < npm && 0 < npn
 	    && 0 < npk); }
 };
