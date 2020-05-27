@@ -856,8 +856,10 @@ static uint ceil_power2(uint u) noexcept {
   for (u0 = 1U; u0 < u; u0 *= 2U) assert(u0 <= UINT_MAX / 2U);
   return u0; }
 
-constexpr uint batch_bundle_size =  7U;
-constexpr uint AV_align          = 64U;
+//constexpr uint batch_bundle_size =  7U;
+//constexpr uint AV_align          = 64U;
+constexpr uint batch_bundle_size =  14U;
+constexpr uint AV_align          = 128U;
 
 static uint partition_len_n() noexcept {
   return ceil_multi(batch_bundle_size*ntile, AV_align); }

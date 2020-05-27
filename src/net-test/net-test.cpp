@@ -471,6 +471,7 @@ int main(int argc, char **argv) {
   mt19937 mt(7);
   shuffle(vec_entry.begin(), vec_entry.end(), mt);
 
+  cout << "Testrun start" << endl;
   steady_clock::time_point start = steady_clock::now();
   for (Entry &entry : vec_entry) queue_test.push(move(entry));
   queue_test.end();
