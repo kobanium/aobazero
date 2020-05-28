@@ -614,19 +614,20 @@ void Network::initialize(int /*playouts*/, const std::string & weightsfile) {
         // when doing fp16 vs. fp32 detections
         m_forward_cpu = init_net(channels, std::make_unique<CPUPipe>());
 #endif
-#ifdef USE_HALF
-        // HALF support is enabled, and we are using the GPU.
-        // Select the precision to use at runtime.
-        select_precision(channels);
-#else
+
         if ( is_process_batch() ) {
-            myprintf("Skip Initializing OpenCL (single precision).\n");
+            myprintf("Skip Initializing OpenCL.\n");
         } else {
+#ifdef USE_HALF
+            // HALF support is enabled, and we are using the GPU.
+            // Select the precision to use at runtime.
+            select_precision(channels);
+#else
             myprintf("Initializing OpenCL (single precision).\n");
             m_forward = init_net(channels,
                                 std::make_unique<OpenCLScheduler<float>>());
-        }
 #endif
+        }
     }
 
 #else //!USE_OPENCL

@@ -49,6 +49,8 @@ std::vector<int> default_gpus;
 void init_global_objects();	// Leela.cpp
 void initialize_network();
 
+bool fUseLeelaZeroOpenCL = false;	// only for test.
+
 #ifdef USE_OPENCL
 #define NN_PARALLEL
 #endif
@@ -60,9 +62,10 @@ void initialize_network();
 using std::copy_n;
 
 std::vector<NNetIPC *> p_nnet_v;
-std::vector<int> nNNetID_v;// = -1;
+std::vector<int> nNNetID_v;
 int nNNetServiceNumber = -1;
 SeqPRN *p_seq_prn;	// プロセスが呼ばれる時点で SeqPRNServiceで確保されてるはず
+int nUseHalf = 0;
 #endif
 
 #ifdef USE_OPENCL
@@ -90,6 +93,13 @@ std::condition_variable cv_prepare_dummy_data;
 std::vector<unsigned short> dummy_nnmoves;
 float dummy_data[1*DCNN_CHANNELS*B_SIZE*B_SIZE];
 
+void prepare_dummy_data_unlock()
+{
+	std::unique_lock<std::mutex> uniq_lk(mutex_prepare_dummy_data);
+	is_prepare_dummy_data = true;
+	cv_prepare_dummy_data.notify_all();
+}
+
 void prepare_dummy_data(float *data, std::vector<unsigned short> &nnmoves)
 {
 	int size = nnmoves.size();
@@ -98,11 +108,7 @@ void prepare_dummy_data(float *data, std::vector<unsigned short> &nnmoves)
 	copy_n(nnmoves.data(),              size, dummy_nnmoves.data() );
 
 //	while ( !is_prepare_dummy_data.compare_exchange_weak(false, true) );
-	{
-		std::unique_lock<std::mutex> uniq_lk(mutex_prepare_dummy_data);
-		is_prepare_dummy_data = true;
-		cv_prepare_dummy_data.notify_all();
-	}
+	prepare_dummy_data_unlock();
 }
 
 class AddDummy {
@@ -162,7 +168,7 @@ void AddDummy::wait_loop() {
 	while (true) {
 		{
 			std::unique_lock<std::mutex> uniq_lk(m_mutex);
-			m_cv.wait(uniq_lk, [this](){ return m_is_ready || is_stop_dummy_thread(); });
+			m_cv.wait(uniq_lk, [this](){ return m_is_ready || stop_dummy_thread; });
 		}
 		if ( is_stop_dummy_thread() ) break;
 
@@ -174,27 +180,31 @@ void AddDummy::wait_loop() {
 	}
 }
 
+void unlock_AddDummy(AddDummy *p)
+{
+	{
+		std::lock_guard<std::mutex> lock(p->m_mutex);
+		p->m_is_ready = true;
+	}
+	p->m_cv.notify_one();
+}
+
 void submit_num_check_loop(size_t gnum) {
 	PRT("start dummy_num_threads=%d,gnum=%d\n",dummy_num_threads,gnum);
-	std::vector<std::thread> th_p(dummy_num_threads);
+	std::vector<std::thread> th_p;
 	int base = dummy_num_threads * gnum;
 	int i;
 	for (i=0; i<dummy_num_threads; i++) {
 		AddDummy *p = pAD[base+i];
-		th_p[i] = std::thread( &AddDummy::wait_loop, p);
+		th_p.emplace_back(std::thread( &AddDummy::wait_loop, p));
 	}
 
-	const int wait_ms = 1;
-	const int wait_check_ms = 1;
-	int sum_ms = 0;
+	const int wait_ns = 1000;	// 1000 nanoseconds = 1ms
 	int prev_total = submit_total[gnum].load();
 	// 1ms 以上、totalに変化がない場合batchをダミーで埋める。ダミーで埋めてる途中に通常が入るとおかしくなる?
 	while (true) {
 		if ( is_stop_dummy_thread() ) break;
-		std::this_thread::sleep_for(std::chrono::milliseconds(wait_ms));	// nanoseconds
-		sum_ms += wait_ms;
-		if ( sum_ms < wait_check_ms ) continue;
-		sum_ms = 0;
+		std::this_thread::sleep_for(std::chrono::nanoseconds(wait_ns));
 		int total = submit_total[gnum].load();
 		bool is_progress = (total != prev_total);
 		prev_total = total;
@@ -214,15 +224,16 @@ void submit_num_check_loop(size_t gnum) {
 		for (i=0; i<dummy_num_threads; i++) {
 			AddDummy *p = pAD[base+i];
 			if ( p->m_is_ready == true ) continue;
-			{
-				std::lock_guard<std::mutex> lock(p->m_mutex);
-				p->m_is_ready = true;
-			}
-			p->m_cv.notify_one();
+			unlock_AddDummy(p);
 			sum++;
 			if ( sum == wakeup_threads ) break;
 		}
 		if ( sum != wakeup_threads ) PRT("not enough wakeup?\n");
+	}
+
+	for (i=0; i<dummy_num_threads; i++) {
+		AddDummy *p = pAD[base+i];
+		unlock_AddDummy(p);
 	}
 
 	for (std::thread& th : th_p) {
@@ -241,6 +252,7 @@ bool is_process_batch()
 bool is_thread_batch()
 {
 #ifdef THREAD_BATCH
+	if ( fUseLeelaZeroOpenCL ) return false;
 	if ( is_process_batch() ) return false;
 	return true;
 #endif
@@ -271,7 +283,9 @@ void init_network()
 #ifdef THREAD_BATCH
 	int num_P = 1;
 	int numGPU = default_gpus.size();
-	if ( numGPU == 0 ) DEBUG_PRT("Err. numGPU=0\n");
+	if ( numGPU == 0       ) DEBUG_PRT("Err. numGPU=0\n");
+	if ( numGPU > MAX_GPUS ) DEBUG_PRT("Err. MAX_GPUS\n");
+
 	threads_per_GPU = cfg_num_threads / numGPU;
 	if ( threads_per_GPU == 0 ) DEBUG_PRT("Err. threads_per_GPU=0\n");
 	if ( is_thread_batch() ) {
@@ -297,7 +311,7 @@ void init_network()
 		for (int i=0;i<numGPU;i++) {
 			num_B[i] = thread_batch_size;
 			num_U[i] = default_gpus[i];
-			num_H[i] = 0;
+			num_H[i] = nUseHalf;
 			fname_W[i].reset_fname(default_weights.c_str());
 			num_T[i] = -1;
 			impl_I[i] = NNet::opencl;
@@ -341,24 +355,13 @@ void init_network()
 	if ( !default_gpus.empty() ) {
 		std::copy(default_gpus.begin(), default_gpus.end(), back_inserter(cfg_gpus) );
 	}
-//	PRT("cfg_rowtiles    =%d\n",cfg_rowtiles);
 #endif
 
 	init_global_objects();
-
-	PRT("cfg_random_temp=%.3f,cfg_num_threads=%d,cfg_batch_size=%d\n",cfg_random_temp,cfg_num_threads,cfg_batch_size);
+	PRT("cfg_random_temp=%.3f,cfg_num_threads=%d,cfg_batch_size=%d,gpus=%d\n",cfg_random_temp,cfg_num_threads,cfg_batch_size,default_gpus.size());
 
 	// Initialize network
 //	Network::initialize();
-
-/*
-static  auto network = std::make_unique<Network>();
-    auto playouts = 800;
-	std::string weightsfile("hogehoge");
-    network->initialize(playouts, weightsfile);
-
-//	Network::initialize(800 , weightsfile);
-*/
 }
 
 void replace_network(const char *token)
@@ -367,6 +370,26 @@ void replace_network(const char *token)
 	cfg_weightsfile = token;
 	GTP::s_network.reset();
 	initialize_network();
+}
+
+void stop_thread_submit()
+{
+#ifdef THREAD_BATCH
+	stop_dummy_thread = true;
+
+	prepare_dummy_data_unlock();
+
+	for (size_t gnum=0; gnum<default_gpus.size(); gnum++) {
+		thread_submit_num_check[gnum].join();
+	}
+
+//	int n = p_nnet_v.size();
+//	for (int i=0; i<n; i++) p_nnet_v.pop_back();
+	for (size_t i=0; i<default_gpus.size(); i++) {
+		nnets.pop_back();
+	}
+	seq_s.pop_back();
+#endif
 }
 
 inline void set_dcnn_data(float data[][B_SIZE][B_SIZE], int n, int y, int x, float v=1.0f)

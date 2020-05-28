@@ -485,7 +485,10 @@ static int CONV proce_usi( tree_t * restrict ptree )
   }
 
   if ( ! strcmp( token, "position" ) ) { return usi_posi( ptree, &lasts ); }
-  if ( ! strcmp( token, "quit" ) )     { return cmd_quit(); }
+  if ( ! strcmp( token, "quit" ) ) {
+    stop_thread_submit();
+    return cmd_quit();
+  }
   if ( ! strcmp( token, "d" ) ) {
 /*
     fprintf(stderr,"print board\n");

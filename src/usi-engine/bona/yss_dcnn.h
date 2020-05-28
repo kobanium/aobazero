@@ -54,6 +54,7 @@ extern int fUSIMoveCount;
 extern int fPrtNetworkRawPath;
 extern int nNNetServiceNumber;
 extern int nDrawMove;
+extern int nUseHalf;
 
 extern std::string default_weights;
 extern std::vector<int> default_gpus;
@@ -87,6 +88,7 @@ int get_thread_id(tree_t * restrict ptree);
 // yss_net.cpp
 void init_network();
 void replace_network(const char *token);
+void stop_thread_submit();
 void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *p_data);
 void prt_dcnn_data(float (*data)[B_SIZE][B_SIZE],int c,int turn_n);
 void prt_dcnn_data_table(float (*data)[B_SIZE][B_SIZE]);

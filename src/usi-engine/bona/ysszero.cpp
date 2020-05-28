@@ -304,8 +304,6 @@ const int USI_BESTMOVE_LEN = MAX_LEGAL_MOVES*(8+5)+10;
 
 int YssZero_com_turn_start( tree_t * restrict ptree )
 {
-//	PRT("start aobazero...\n");
-//	init_yss_zero();
 	if ( 0 ) {
 		int ct1 = get_clock();
 		int i;
@@ -1464,6 +1462,10 @@ int getCmdLineParam(int argc, char *argv[])
 			nNNetServiceNumber = n;
 			default_gpus.push_back(n);
 		}
+		if ( strstr(p,"-h") ) {
+			nUseHalf = 1;
+			PRT("nUseHalf=1\n");
+		}
 #endif
 		if ( strstr(p,"-t") ) {
 			if ( n < 1            ) n = 1;
@@ -1513,6 +1515,45 @@ int getCmdLineParam(int argc, char *argv[])
 	}
 
 	return 1;
+}
+
+void set_default_param()
+{
+	// スレッド、バッチサイズが未定ならCPU版は最大数、OpenCLはb=7,t=15 を指定
+	// OpenCLでスレッドのみ指定ならバッチサイズはb=3,7,14
+	// OpenCLでバッチサイズのみ指定なら(b=3,t=7), (b=7,t=15),(b=14,t=29),(b=28,t=85)
+	if ( is_process_batch() ) {
+		cfg_num_threads = 1;
+		return;
+	}
+#ifdef USE_OPENCL
+	if ( default_gpus.size() == 0 ) default_gpus.push_back(0);
+	size_t gpus = default_gpus.size();
+	if ( cfg_num_threads == 0 && cfg_batch_size == 0 ) {
+		cfg_batch_size  = 7;
+		cfg_num_threads = 15 * gpus;
+	} else if ( cfg_num_threads == 0 ) {
+		cfg_num_threads = (cfg_batch_size * 2 + 1) * gpus;
+	} else if ( cfg_batch_size == 0 ) {
+		cfg_batch_size  = (cfg_num_threads/gpus - 1) / 2;
+		if ( cfg_batch_size < 1 ) cfg_batch_size = 1;
+	} else {
+		if ( cfg_batch_size > cfg_num_threads ) {
+			DEBUG_PRT("Err. must be threads >= batch_size\n");
+		}
+	}
+#else
+	if ( cfg_num_threads == 0 ) {
+		auto cfg_max_threads = std::min(SMP::get_num_cpus(), size_t{TLP_NUM_WORK});
+		cfg_num_threads = cfg_max_threads;
+	}
+#endif
+	if ( nLimitUctLoop < (int)cfg_num_threads ) {
+		PRT("too small playouts. thread = 1, batch = 1\n");
+		cfg_num_threads = 1;
+		cfg_batch_size  = 1;
+	}
+
 }
 
 const char *get_cmd_line_ptr()

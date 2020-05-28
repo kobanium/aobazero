@@ -53,6 +53,7 @@ main()
     out_error( "%s", str_error );
     return EXIT_SUCCESS;
   }
+  set_default_param();
   init_yss_zero();
 //{ void test_dist_loop(); test_dist_loop(); exit(1); }
 #endif
