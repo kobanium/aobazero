@@ -776,6 +776,8 @@ static void load_book_file() noexcept {
   if (book.size() != size_book) die(ERR_INT("Bad book size %d", book.size()));
 
   std::random_device seed_gen;
-  std::mt19937 engine(seed_gen());
+  auto seed = seed_gen();
+  std::mt19937 engine(seed);
   std::shuffle(book.begin(), book.end(), engine);
-  cout << "'Read " << book.size() << " lines from " << str_book << std::endl; }
+  cout << "'Read " << book.size() << " lines from " << str_book << " seed="
+       << seed << std::endl; }
