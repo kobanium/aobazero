@@ -21,12 +21,10 @@ namespace NNAux {
 
 class ManageDecode {
   using uint = unsigned int;
-  size_t _one_size_g[3],  _one_size_l[3];
-  size_t _zero_size_g[3], _zero_size_l[3];
+  size_t _zero_size;
   size_t _fill_size_g[3], _fill_size_l[3];
   OCL::Kernel _ker_zero_clear[NNAux::nslot];
   OCL::Kernel _ker_plane_fill[NNAux::nslot], _ker_set_one[NNAux::nslot];
-  uint _nbatch, _nm;
 
 public:
   void start(const OCL::Context &context,

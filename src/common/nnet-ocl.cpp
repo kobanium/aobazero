@@ -103,11 +103,7 @@ constexpr float bn_eps               = 1e-5f;
 */
 
 const string code_decode = R"(
-__kernel __attribute__((reqd_work_group_size(128, 1, 1)))
-void zero_clear(__global float *p) {
-  uint sq128 = get_global_id(0);
-  uint chb   = get_global_id(1);
-  p[chb*128U + sq128] = 0.0f; }
+__kernel void zero_clear(__global float *p) { p[get_global_id(0)] = 0.0f; }
 
 __kernel __attribute__((reqd_work_group_size(81, 1, 1)))
 void plane_fill(__global const float *pvalue, __global const uint *pindex,
@@ -1261,22 +1257,14 @@ void ManageDecode::start(const OCL::Context &context,
 			 const OCL::Memory mem_out[NNAux::nslot],
 			 uint index_block, uint maxsize_batch) noexcept {
   assert(context.ok());
-  _nbatch = maxsize_batch;
-  _nm     = _nbatch * NNAux::nch_input * NNAux::size_plane;
 
-  _zero_size_l[0] = _zero_size_g[0] = 128U;
-  _zero_size_g[1] = NNAux::nch_input * _nbatch;
-  _zero_size_l[1] = _zero_size_l[2] = _zero_size_g[2] = 1U;
-
-  _one_size_l[0] = 32U;
-  _one_size_l[1] = _one_size_g[1] = _one_size_l[2] = _one_size_g[2] = 1U;
-
+  _zero_size = maxsize_batch * NNAux::nch_input * NNAux::size_plane;
   _fill_size_l[0] = _fill_size_g[0] = 81U;
   _fill_size_l[1] = _fill_size_l[2] = _fill_size_g[2] = 1U;
-  _fill_size_g[1] = send_nch_fill * _nbatch;
+  _fill_size_g[1] = send_nch_fill * maxsize_batch;
 
   string code = ("#define INDEX_BLOCK " + to_string(index_block) + "U\n"
-		 "#define NB          " + to_string(_nbatch) + "U\n"
+		 "#define NB          " + to_string(maxsize_batch) + "U\n"
 		 + code_decode);
   OCL::Program pg = context.gen_program(code);
 
@@ -1297,13 +1285,15 @@ void ManageDecode::start(const OCL::Context &context,
 void ManageDecode::push(const OCL::Queue &queue, uint n_one, uint uslot)
   noexcept {
   assert(queue.ok());
-  queue.push_ndrange_kernel(_ker_zero_clear[uslot], 3, _zero_size_g,
-			    _zero_size_l);
+  //nqueue.push_ndrange_kernel(_ker_zero_clear[uslot], 3, _zero_size_g,
+  //_zero_size_l);
+  queue.push_kernel(_ker_zero_clear[uslot], _zero_size);
   queue.push_ndrange_kernel(_ker_plane_fill[uslot], 3, _fill_size_g,
 			    _fill_size_l);
-  _one_size_g[0] = n_one;
-  queue.push_ndrange_kernel(_ker_set_one[uslot], 3, _one_size_g, _one_size_l);
-}
+  //_one_size_g[0] = n_one;
+  //queue.push_ndrange_kernel(_ker_set_one[uslot], 3, _one_size_g,
+  //_one_size_l);
+  queue.push_kernel(_ker_set_one[uslot], n_one); }
 
 void ManageComputeMatM::start(const OCL::Context &context, uint nbatch,
 			      uint nm0, uint nn0, uint nk0,
@@ -1913,7 +1903,7 @@ static void compute_probs(uint nb, const uint *sizes_nnmove, const float *fin,
 static void compress_data(uint index_block, uint nb0, uint nb, const float *in,
 			  const uint *sizes_nnmove, const ushort *nnmoves,
 			  void *out, size_t &size_write, uint &n_one,
-			  uint &ntot_moves) noexcept {
+			  uint &ntot_moves, uint &index_moves) noexcept {
   assert(in && sizes_nnmove && nnmoves && out);
   float *pvalue = static_cast<float *>(out);
   uint  *pindex = static_cast<uint *>(out) + index_block;
@@ -1944,11 +1934,8 @@ static void compress_data(uint index_block, uint nb0, uint nb, const float *in,
 	  if (in[bch + u] < 0.5f) continue;
 	  pindex[n_one++] = chb + u; } }
 
-  uint n_one_end = ceil_multi(n_one, 32U);
-  for (; n_one < n_one_end; ++n_one)
-    pindex[n_one] = NNAux::nch_input * 128U * nb + (n_one % 32U);
-
-  pindex = reinterpret_cast<uint *>(out) + index_block*2U + n_one;
+  index_moves = ceil_multi(index_block*2U + n_one, 32U);
+  pindex = static_cast<uint *>(out) + index_moves;
   ntot_moves = 0;
   for (uint ub = 0; ub < nb0; ++ub)
     for (uint unn = 0; unn < sizes_nnmove[ub]; ++unn) {
@@ -1957,7 +1944,7 @@ static void compress_data(uint index_block, uint nb0, uint nb, const float *in,
       assert(nnmove < NNAux::nch_out_policy * NNAux::size_plane);
       *pindex++ = ub * NNAux::nch_out_policy * NNAux::size_plane + nnmove; }
   
-  size_write = (2U*index_block + n_one + ntot_moves) * sizeof(uint); }
+  size_write = (index_moves + ntot_moves) * sizeof(uint); }
 
 NNetOCL::NNetOCL() noexcept : _pool1_slot_size(NNAux::nslot) {}
 
@@ -2116,7 +2103,7 @@ string NNetOCL::reset(uint maxsize_batch,
 		    1U);
   lines << _mng_value3.gen_info() << "\n";
 
-  uint size_decode     = maxsize_batch * NNAux::nch_input * 128U + 32U;
+  uint size_decode     = maxsize_batch * NNAux::nch_input * NNAux::size_plane;
   uint size_bypass     = (AV_block_size(maxsize_batch) * ntile
 			  * AV_num_groups(maxsize_batch) * resnet_nout);
   uint sizeV_input     = (_pmng_compute_matM[0].get_nk()
@@ -2321,10 +2308,10 @@ uint NNetOCL::push_ff(uint size_batch, const float *input,
     die(ERR_INT("invalid size_batch"));
 
   size_t size_write;
-  uint n_one, ntot_moves;
+  uint n_one, ntot_moves, index_moves;
   compress_data(_index_block, size_batch, _maxsize_batch, input, sizes_nnmove,
 		nnmoves, _mem_in[uslot].get_pointer(), size_write, n_one,
-		ntot_moves);
+		ntot_moves, index_moves);
   memcpy(_slots_sizes_nnmove[uslot].get(), sizes_nnmove,
 	 sizeof(uint) * size_batch);
   _slots_size_batch[uslot] = size_batch;
@@ -2348,8 +2335,7 @@ uint NNetOCL::push_ff(uint size_batch, const float *input,
   // out: f2[size_batch][value1_nout][size_plane]
   _mng_head1.push(_queue_a[uslot], uslot);
   _mng_compute_BNReLU.push(_queue_a[uslot], uslot);
-  _mng_compute_policy.push(_queue_a[uslot], ntot_moves,
-			   2U*_index_block + n_one, uslot);
+  _mng_compute_policy.push(_queue_a[uslot], ntot_moves, index_moves, uslot);
   
   _mng_transform_value2.push(_queue_a[uslot], uslot);
   _mng_value2.push(_queue_a[uslot], uslot);
