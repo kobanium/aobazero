@@ -224,7 +224,7 @@ public:
 struct TestSet {
   uint wait_id;
   uint nentry;
-  vector<Entry> data;
+  vector<const Entry *> pdata;
   unique_ptr<float []> probs;
   unique_ptr<float []> values;
 };
@@ -235,7 +235,7 @@ class QueueTest {
   condition_variable _cv;
   thread _th_worker;
   deque<TestSet> _deque_ts;
-  vector<Entry> _data;
+  vector<const Entry *> _pdata;
   uint _npush, _nbatch;
   int64_t _nelapsed;
 
@@ -251,12 +251,12 @@ class QueueTest {
       if (ts.nentry == 0) return;
       _pnnet->wait_ff(ts.wait_id);
       for (uint index = 0; index < ts.nentry; ++index)
-	ts.data[index].compare(ts.probs.get() + index * SAux::maxsize_moves,
-			       ts.values[index]);
+	ts.pdata[index]->compare(ts.probs.get() + index * SAux::maxsize_moves,
+				ts.values[index]);
 
       if (opt_verbose) {
 	for (uint index = 0; index < ts.nentry; ++index)
-	  cout << setw(5) << ts.data[index].get_no();
+	  cout << setw(5) << ts.pdata[index]->get_no();
 	cout << " OK" << endl; }
       _nelapsed += 1U; } }
 
@@ -269,31 +269,30 @@ class QueueTest {
     unique_ptr<ushort []> _nnmoves(new ushort [_nbatch * SAux::maxsize_moves]);
     unique_ptr<uint []> _sizes_nnmove(new uint [_nbatch]);
     for (uint index = 0; index < _npush; ++index) {
-      const Entry &entry = _data[index];
-      copy_n(entry.input.begin(), NNAux::size_input,
+      const Entry *pe = _pdata[index];
+      copy_n(pe->input.begin(), NNAux::size_input,
 	     _input.get() + index * NNAux::size_input);
-      copy_n(entry.nnmoves.begin(), SAux::maxsize_moves,
+      copy_n(pe->nnmoves.begin(), SAux::maxsize_moves,
 	     _nnmoves.get() + index * SAux::maxsize_moves);
-      _sizes_nnmove[index] = entry.get_size_nnmove(); }
+      _sizes_nnmove[index] = pe->get_size_nnmove(); }
 
     uint wait_id = _pnnet->push_ff(_npush, _input.get(), _sizes_nnmove.get(),
 				   _nnmoves.get(), _probs.get(),
 				   _values.get());
-    TestSet ts{wait_id, _npush, move(_data), move(_probs), move(_values)};
+    TestSet ts{wait_id, _npush, _pdata, move(_probs), move(_values)};
     unique_lock<mutex> lock(_m);
     _deque_ts.push_back(move(ts));
     lock.unlock();
     _cv.notify_one();
 
-    _data.resize(_nbatch);
     _npush = 0; }
   
 public:
   explicit QueueTest(const FName &fname, int device_id, uint nbatch,
 		     bool use_half, int thread_num) noexcept
-    : _th_worker(&QueueTest::worker, this), _npush(0), _nbatch(nbatch),
-    _nelapsed(0) {
-    _data.resize(nbatch);
+    : _th_worker(&QueueTest::worker, this), _pdata(nbatch), _npush(0),
+		  _nbatch(nbatch), _nelapsed(0) {
+      
     uint version;
     uint64_t digest;
     NNAux::wght_t wght = NNAux::read(fname, version, digest);
@@ -319,9 +318,9 @@ public:
     (void)device_id;
     (void)use_half; }
 
-  void push(Entry &&entry) noexcept {
-    assert(entry.ok());
-    _data[_npush] = move(entry);
+  void push(const Entry *pe) noexcept {
+    assert(pe && pe->ok());
+    _pdata[_npush] = pe;
     if (++_npush == _nbatch) flush(); }
 
   void end() noexcept {
@@ -465,15 +464,16 @@ int main(int argc, char **argv) {
   vector<Entry> vec_entry = f_vec_entry.get();
   cout << "Finish reading " << vec_entry.size() << " entries" << endl;
 
-  for (int i = 0; i < opt_repeat_num; ++i) {
-    vector<Entry> vec_tmp = vec_entry;
-    for (Entry &e : vec_tmp) vec_entry.push_back(move(e)); }
+  vector<const Entry *> vec_pe(opt_repeat_num * vec_entry.size());
+  uint index = 0;
+  for (const Entry &e : vec_entry)
+    for (int i = 0; i < opt_repeat_num; ++i) vec_pe[index++] = &e;
   mt19937 mt(7);
-  shuffle(vec_entry.begin(), vec_entry.end(), mt);
+  shuffle(vec_pe.begin(), vec_pe.end(), mt);
 
   cout << "Testrun start" << endl;
   steady_clock::time_point start = steady_clock::now();
-  for (Entry &entry : vec_entry) queue_test.push(move(entry));
+  for (const Entry *pe : vec_pe) queue_test.push(pe);
   queue_test.end();
   steady_clock::time_point end   = steady_clock::now();
   int64_t elapsed  = duration_cast<microseconds>(end - start).count();

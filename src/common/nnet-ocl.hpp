@@ -233,7 +233,7 @@ class NNetOCL : public NNet {
   OCL::Memory _mem_head1_mean, _mem_head1_sd_inv;
   OCL::Memory _mem_policy2_wght, _mem_policy2_bias;
   OCL::Memory _mem_value2_bias;
-  OCL::Memory _mem_input[NNAux::nslot], _mem_matV_input[NNAux::nslot];
+  OCL::Memory _mem_decode[NNAux::nslot], _mem_matV_input[NNAux::nslot];
   OCL::Memory _mem_matV[NNAux::nslot], _mem_matM[NNAux::nslot];
   OCL::Memory _mem_bypass[NNAux::nslot], _mem_resout[NNAux::nslot];
   OCL::Memory _mem_head1_out[NNAux::nslot], _mem_BNReLU_out[NNAux::nslot];

@@ -2116,7 +2116,7 @@ string NNetOCL::reset(uint maxsize_batch,
 		    1U);
   lines << _mng_value3.gen_info() << "\n";
 
-  uint size_input      = maxsize_batch * NNAux::nch_input * 128U + 32U;
+  uint size_decode     = maxsize_batch * NNAux::nch_input * 128U + 32U;
   uint size_bypass     = (AV_block_size(maxsize_batch) * ntile
 			  * AV_num_groups(maxsize_batch) * resnet_nout);
   uint sizeV_input     = (_pmng_compute_matM[0].get_nk()
@@ -2153,7 +2153,7 @@ string NNetOCL::reset(uint maxsize_batch,
     index += 4U; }
 
   for (uint u = 0; u < NNAux::nslot; ++u) {
-    _mem_input[u]      = gen_mem_init(context, size_input, 0.0f);
+    _mem_decode[u]     = gen_mem_init(context, size_decode, 0.0f);
     _mem_matV_input[u] = gen_mem_init(context, sizeV_input, 0.0f, use_wmma);
     _mem_matV[u]       = gen_mem_init(context, sizeV, 0.0f, use_wmma);
     _mem_matM[u]       = gen_mem_init(context, sizeM, 0.0f);
@@ -2209,12 +2209,13 @@ string NNetOCL::reset(uint maxsize_batch,
 
 
   _pmng_compute_matAV.reset(new ManageComputeMatAV [_nres_block]);
-  _mng_decode.start(context, _mem_in, _mem_input, _index_block, maxsize_batch);
+  _mng_decode.start(context, _mem_in, _mem_decode, _index_block,
+		    maxsize_batch);
   _mng_compute_matV_first.start(use_wmma, context, NNAux::nch_input,
 				maxsize_batch,
 				_pmng_compute_matM[0].get_nn(),
 				_pmng_compute_matM[0].get_nk(),
-				_mem_input, _mem_matV_input);
+				_mem_decode, _mem_matV_input);
   _pmng_compute_matM[0].set(_vec_reswghts[0].matU, _mem_matV_input, _mem_matM);
   _pmng_compute_matAV[0].start(use_wmma, false, true, context, resnet_nout,
 			       maxsize_batch, _pmng_compute_matM[1].get_nm(),
