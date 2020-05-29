@@ -1,38 +1,38 @@
-playshogi��2��usi�v���O�������m��ΐ킳���܂��B
+playshogiは2つのusiプログラム同士を対戦させます。
 
-1. 513��ɒB���������͎����I�Ɉ�������
-2. �錾�����������I�Ɉ�������(�ʏ�͏����𖞂����Ă���"win"�𑗂�܂���
-   �����𖞂�������w�����u�Ԃ�playshogi�����肵�܂�)�B27�_�@
-3. AobaZero���g���ꍇ�A�����ɕ����̑ΐ�𑖂点�A�v���Z�X�ԃo�b�`��g�ނ��Ƃō������ł��܂��B
-4. �����͕W���o�͂ɏo�܂��B
-5. ��莁���쐬���ꂽ24��ڂ܂ł̌݊p��ՏW���g���đΐ�ł��܂��B
+1. 513手に達した将棋は自動的に引き分け
+2. 宣言勝ちも自動的に引き分け(通常は条件を満たしてから"win"を送りますが
+   条件を満たす手を指した瞬間にplayshogiが判定します)。27点法
+3. AobaZeroを使う場合、同時に複数の対戦を走らせ、プロセス間バッチを組むことで高速化できます。
+4. 棋譜は標準出力に出ます。
+5. 磯崎氏が作成された24手目までの互角定跡集を使って対戦できます。
    http://yaneuraou.yaneu.com/2016/08/24/%E8%87%AA%E5%B7%B1%E5%AF%BE%E5%B1%80%E7%94%A8%E3%81%AB%E4%BA%92%E8%A7%92%E3%81%AE%E5%B1%80%E9%9D%A2%E9%9B%86%E3%82%92%E5%85%AC%E9%96%8B%E3%81%97%E3%81%BE%E3%81%97%E3%81%9F/
    records2016_10818.sfen
-   ���J�����g�f�B���N�g���ɒu���ĉ������B
-   ��Ղ͋N�����ƂɃ����_���ɑI�΂�܂��B
+   をカレントディレクトリに置いて下さい。
+   定跡は起動ごとにランダムに選ばれます。
 
 
 
-��:
-AobaZero���m��ΐ킳����ꍇ�B800�ǁB�݊p��ՏW��400�ǎg���Đ����݂ɁB"-0"�����ł��B
+例:
+AobaZero同士を対戦させる場合。800局。互角定跡集を400局使って先後交互に。"-0"が先手です。
 ./bin/playshogi -rsbm 800 -0 "./bin/aobaz -p 100 -w ./weight/w1198.txt" -1 "./bin/aobaz -p 100 -w ./weight/w1198.txt" >> w1198_p100_vs_w1198_p100.csa
 
-AobaZero(1��800playout)��Kristallweizen(1��200k�m�[�h�A1�X���b�h�A��ՂȂ�)��ΐ킳����ꍇ�B�v���Z�X�ԃo�b�`���p�Bweight�̎w���playshogi�Aaobaz�A�������̂��w�肵�Ă�������(�����Ŏ��XGPU�̌v�Z��CPU�̌v�Z�̈�v���m�F���邽��)�B
+AobaZero(1手800playout)とKristallweizen(1手200kノード、1スレッド、定跡なし)を対戦させる場合。プロセス間バッチ利用。weightの指定はplayshogi、aobaz、同じものを指定してください(内部で時々GPUの計算とCPUの計算の一致を確認するため)。
 ./bin/playshogi -rsbm 600 -B 7 -P 18 -U 0 -c /bin/bash -W ./weight/w1198.txt -0 "./bin/aobaz -p 800 -e 0 -w ./weight/w1198.txt" -1 "~/Kristallweizen/yane483_nnue_avx2 usi , isready , setoption name BookMoves value 0 , setoption Threads value 1 , setoption NodesLimit value 200000" >> w1198_p800_vs_200k.csa
 
-�� ����
-ubuntu 16���� "-c /bin/bash" ��t���Ȃ���AobaZero�̃v���Z�X�ԃo�b�`�͓��삵�܂���B
-CentOS���ƕK�v�Ȃ��ł��B����� "sh -c" �ŋN�������v���Z�X��ubuntu���Ǝq�v���Z�X�łȂ����v���Z�X�ɂȂ邽�߂ł��B
+※ 注意
+ubuntu 16だと "-c /bin/bash" を付けないとAobaZeroのプロセス間バッチは動作しません。
+CentOSだと必要ないです。これは "sh -c" で起動したプロセスがubuntuだと子プロセスでなく孫プロセスになるためです。
 
 
 
-���ʂ̌���
+結果の見方
    W-D-L    Games(DW-rep-DL) Sente WinR                WinRate 95%   ELO
-   �� �� �s �ǐ� (�� �� ��)    ��菟��                 ����   95%   ELO
+   勝 分 敗 局数 (宣 千 宣)    先手勝率                 勝率   95%   ELO
   437-13-350 800 (50-10-2)(s=422-365,0.536), m=133, wr=0.554(0.034)(  37)
 
-  (50-10-2) �͐��̐錾������50�ǁA�����̈���������10�ǁA���̐錾������2�ǁA�ł��B
-  513�蒴����13-10=3�ǂł��B
+  (50-10-2) は先手の宣言勝ちが50局、千日手の引き分けが10局、後手の宣言勝ちが2局、です。
+  513手超えは13-10=3局です。
 
 
 
