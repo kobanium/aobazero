@@ -214,9 +214,10 @@ class NNetOCL : public NNet {
   std::condition_variable _cv_pool1_slot;
   uint _pool1_slots[NNAux::nslot];
   uint _pool1_slot_size;
+  uint acquire_slot_wait() noexcept;
+  void release_slot(uint uslot) noexcept;
 
   int64_t _elapsed_wait_ff;
-
   ManageDecode _mng_decode;
   ManageComputeMatV _mng_compute_matV_first;
   std::unique_ptr<ManageComputeMatM []> _pmng_compute_matM;
@@ -240,7 +241,7 @@ class NNetOCL : public NNet {
   OCL::MemPinned _mem_in[NNAux::nslot], _mem_out[NNAux::nslot];
   std::vector<struct CLResWght> _vec_reswghts;
   uint _slots_size_batch[NNAux::nslot];
-  std::unique_ptr<uint []> _slots_sizes_nnmove[NNAux::nslot];
+  const uint *_slots_sizes_nnmove[NNAux::nslot];
   float *_slots_probs[NNAux::nslot];
   float *_slots_values[NNAux::nslot];
   uint _maxsize_batch, _nres_block;

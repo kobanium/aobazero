@@ -1884,63 +1884,16 @@ static void compute_probs(uint nb, const uint *sizes_nnmove, const float *fin,
 			  float *probs) noexcept {
   assert(sizes_nnmove && fin && probs);
   for (uint ub = 0; ub < nb; ++ub) {
-    float *probs_b = probs + ub * NNAux::nmove;
+    float *probs_b = probs + ub * SAux::maxsize_moves;
     copy_n(fin, sizes_nnmove[ub], probs_b);
     NNAux::softmax(sizes_nnmove[ub], probs_b);
     fin += sizes_nnmove[ub]; } }
-
-static void compress_data(uint nb0, uint nb, const float *in,
-			  const uint *sizes_nnmove, const ushort *nnmoves,
-			  void *out, size_t &size_write, uint &n_one,
-			  uint &ntot_moves, uint &index_moves) noexcept {
-  assert(in && sizes_nnmove && nnmoves && out);
-  float *pvalue = static_cast<float *>(out);
-  uint  *pindex = static_cast<uint *>(out) + NNAux::fill_block_size(nb);
-  uint index;
-  for (uint ub = 0; ub < nb; ++ub) {
-    for (uint uposi = 0; uposi < 8U; ++uposi)
-      for (uint ufplane = 28; ufplane < 45U; ++ufplane) {
-	uint ch = 45U * uposi + ufplane;
-	index   = (ub * NNAux::nch_input + ch) * NNAux::size_plane;
-	*pindex++ = (ch * nb + ub) * NNAux::size_plane;
-	*pvalue++ = (ub < nb0) ? in[index] : 0.0f; }
-    index     = (ub * NNAux::nch_input + 360U) * NNAux::size_plane;
-    *pindex++ = (360U * nb + ub) * NNAux::size_plane;
-    *pvalue++ = (ub < nb0) ? in[index] : 0.0f;
-    index     = (ub * NNAux::nch_input + 361U) * NNAux::size_plane;
-    *pindex++ = (361U * nb + ub) * NNAux::size_plane;
-    *pvalue++ = (ub < nb0) ? in[index] : 0.0f; }
-
-  pindex = static_cast<uint *>(out) + NNAux::fill_block_size(nb)*2U;
-  n_one  = 0;
-  for (uint ub = 0; ub < nb0; ++ub)
-    for (uint uposi = 0; uposi < 8U; ++uposi)
-      for (uint ufplane = 0; ufplane < 28U; ++ufplane) {
-	uint ch  = 45U * uposi + ufplane;
-	uint bch = (ub * NNAux::nch_input + ch) * NNAux::size_plane;
-	uint chb = (ch * nb + ub) * NNAux::size_plane;
-	for (uint u = 0; u < NNAux::size_plane; ++u) {
-	  if (in[bch + u] < 0.5f) continue;
-	  pindex[n_one++] = chb + u; } }
-
-  index_moves = NNAux::fill_block_size(nb)*2U + NNAux::ceil_multi(n_one, 32U);
-  pindex = static_cast<uint *>(out) + index_moves;
-  ntot_moves = 0;
-  for (uint ub = 0; ub < nb0; ++ub)
-    for (uint unn = 0; unn < sizes_nnmove[ub]; ++unn) {
-      uint nnmove = nnmoves[ub * NNAux::nmove + unn];
-      ntot_moves += 1U;
-      assert(nnmove < NNAux::nch_out_policy * NNAux::size_plane);
-      *pindex++ = ub * NNAux::nch_out_policy * NNAux::size_plane + nnmove; }
-  
-  size_write = (index_moves + ntot_moves) * sizeof(uint); }
 
 NNetOCL::NNetOCL() noexcept : _pool1_slot_size(NNAux::nslot) {}
 
 string NNetOCL::reset(uint maxsize_batch,
 		      const vector<pair<uint, row_t>> &wght, int device_id,
 		      bool use_half, bool flag_out, bool do_sleep) noexcept {
-
   //
   // setup thread objects
   //
@@ -1950,9 +1903,8 @@ string NNetOCL::reset(uint maxsize_batch,
 
   _do_sleep = do_sleep;
   _elapsed_wait_ff = 0;
-  for (uint uslot = 0; uslot < NNAux::nslot; ++uslot) {
+  for (uint uslot = 0; uslot < NNAux::nslot; ++uslot)
     _pool1_slots[NNAux::nslot - uslot - 1U] = uslot;
-    _slots_sizes_nnmove[uslot].reset(new uint [maxsize_batch]); }
 
   //
   // compute weight dimension
@@ -2142,7 +2094,7 @@ string NNetOCL::reset(uint maxsize_batch,
     _mem_in[u]         = context.gen_mem_pin_hw_dr(sizeof(uint)
 						   * 2048U * maxsize_batch);
     _mem_out[u]        = context.gen_mem_pin_hr_dw(sizeof(float)
-						   * (1U + NNAux::nmove)
+						   * (1U + SAux::maxsize_moves)
 						   * maxsize_batch); }
   
   row_t row = gen_head1_trans_weight(policy1_nout, value1_nout, resnet_nout,
@@ -2280,30 +2232,37 @@ void NNetOCL::ff(uint size_batch, const float *input, const uint *sizes_nnmove,
 			 probs, values);
   wait_ff(wait_id); }
 
-uint NNetOCL::push_ff(uint size_batch, const float *input,
-		      const uint *sizes_nnmove, const ushort *nnmoves,
-		      float *probs, float *values) noexcept {
-  assert(input && sizes_nnmove && nnmoves && probs && values);
-
+uint NNetOCL::acquire_slot_wait() noexcept {
   unique_lock<mutex> lock_pool1(_m_pool1_slot);
   _cv_pool1_slot.wait(lock_pool1, [&]{ return 0 < _pool1_slot_size; });
   assert(0 < _pool1_slot_size);
   uint uslot = _pool1_slots[ --_pool1_slot_size ];
   lock_pool1.unlock();
+  return uslot; }
 
-  if (size_batch == 0 || _maxsize_batch < size_batch)
-    die(ERR_INT("invalid size_batch"));
+void NNetOCL::release_slot(uint uslot) noexcept {
+  unique_lock<mutex> lock(_m_pool1_slot);
+  assert(_pool1_slot_size < NNAux::nslot);
+  _pool1_slots[ _pool1_slot_size++ ] = uslot;
+  lock.unlock();
+  _cv_pool1_slot.notify_one(); }
 
+uint NNetOCL::push_ff(uint size_batch, const float *input,
+		      const uint *sizes_nnmove, const ushort *nnmoves,
+		      float *probs, float *values) noexcept {
+  assert(0 < size_batch && size_batch <= _maxsize_batch);
+  assert(input && sizes_nnmove && nnmoves && probs && values);
+
+  uint uslot = acquire_slot_wait();
   size_t size_write;
   uint n_one, ntot_moves, index_moves;
   tie(size_write, n_one, ntot_moves, index_moves)
     = NNAux::pack_batch(size_batch, _maxsize_batch, input, sizes_nnmove,
 			nnmoves, _mem_in[uslot].get_pointer());
-  memcpy(_slots_sizes_nnmove[uslot].get(), sizes_nnmove,
-	 sizeof(uint) * size_batch);
-  _slots_size_batch[uslot] = size_batch;
-  _slots_probs[uslot]      = probs;
-  _slots_values[uslot]     = values;
+  _slots_sizes_nnmove[uslot] = sizes_nnmove;
+  _slots_size_batch[uslot]   = size_batch;
+  _slots_probs[uslot]        = probs;
+  _slots_values[uslot]       = values;
 
   _queue_a[uslot].push_write(_mem_in[uslot], size_write);
   _mng_decode.push(_queue_a[uslot], n_one, uslot);
@@ -2347,7 +2306,7 @@ void NNetOCL::wait_ff(uint uslot) noexcept {
 			/ INT64_C(100)); }
   else _queue_a[uslot].finish();
 
-  compute_probs(_slots_size_batch[uslot], _slots_sizes_nnmove[uslot].get(),
+  compute_probs(_slots_size_batch[uslot], _slots_sizes_nnmove[uslot],
 		static_cast<float *>(_mem_out[uslot].get_pointer())
 		+ _maxsize_batch, _slots_probs[uslot]);
   for (uint ub = 0; ub < _slots_size_batch[uslot]; ++ub)
@@ -2355,9 +2314,5 @@ void NNetOCL::wait_ff(uint uslot) noexcept {
       = std::tanh(static_cast<float *>(_mem_out[uslot].get_pointer())[ub]
 		  + _value3_bias[0]);
 
-  unique_lock<mutex> lock(_m_pool1_slot);
-  assert(_pool1_slot_size < NNAux::nslot);
-  _pool1_slots[ _pool1_slot_size++ ] = uslot;
-  lock.unlock();
-  _cv_pool1_slot.notify_one(); }
+  release_slot(uslot); }
 #endif

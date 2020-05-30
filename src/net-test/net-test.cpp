@@ -224,9 +224,14 @@ public:
 struct TestSet {
   uint wait_id;
   uint nentry;
-  vector<const Entry *> pdata;
+  NNInput nninput;
+  unique_ptr<const Entry *[]> ppentry;
   unique_ptr<float []> probs;
   unique_ptr<float []> values;
+  explicit TestSet(uint nb_) noexcept : nentry(0), nninput(nb_),
+    ppentry(new const Entry *[nb_]),
+    probs(new float [nb_ * SAux::maxsize_moves]),
+    values(new float [nb_]) {};
 };
 
 class QueueTest {
@@ -234,65 +239,63 @@ class QueueTest {
   mutex _m;
   condition_variable _cv;
   thread _th_worker_wait_test;
-  deque<TestSet> _deque_ts;
-  vector<const Entry *> _pdata;
-  uint _npush, _nbatch;
-  int64_t _nelapsed;
+  deque<unique_ptr<TestSet>> _deque_wait;
+  deque<unique_ptr<TestSet>> _deque_pool;
+  unique_ptr<TestSet> _pts_push;
+  bool _flag_quit;
+  uint _nb;
+  int64_t _neval;
 
   void worker_wait_test() noexcept {
-    TestSet ts;
+    unique_ptr<TestSet> pts;
     while (true) {
       unique_lock<mutex> lock(_m);
-      _cv.wait(lock, [&]{ return 0 < _deque_ts.size(); });
-      ts = move(_deque_ts.front());
-      _deque_ts.pop_front();
+      _cv.wait(lock, [&]{ return (_flag_quit || 0 < _deque_wait.size()); });
+      if (_deque_wait.empty() && _flag_quit) return;
+      pts = move(_deque_wait.front());
+      _deque_wait.pop_front();
       lock.unlock();
+      _cv.notify_one();
 
-      if (ts.nentry == 0) return;
-      _pnnet->wait_ff(ts.wait_id);
-      for (uint index = 0; index < ts.nentry; ++index)
-	ts.pdata[index]->compare(ts.probs.get() + index * SAux::maxsize_moves,
-				ts.values[index]);
-
+      _pnnet->wait_ff(pts->wait_id);
+      for (uint ub = 0; ub < pts->nentry; ++ub)
+	pts->ppentry[ub]->compare(pts->probs.get() + ub * SAux::maxsize_moves,
+				  pts->values[ub]);
       if (opt_verbose) {
-	for (uint index = 0; index < ts.nentry; ++index)
-	  cout << setw(5) << ts.pdata[index]->get_no();
+	for (uint ub = 0; ub < pts->nentry; ++ub)
+	  cout << setw(5) << pts->ppentry[ub]->get_no();
 	cout << " OK" << endl; }
-      _nelapsed += 1U; } }
+      _neval += 1U;
+      
+      lock.lock();
+      _deque_pool.push_back(move(pts));
+      lock.unlock(); } }
 
   void flush() noexcept {
-    if (_npush == 0) return;
-
-    unique_ptr<float []> _probs(new float [_nbatch * SAux::maxsize_moves]);
-    unique_ptr<float []> _values(new float [_nbatch]);
-    unique_ptr<float []> _input(new float [_nbatch * NNAux::size_input]);
-    unique_ptr<ushort []> _nnmoves(new ushort [_nbatch * SAux::maxsize_moves]);
-    unique_ptr<uint []> _sizes_nnmove(new uint [_nbatch]);
-    for (uint index = 0; index < _npush; ++index) {
-      const Entry *pe = _pdata[index];
-      copy_n(pe->input.begin(), NNAux::size_input,
-	     _input.get() + index * NNAux::size_input);
-      copy_n(pe->nnmoves.begin(), SAux::maxsize_moves,
-	     _nnmoves.get() + index * SAux::maxsize_moves);
-      _sizes_nnmove[index] = pe->get_size_nnmove(); }
-
-    uint wait_id = _pnnet->push_ff(_npush, _input.get(), _sizes_nnmove.get(),
-				   _nnmoves.get(), _probs.get(),
-				   _values.get());
-    TestSet ts{wait_id, _npush, _pdata, move(_probs), move(_values)};
+    if (_pts_push->nentry == 0) return;
+    _pts_push->wait_id = _pnnet->push_ff(_pts_push->nninput.get_ub(),
+					 _pts_push->nninput.get_input(),
+					 _pts_push->nninput.get_sizes_nnmove(),
+					 _pts_push->nninput.get_nnmoves(),
+					 _pts_push->probs.get(),
+					 _pts_push->values.get());
     unique_lock<mutex> lock(_m);
-    _deque_ts.push_back(move(ts));
+    _cv.wait(lock, [&]{ return _deque_wait.size() < 16U; });
+    _deque_wait.push_back(move(_pts_push));
+    if (_deque_pool.empty()) _deque_pool.emplace_back(new TestSet(_nb));
+    _pts_push = move(_deque_pool.front());
+    _deque_pool.pop_front();
     lock.unlock();
     _cv.notify_one();
 
-    _npush = 0; }
+    _pts_push->nentry = 0;
+    _pts_push->nninput.erase(); }
   
 public:
-  explicit QueueTest(const FName &fname, int device_id, uint nbatch,
-		     bool use_half, int thread_num) noexcept
+  explicit QueueTest(const FName &fname, int device_id, uint nb, bool use_half,
+		     int thread_num) noexcept
     : _th_worker_wait_test(&QueueTest::worker_wait_test, this),
-		  _pdata(nbatch), _npush(0),
-		  _nbatch(nbatch), _nelapsed(0) {
+    _pts_push(new TestSet(nb)), _flag_quit(false), _nb(nb), _neval(0) {
       
     uint version;
     uint64_t digest;
@@ -302,7 +305,7 @@ public:
 #if defined(USE_OPENCL_AOBA)
       _pnnet.reset(new NNetOCL);
       NNetOCL *p = dynamic_cast<NNetOCL *>(_pnnet.get());
-      p->reset(nbatch, wght, device_id, use_half);
+      p->reset(_nb, wght, device_id, use_half);
 #else
       die(ERR_INT("No OpenCL support"));
 #endif
@@ -310,7 +313,7 @@ public:
 #if defined(USE_MKL) || defined(USE_OPENBLAS)
       _pnnet.reset(new NNetCPU);
       NNetCPU *p = dynamic_cast<NNetCPU *>(_pnnet.get());
-      p->reset(nbatch, wght, thread_num);
+      p->reset(_nb, wght, thread_num);
 #else
       die(ERR_INT("No CPU BLAS support"));
 #endif
@@ -321,21 +324,22 @@ public:
 
   void push(const Entry *pe) noexcept {
     assert(pe && pe->ok());
-    _pdata[_npush] = pe;
-    if (++_npush == _nbatch) flush(); }
+    _pts_push->ppentry[_pts_push->nentry++] = pe;
+    _pts_push->nninput.add(pe->input.data(), pe->get_size_nnmove(),
+			   pe->nnmoves.data());
+    assert(_pts_push->nentry == _pts_push->nninput.get_ub());
+    if (_pts_push->nentry == _nb) flush(); }
 
   void end() noexcept {
     flush();
-    TestSet ts;
-    ts.nentry = 0;
     {
       lock_guard<mutex> lock(_m);
-      _deque_ts.push_back(move(ts));
+      _flag_quit = true;
     }
     _cv.notify_one();
     _th_worker_wait_test.join(); }
 
-  int64_t get_nelapsed() const noexcept { return _nelapsed; }
+  int64_t get_neval() const noexcept { return _neval; }
 };
 
 static vector<Entry> read_entries(istream *pis) noexcept {
@@ -478,7 +482,7 @@ int main(int argc, char **argv) {
   queue_test.end();
   steady_clock::time_point end   = steady_clock::now();
   int64_t elapsed  = duration_cast<microseconds>(end - start).count();
-  int64_t nelapsed = queue_test.get_nelapsed() * 1000U;
+  int64_t nelapsed = queue_test.get_neval() * 1000U;
   if (0 < nelapsed)
     cout << "Average Time: "
 	 << static_cast<double>(elapsed) / static_cast<double>(nelapsed)

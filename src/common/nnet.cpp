@@ -13,6 +13,7 @@
 #include <cassert>
 #include <climits>
 #include <cmath>
+#include <cstring>
 using std::fill_n;
 using std::ifstream;
 using std::ios;
@@ -31,8 +32,6 @@ static_assert(SAux::file_size == NNAux::width,
 	      "SAux::file_size == NNAux::width");
 static_assert(SAux::rank_size == NNAux::height,
 	      "SAux::rank_size == NNAux::height");
-static_assert(SAux::maxsize_moves == NNAux::nmove,
-	      "SAux::maxsize_size == NNAux::nmove");
 
 constexpr char msg_bad_xz_fmt[] = "bad xz format";
 constexpr char msg_bad_wght[]   = "bad weight format";
@@ -140,6 +139,20 @@ static void store_plane(float *p, uint uch, float f = 1.0f) noexcept {
   assert(p && uch < NNAux::nch_input);
   fill_n(p + uch * Sq::ok_size, Sq::ok_size, f); };
 
+NNInput::NNInput(uint nb) noexcept : _ub(0), _nb(nb),
+  _input(new float [nb * NNAux::size_input]), _sizes_nnmove(new uint [nb]),
+  _nnmoves(new ushort [nb * SAux::maxsize_moves]) {}
+
+void NNInput::add(const float *input, uint size_nnmove, const ushort *nnmoves)
+  noexcept {
+  assert(input && size_nnmove < SAux::maxsize_moves && nnmoves && _ub < _nb);
+  memcpy(_input.get() + _ub * NNAux::size_input, input,
+	   NNAux::size_input * sizeof(float));
+  memcpy(_nnmoves.get() + _ub * SAux::maxsize_moves, nnmoves,
+	 SAux::maxsize_moves * sizeof(ushort));
+  _sizes_nnmove[_ub] = size_nnmove;
+  _ub += 1U; }
+
 void NNAux::softmax(uint n, float *p) noexcept {
   if (n == 0) return;
   assert(p);
@@ -223,7 +236,7 @@ NNAux::pack_batch(uint nb0, uint nb, const float *in, const uint *sizes_nnmove,
   pindex = static_cast<uint *>(out) + index_moves;
   for (uint ub = 0; ub < nb0; ++ub)
     for (uint unn = 0; unn < sizes_nnmove[ub]; ++unn) {
-      uint nnmove = nnmoves[ub * NNAux::nmove + unn];
+      uint nnmove = nnmoves[ub * SAux::maxsize_moves + unn];
       ntot_moves += 1U;
       assert(nnmove < NNAux::nch_out_policy * NNAux::size_plane);
       *pindex++ = ub * NNAux::nch_out_policy * NNAux::size_plane + nnmove; }

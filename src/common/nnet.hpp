@@ -16,7 +16,6 @@ namespace NNAux {
   constexpr uint width       = 9U;
   constexpr uint height      = 9U;
   constexpr uint size_plane  = width * height;
-  constexpr uint nmove       = 1024U;
   void softmax(uint n, float *p) noexcept;
   wght_t read(const FName &fwght, uint &version, uint64_t &digest) noexcept;
 
@@ -50,6 +49,25 @@ public:
   void clear() noexcept { Node<Len>::clear(); set_posi(); }
   void take_action(const Action &a) noexcept;
   void encode_input(float *p) const noexcept;
+};
+
+class NNInput {
+  using uint   = unsigned int;
+  using ushort = unsigned short;
+  uint _ub, _nb;
+  std::unique_ptr<float []> _input;
+  std::unique_ptr<uint []> _sizes_nnmove;
+  std::unique_ptr<ushort []> _nnmoves;
+
+public:
+  explicit NNInput(uint nb) noexcept;
+  void erase() noexcept { _ub = 0; }
+  void add(const float *input, uint size_nnmove, const ushort *nnmoves)
+    noexcept;
+  uint get_ub() const noexcept { return _ub; }
+  const float *get_input() const noexcept { return _input.get(); }
+  const uint *get_sizes_nnmove() const noexcept { return _sizes_nnmove.get(); }
+  const ushort *get_nnmoves() const noexcept { return _nnmoves.get(); }
 };
 
 class NNet {
