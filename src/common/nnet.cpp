@@ -16,8 +16,10 @@
 using std::fill_n;
 using std::ifstream;
 using std::ios;
+using std::make_tuple;
 using std::pair;
 using std::queue;
+using std::tuple;
 using std::unique_ptr;
 using std::vector;
 using row_t  = unique_ptr<float []>;
@@ -181,6 +183,53 @@ ushort NNAux::encode_nnmove(const Action &a, const Color &turn) noexcept {
   ushort us = static_cast<ushort>(ch * Sq::ok_size + from.to_u());
   assert(us < 10692U);
   return us; }
+
+tuple<uint, uint, uint, uint>
+NNAux::pack_batch(uint nb0, uint nb, const float *in, const uint *sizes_nnmove,
+		  const ushort *nnmoves, void *out) noexcept {
+  assert(nb0 <= nb && in && sizes_nnmove && nnmoves && out);
+  float *pvalue = static_cast<float *>(out);
+  uint  *pindex = static_cast<uint *>(out) + NNAux::fill_block_size(nb);
+  uint index;
+  for (uint ub = 0; ub < nb; ++ub) {
+    for (uint uposi = 0; uposi < 8U; ++uposi)
+      for (uint ufplane = 28; ufplane < 45U; ++ufplane) {
+	uint ch = 45U * uposi + ufplane;
+	index   = (ub * NNAux::nch_input + ch) * NNAux::size_plane;
+	*pindex++ = (ch * nb + ub) * NNAux::size_plane;
+	*pvalue++ = (ub < nb0) ? in[index] : 0.0f; }
+    index     = (ub * NNAux::nch_input + 360U) * NNAux::size_plane;
+    *pindex++ = (360U * nb + ub) * NNAux::size_plane;
+    *pvalue++ = (ub < nb0) ? in[index] : 0.0f;
+    index     = (ub * NNAux::nch_input + 361U) * NNAux::size_plane;
+    *pindex++ = (361U * nb + ub) * NNAux::size_plane;
+    *pvalue++ = (ub < nb0) ? in[index] : 0.0f; }
+
+  pindex = static_cast<uint *>(out) + NNAux::fill_block_size(nb)*2U;
+  uint n_one = 0;
+  for (uint ub = 0; ub < nb0; ++ub)
+    for (uint uposi = 0; uposi < 8U; ++uposi)
+      for (uint ufplane = 0; ufplane < 28U; ++ufplane) {
+	uint ch  = 45U * uposi + ufplane;
+	uint bch = (ub * NNAux::nch_input + ch) * NNAux::size_plane;
+	uint chb = (ch * nb + ub) * NNAux::size_plane;
+	for (uint u = 0; u < NNAux::size_plane; ++u) {
+	  if (in[bch + u] < 0.5f) continue;
+	  pindex[n_one++] = chb + u; } }
+
+  uint ntot_moves = 0;
+  uint index_moves = (NNAux::fill_block_size(nb)*2U
+		      + NNAux::ceil_multi(n_one, 32U));
+  pindex = static_cast<uint *>(out) + index_moves;
+  for (uint ub = 0; ub < nb0; ++ub)
+    for (uint unn = 0; unn < sizes_nnmove[ub]; ++unn) {
+      uint nnmove = nnmoves[ub * NNAux::nmove + unn];
+      ntot_moves += 1U;
+      assert(nnmove < NNAux::nch_out_policy * NNAux::size_plane);
+      *pindex++ = ub * NNAux::nch_out_policy * NNAux::size_plane + nnmove; }
+  
+  uint size_write = (index_moves + ntot_moves) * sizeof(uint);
+  return make_tuple(size_write, n_one, ntot_moves, index_moves); }
 
 template<uint Len>
 void NodeNN<Len>::set_posi() noexcept {

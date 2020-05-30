@@ -29,8 +29,8 @@ class ManageDecode {
 public:
   void start(const OCL::Context &context,
 	     const OCL::MemPinned mem_in[NNAux::nslot],
-	     const OCL::Memory mem_out[NNAux::nslot], uint _index_block,
-	     uint maxsize_batch) noexcept;
+	     const OCL::Memory mem_out[NNAux::nslot], uint maxsize_batch)
+    noexcept;
   void push(const OCL::Queue &queue, uint n_one, uint uslot) noexcept;
 };
 
@@ -244,7 +244,6 @@ class NNetOCL : public NNet {
   float *_slots_probs[NNAux::nslot];
   float *_slots_values[NNAux::nslot];
   uint _maxsize_batch, _nres_block;
-  uint _index_block;
   row_t _value3_bias;
   bool _do_sleep;
 

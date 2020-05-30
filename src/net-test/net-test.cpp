@@ -233,13 +233,13 @@ class QueueTest {
   unique_ptr<NNet> _pnnet;
   mutex _m;
   condition_variable _cv;
-  thread _th_worker;
+  thread _th_worker_wait_test;
   deque<TestSet> _deque_ts;
   vector<const Entry *> _pdata;
   uint _npush, _nbatch;
   int64_t _nelapsed;
 
-  void worker() noexcept {
+  void worker_wait_test() noexcept {
     TestSet ts;
     while (true) {
       unique_lock<mutex> lock(_m);
@@ -290,7 +290,8 @@ class QueueTest {
 public:
   explicit QueueTest(const FName &fname, int device_id, uint nbatch,
 		     bool use_half, int thread_num) noexcept
-    : _th_worker(&QueueTest::worker, this), _pdata(nbatch), _npush(0),
+    : _th_worker_wait_test(&QueueTest::worker_wait_test, this),
+		  _pdata(nbatch), _npush(0),
 		  _nbatch(nbatch), _nelapsed(0) {
       
     uint version;
@@ -332,7 +333,7 @@ public:
       _deque_ts.push_back(move(ts));
     }
     _cv.notify_one();
-    _th_worker.join(); }
+    _th_worker_wait_test.join(); }
 
   int64_t get_nelapsed() const noexcept { return _nelapsed; }
 };

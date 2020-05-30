@@ -83,7 +83,6 @@ constexpr uint size_plane_in         = size_tile_in * ntile;
 constexpr uint pad                   = 1U;
 constexpr uint send_size_ave         = 3000U;
 constexpr uint read_size_ave         = 400U;
-constexpr uint send_nch_fill         = 17U * 8U + 2U;
 constexpr uint size_align_local      = 32U;
 constexpr float bn_factor            = 1.0f / 999.982f;
 constexpr float bn_eps               = 1e-5f;
@@ -843,10 +842,6 @@ void resize_bias_ReLU(__global const float *bias, __global const float *fin,
   fout[nm*LD_OUT + nn] = fmax(0.0f, fin[nm*LD_IN + nn] + bias[nm]); }
 )";
 
-static uint ceil_multi(uint u, uint mul) noexcept {
-  assert(1U <= mul && u <= UINT_MAX - mul + 1U);
-  return ((u + mul - 1U) / mul) * mul; }
-
 static uint ceil_power2(uint u) noexcept {
   uint u0;
   for (u0 = 1U; u0 < u; u0 *= 2U) assert(u0 <= UINT_MAX / 2U);
@@ -856,9 +851,12 @@ static uint ceil_power2(uint u) noexcept {
 //constexpr uint AV_align          = 64U;
 constexpr uint batch_bundle_size =  14U;
 constexpr uint AV_align          = 128U;
-
-static uint partition_len_n() noexcept {
-  return ceil_multi(batch_bundle_size*ntile, AV_align); }
+constexpr uint partition_len_n() noexcept {
+  return NNAux::ceil_multi(batch_bundle_size*ntile, AV_align); }
+constexpr uint AV_local_size(uint bs) noexcept {
+  return (bs < batch_bundle_size) ? bs : batch_bundle_size; }
+constexpr uint AV_block_size(uint bs) noexcept {
+  return NNAux::ceil_multi(AV_local_size(bs) * ntile, AV_align); }
 
 static bool is_bs_allowed(uint bs) noexcept {
   uint major = bs / batch_bundle_size;
@@ -874,22 +872,11 @@ static uint len_n(uint bs) noexcept {
   if (major == 0) return minor * ntile;
   return (major - 1U) * partition_len_n() + batch_bundle_size * ntile; }
 
-static uint AV_local_size(uint bs) noexcept {
-  assert(is_bs_allowed(bs));
-  uint major = bs / batch_bundle_size;
-  uint minor = bs % batch_bundle_size;
-  if (major == 0) return minor;
-  return batch_bundle_size; }
-
 static uint AV_num_groups(uint bs) noexcept {
   assert(is_bs_allowed(bs));
   uint major = bs / batch_bundle_size;
   if (major == 0) return 1U;
   return major; }
-
-static uint AV_block_size(uint bs) noexcept {
-  assert(is_bs_allowed(bs));
-  return ceil_multi(AV_local_size(bs) * ntile, AV_align); }
 
 static tuple<string, uint, uint, uint, size_t, size_t, size_t, size_t>
 gen_code_compute_matM(uint nm0, uint nn0, uint nk0, const SgemmParam &param)
@@ -897,9 +884,9 @@ gen_code_compute_matM(uint nm0, uint nn0, uint nk0, const SgemmParam &param)
   assert(0 < nm0 && 0 < nn0 && 0 < nk0 && param.ok());
   if (param.do_wmma) {
     uint ntk = 16U;
-    uint nm = ceil_multi(nm0, param.nlm * param.npm * param.ntm);
-    uint nn = ceil_multi(nn0, param.nln * param.npn * param.ntn);
-    uint nk = ceil_multi(nk0, param.npk * ntk);
+    uint nm = NNAux::ceil_multi(nm0, param.nlm * param.npm * param.ntm);
+    uint nn = NNAux::ceil_multi(nn0, param.nln * param.npn * param.ntn);
+    uint nk = NNAux::ceil_multi(nk0, param.npk * ntk);
     string str, str_tdm;
     if (param.ntm ==  8) str_tdm = R"(".m8n32k16")";
     if (param.ntm == 16) str_tdm = R"(".m16n16k16")";
@@ -934,9 +921,9 @@ gen_code_compute_matM(uint nm0, uint nn0, uint nk0, const SgemmParam &param)
 		      nm / (param.npm*param.ntm),
 		      param.nln * size_wrap_wmma, param.nlm); }
   else {
-    uint nm = ceil_multi(nm0, param.nl * param.nlfm * param.npm);
-    uint nn = ceil_multi(nn0, param.nl * param.npn);
-    uint nk = ceil_multi(nk0, param.nl * param.nlfm * param.npk);
+    uint nm = NNAux::ceil_multi(nm0, param.nl * param.nlfm * param.npm);
+    uint nn = NNAux::ceil_multi(nn0, param.nl * param.npn);
+    uint nk = NNAux::ceil_multi(nk0, param.nl * param.nlfm * param.npk);
     string str;
     str += "#define SIZE_ALIGN " + to_string(size_align_local) + "U\n";
     str += "#define NM         " + to_string(nm)         + "U\n";
@@ -1255,13 +1242,15 @@ static void get_best_device(OCL::Device &device_best) noexcept {
 void ManageDecode::start(const OCL::Context &context,
 			 const OCL::MemPinned mem_in[NNAux::nslot],
 			 const OCL::Memory mem_out[NNAux::nslot],
-			 uint index_block, uint maxsize_batch) noexcept {
+			 uint maxsize_batch) noexcept {
   assert(context.ok());
 
+  uint index_block = NNAux::ceil_multi(maxsize_batch * NNAux::nch_input_fill,
+				       32U);
   _zero_size = maxsize_batch * NNAux::nch_input * NNAux::size_plane;
   _fill_size_l[0] = _fill_size_g[0] = 81U;
   _fill_size_l[1] = _fill_size_l[2] = _fill_size_g[2] = 1U;
-  _fill_size_g[1] = send_nch_fill * maxsize_batch;
+  _fill_size_g[1] = NNAux::nch_input_fill * maxsize_batch;
 
   string code = ("#define INDEX_BLOCK " + to_string(index_block) + "U\n"
 		 "#define NB          " + to_string(maxsize_batch) + "U\n"
@@ -1329,9 +1318,9 @@ static double measure_sgemm(const OCL::Context &context,
 			    uint nk0, uint sample_size) {
   assert(context.ok() && param.ok());
   assert(0 < nm0 && 0 < nn0 && 0 < nk0 && 0 < sample_size);
-  uint nm = ceil_multi(nm0, param.nl * param.nlfm * param.npm);
-  uint nn = ceil_multi(nn0, param.nl * param.npn);
-  uint nk = ceil_multi(nk0, param.nl * param.nlfm * param.npk);
+  uint nm = NNAux::ceil_multi(nm0, param.nl * param.nlfm * param.npm);
+  uint nn = NNAux::ceil_multi(nn0, param.nl * param.npn);
+  uint nk = NNAux::ceil_multi(nk0, param.nl * param.nlfm * param.npk);
   string str        = gen_code_sgemm(nm, nn, nk, param);
   OCL::Kernel ker   = context.gen_program(str).gen_kernel("sgemm");
   OCL::Memory mem_a = gen_mem_init(context, nm * nk, 0.01f);
@@ -1463,9 +1452,9 @@ void ManageSgemm::start(const OCL::Device &device, const OCL::Context &context,
   _nm0  = nm0;  _nn0  = nn0;  _nk0  = nk0;
   _lda  = lda;  _ldb  = ldb;  _ldc  = ldc;
   _offa = offa; _offb = offb; _offc = offc;
-  _nm = ceil_multi(nm0, _param.nl * _param.nlfm * _param.npm);
-  _nn = ceil_multi(nn0, _param.nl * _param.npn);
-  _nk = ceil_multi(nk0, _param.nl * _param.nlfm * _param.npk);
+  _nm = NNAux::ceil_multi(nm0, _param.nl * _param.nlfm * _param.npm);
+  _nn = NNAux::ceil_multi(nn0, _param.nl * _param.npn);
+  _nk = NNAux::ceil_multi(nk0, _param.nl * _param.nlfm * _param.npk);
   size_g[0] = _nn / _param.npn;
   size_g[1] = _nm / _param.npm;
   size_g[2] = 1U;
@@ -1900,13 +1889,13 @@ static void compute_probs(uint nb, const uint *sizes_nnmove, const float *fin,
     NNAux::softmax(sizes_nnmove[ub], probs_b);
     fin += sizes_nnmove[ub]; } }
 
-static void compress_data(uint index_block, uint nb0, uint nb, const float *in,
+static void compress_data(uint nb0, uint nb, const float *in,
 			  const uint *sizes_nnmove, const ushort *nnmoves,
 			  void *out, size_t &size_write, uint &n_one,
 			  uint &ntot_moves, uint &index_moves) noexcept {
   assert(in && sizes_nnmove && nnmoves && out);
   float *pvalue = static_cast<float *>(out);
-  uint  *pindex = static_cast<uint *>(out) + index_block;
+  uint  *pindex = static_cast<uint *>(out) + NNAux::fill_block_size(nb);
   uint index;
   for (uint ub = 0; ub < nb; ++ub) {
     for (uint uposi = 0; uposi < 8U; ++uposi)
@@ -1922,7 +1911,7 @@ static void compress_data(uint index_block, uint nb0, uint nb, const float *in,
     *pindex++ = (361U * nb + ub) * NNAux::size_plane;
     *pvalue++ = (ub < nb0) ? in[index] : 0.0f; }
 
-  pindex = static_cast<uint *>(out) + index_block*2U;
+  pindex = static_cast<uint *>(out) + NNAux::fill_block_size(nb)*2U;
   n_one  = 0;
   for (uint ub = 0; ub < nb0; ++ub)
     for (uint uposi = 0; uposi < 8U; ++uposi)
@@ -1934,7 +1923,7 @@ static void compress_data(uint index_block, uint nb0, uint nb, const float *in,
 	  if (in[bch + u] < 0.5f) continue;
 	  pindex[n_one++] = chb + u; } }
 
-  index_moves = ceil_multi(index_block*2U + n_one, 32U);
+  index_moves = NNAux::fill_block_size(nb)*2U + NNAux::ceil_multi(n_one, 32U);
   pindex = static_cast<uint *>(out) + index_moves;
   ntot_moves = 0;
   for (uint ub = 0; ub < nb0; ++ub)
@@ -1971,7 +1960,6 @@ string NNetOCL::reset(uint maxsize_batch,
   if (! is_bs_allowed(maxsize_batch))
     die(ERR_INT("bad batch size %u", maxsize_batch));
   _maxsize_batch = maxsize_batch;
-  _index_block   = ceil_multi(maxsize_batch * send_nch_fill, 32U);
   constexpr uint nrow_input = 4U;
   constexpr uint nrow_head  = 14U;
   uint nrow = static_cast<uint>(wght.size());
@@ -2196,8 +2184,7 @@ string NNetOCL::reset(uint maxsize_batch,
 
 
   _pmng_compute_matAV.reset(new ManageComputeMatAV [_nres_block]);
-  _mng_decode.start(context, _mem_in, _mem_decode, _index_block,
-		    maxsize_batch);
+  _mng_decode.start(context, _mem_in, _mem_decode, maxsize_batch);
   _mng_compute_matV_first.start(use_wmma, context, NNAux::nch_input,
 				maxsize_batch,
 				_pmng_compute_matM[0].get_nn(),
@@ -2309,9 +2296,9 @@ uint NNetOCL::push_ff(uint size_batch, const float *input,
 
   size_t size_write;
   uint n_one, ntot_moves, index_moves;
-  compress_data(_index_block, size_batch, _maxsize_batch, input, sizes_nnmove,
-		nnmoves, _mem_in[uslot].get_pointer(), size_write, n_one,
-		ntot_moves, index_moves);
+  tie(size_write, n_one, ntot_moves, index_moves)
+    = NNAux::pack_batch(size_batch, _maxsize_batch, input, sizes_nnmove,
+			nnmoves, _mem_in[uslot].get_pointer());
   memcpy(_slots_sizes_nnmove[uslot].get(), sizes_nnmove,
 	 sizeof(uint) * size_batch);
   _slots_size_batch[uslot] = size_batch;
