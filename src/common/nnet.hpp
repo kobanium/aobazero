@@ -22,7 +22,7 @@ namespace NNAux {
   constexpr uint nch_input      = 362U;
   constexpr uint nch_input_fill = 17U * 8U + 2U;
   constexpr uint nch_out_policy = 139U;
-  constexpr uint size_input     = size_plane * nch_input;
+  constexpr uint maxsize_encoded_features = (size_plane * nch_input) / 8U;
   constexpr uint ceil_multi(uint u, uint mul) noexcept {
     return ((u + mul - 1U) / mul) * mul; }
   unsigned short encode_nnmove(const Action &a, const Color &turn) noexcept;
@@ -48,24 +48,56 @@ public:
   explicit NodeNN() noexcept { set_posi(); }
   void clear() noexcept { Node<Len>::clear(); set_posi(); }
   void take_action(const Action &a) noexcept;
-  void encode_input(float *p) const noexcept;
+  void encode_features(float *p) const noexcept;
 };
 
-class NNInput {
+class NNFeatures {
+  using uint   = unsigned int;
+  using ushort = unsigned short;
+  float _features[NNAux::size_plane * NNAux::nch_input];
+
+public:
+  explicit NNFeatures() noexcept {}
+  explicit NNFeatures(const float *features) noexcept { reset(features); }
+  void reset(const float *features) noexcept;
+  float *get() noexcept { return _features; }
+  const float *get() const noexcept { return _features; }
+};
+
+/*
+class NNEncodedFeatures {
+  using uint   = unsigned int;
+  using ushort = unsigned short;
+  float _encoded_features[NNAux::maxsize_encoded_features];
+  uint _n_one;
+
+public:
+  explicit NNEncodedFeatures() noexcept {}
+  explicit NNEncodedFeatures(uint n_one, float *encode_features) noexcept {
+    reset(n_one, encode_features); }
+  explicit NNEncodedFeatures(float *features) noexcept { reset(features); }
+  void reset(uint n_one, const float *encoded_features) noexcept;
+  void reset(const float *features) noexcept;
+  float *get() noexcept { return _features; }
+  const float *get() const noexcept { return _features; }
+};
+*/
+
+class NNInBatch {
   using uint   = unsigned int;
   using ushort = unsigned short;
   uint _ub, _nb;
-  std::unique_ptr<float []> _input;
+  std::unique_ptr<float []> _features;
   std::unique_ptr<uint []> _sizes_nnmove;
   std::unique_ptr<ushort []> _nnmoves;
 
 public:
-  explicit NNInput(uint nb) noexcept;
+  explicit NNInBatch(uint nb) noexcept;
   void erase() noexcept { _ub = 0; }
-  void add(const float *input, uint size_nnmove, const ushort *nnmoves)
+  void add(const NNFeatures &nn_ft, uint size_nnmove, const ushort *nnmoves)
     noexcept;
   uint get_ub() const noexcept { return _ub; }
-  const float *get_input() const noexcept { return _input.get(); }
+  const float *get_features() const noexcept { return _features.get(); }
   const uint *get_sizes_nnmove() const noexcept { return _sizes_nnmove.get(); }
   const ushort *get_nnmoves() const noexcept { return _nnmoves.get(); }
 };
@@ -94,8 +126,8 @@ struct SharedService {
 
 struct SharedIPC {
   uint nnet_id;
-  float input[NNAux::size_input];
-  uint size_nnmove;
-  ushort nnmoves[SAux::maxsize_moves];
+  NNFeatures nn_ft;
+  unsigned int size_nnmove;
+  unsigned short nnmove[SAux::maxsize_moves];
   float probs[SAux::maxsize_moves];
   float value; };

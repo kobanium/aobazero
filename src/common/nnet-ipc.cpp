@@ -75,11 +75,11 @@ void NNetIPC::end() noexcept {
 
 int NNetIPC::get_id() const noexcept { assert(ok()); return _id; }
 
-float *NNetIPC::get_input() const noexcept {
-  assert(ok() && _pipc); return _pipc->input; }
+float *NNetIPC::get_features() const noexcept {
+  assert(ok() && _pipc); return _pipc->nn_ft.get(); }
 
 ushort *NNetIPC::get_nnmoves() const noexcept {
-  assert(ok() && _pipc); return _pipc->nnmoves; }
+  assert(ok() && _pipc); return _pipc->nnmove; }
 
 const float *NNetIPC::get_probs() const noexcept {
   assert(ok() && _pipc); return _pipc->probs; }

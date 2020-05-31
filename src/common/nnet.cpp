@@ -139,15 +139,50 @@ static void store_plane(float *p, uint uch, float f = 1.0f) noexcept {
   assert(p && uch < NNAux::nch_input);
   fill_n(p + uch * Sq::ok_size, Sq::ok_size, f); };
 
-NNInput::NNInput(uint nb) noexcept : _ub(0), _nb(nb),
-  _input(new float [nb * NNAux::size_input]), _sizes_nnmove(new uint [nb]),
+void NNFeatures::reset(const float *features) noexcept {
+  assert(features); memcpy(_features, features, sizeof(_features)); }
+
+/*
+void NNEncodedFeatures::reset(uint n_one, const float *encoded_features) 
+  noexcept {
+  assert(encoded_features);
+  assert(NNAux::nch_input_fill + n_one <= NNAux::maxsize_encoded_features);
+  memcpy(_encoded_features, encoded_features,
+	 (NNAux::nch_input_fill + n_one) * sizeof(float)); }
+
+void NNEncodedFeatures::reset(const float *features) noexcept {
+  assert(features);
+  float *pvalue = static_cast<float *>(_encoded_features);
+  for (uint uposi = 0; uposi < 8U; ++uposi)
+    for (uint ufplane = 28; ufplane < 45U; ++ufplane) {
+      uint ch = 45U * uposi + ufplane;
+      *pvalue++ = features[ch * NNAux::size_plane]; }
+  *pvalue++ = features[360U * NNAux::size_plane];
+  *pvalue++ = features[361U * NNAux::size_plane];
+
+  uint *pindex
+    = static_cast<uint *>(_encoded_features + NNAux::nch_input_fill);
+  uint n_one = 0;
+  for (uint uposi = 0; uposi < 8U; ++uposi)
+    for (uint ufplane = 0; ufplane < 28U; ++ufplane) {
+      uint ch  = 45U * uposi + ufplane;
+      for (uint u = 0; u < NNAux::size_plane; ++u) {
+	if (features[ch * NNAux::size_plane + u] < 0.5f) continue;
+	assert(NNAux::nch_input_fill + n_one
+	       < NNAux::maxsize_encoded_features);
+	pindex[n_one++] = ch * NNAux::size_plane + u; } } }
+*/
+
+NNInBatch::NNInBatch(uint nb) noexcept : _ub(0), _nb(nb),
+  _features(new float [nb * NNAux::size_plane * NNAux::nch_input]),
+  _sizes_nnmove(new uint [nb]),
   _nnmoves(new ushort [nb * SAux::maxsize_moves]) {}
 
-void NNInput::add(const float *input, uint size_nnmove, const ushort *nnmoves)
-  noexcept {
-  assert(input && size_nnmove < SAux::maxsize_moves && nnmoves && _ub < _nb);
-  memcpy(_input.get() + _ub * NNAux::size_input, input,
-	   NNAux::size_input * sizeof(float));
+void NNInBatch::add(const NNFeatures &nn_ft, uint size_nnmove,
+		    const ushort *nnmoves) noexcept {
+  assert(size_nnmove < SAux::maxsize_moves && nnmoves && _ub < _nb);
+  memcpy(_features.get() + _ub * NNAux::size_plane * NNAux::nch_input,
+	 nn_ft.get(), NNAux::size_plane * NNAux::nch_input * sizeof(float));
   memcpy(_nnmoves.get() + _ub * SAux::maxsize_moves, nnmoves,
 	 SAux::maxsize_moves * sizeof(ushort));
   _sizes_nnmove[_ub] = size_nnmove;
@@ -265,9 +300,9 @@ void NodeNN<Len>::take_action(const Action &a) noexcept {
   if (Node<Len>::get_type().is_interior()) set_posi(); }
 
 template<uint Len>
-void NodeNN<Len>::encode_input(float *p) const noexcept {
+void NodeNN<Len>::encode_features(float *p) const noexcept {
   assert(p);
-  fill_n(p, NNAux::size_input, 0.0f);
+  fill_n(p, NNAux::size_plane * NNAux::nch_input, 0.0f);
   const Color &turn = Node<Len>::get_turn();
   
   uint ch_off = 0;

@@ -367,8 +367,8 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 			nnmoves[i] = id;
 		}
 
-		copy_n(          data, NNAux::size_input, p_nnet->get_input()  );
-		copy_n(nnmoves.data(),          move_num, p_nnet->get_nnmoves());
+		copy_n(data, NNAux::size_plane * NNAux::nch_input, p_nnet->get_features()  );
+		copy_n(nnmoves.data(), move_num, p_nnet->get_nnmoves());
 		if ( p_nnet->submit_block(move_num) == -1 ) {	// lock. wait result.
 			PRT("Err. submit_block()\n"); debug();
 		}

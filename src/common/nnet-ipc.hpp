@@ -32,7 +32,7 @@ public:
   int start(uint nnet_id) noexcept;
   void end() noexcept;
   int get_id() const noexcept;
-  float *get_input() const noexcept;
+  float *get_features() const noexcept;
   ushort *get_nnmoves() const noexcept;
   const float *get_probs() const noexcept;
   float get_value() const noexcept;

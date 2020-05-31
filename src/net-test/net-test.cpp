@@ -163,21 +163,25 @@ class Entry {
   double _value_answer;
   map<string, double> _policy_answers;
   map<ushort, string> _nnmove2str;
+  NNFeatures _nn_ft;
 
 public:
-  vector<float> input;
   vector<ushort> nnmoves;
   explicit Entry() noexcept : _size_nnmove(0) {}
   explicit Entry(uint no, uint size_nnmove, double value_answer,
 		 map<string, double> &&policy_answers,
-		 map<ushort, string> &&nnmove2str) noexcept :
+		 map<ushort, string> &&nnmove2str,
+		 const float *features) noexcept :
     _no(no), _size_nnmove(size_nnmove), _value_answer(value_answer),
-    _policy_answers(move(policy_answers)), _nnmove2str(move(nnmove2str)) {}
+    _policy_answers(move(policy_answers)), _nnmove2str(move(nnmove2str)),
+    _nn_ft(features) {}
   Entry(const Entry &e) = default;
   Entry &operator=(const Entry &e) = default;
   Entry(Entry &&e) = default;
   Entry &operator=(Entry &&e) = default;
 
+  const NNFeatures &get_nn_ft() const noexcept { return _nn_ft; }
+  const float *get_features() const noexcept { return _nn_ft.get(); }
   uint get_size_nnmove() const noexcept { return _size_nnmove; }
   uint get_no() const noexcept { return _no; }
   bool ok() const noexcept {
@@ -224,11 +228,11 @@ public:
 struct TestSet {
   uint wait_id;
   uint nentry;
-  NNInput nninput;
+  NNInBatch nn_in_b;
   unique_ptr<const Entry *[]> ppentry;
   unique_ptr<float []> probs;
   unique_ptr<float []> values;
-  explicit TestSet(uint nb_) noexcept : nentry(0), nninput(nb_),
+  explicit TestSet(uint nb_) noexcept : nentry(0), nn_in_b(nb_),
     ppentry(new const Entry *[nb_]),
     probs(new float [nb_ * SAux::maxsize_moves]),
     values(new float [nb_]) {};
@@ -273,10 +277,10 @@ class QueueTest {
 
   void flush() noexcept {
     if (_pts_push->nentry == 0) return;
-    _pts_push->wait_id = _pnnet->push_ff(_pts_push->nninput.get_ub(),
-					 _pts_push->nninput.get_input(),
-					 _pts_push->nninput.get_sizes_nnmove(),
-					 _pts_push->nninput.get_nnmoves(),
+    _pts_push->wait_id = _pnnet->push_ff(_pts_push->nn_in_b.get_ub(),
+					 _pts_push->nn_in_b.get_features(),
+					 _pts_push->nn_in_b.get_sizes_nnmove(),
+					 _pts_push->nn_in_b.get_nnmoves(),
 					 _pts_push->probs.get(),
 					 _pts_push->values.get());
     unique_lock<mutex> lock(_m);
@@ -289,7 +293,7 @@ class QueueTest {
     _cv.notify_one();
 
     _pts_push->nentry = 0;
-    _pts_push->nninput.erase(); }
+    _pts_push->nn_in_b.erase(); }
   
 public:
   explicit QueueTest(const FName &fname, int device_id, uint nb, bool use_half,
@@ -325,9 +329,9 @@ public:
   void push(const Entry *pe) noexcept {
     assert(pe && pe->ok());
     _pts_push->ppentry[_pts_push->nentry++] = pe;
-    _pts_push->nninput.add(pe->input.data(), pe->get_size_nnmove(),
+    _pts_push->nn_in_b.add(pe->get_nn_ft(), pe->get_size_nnmove(),
 			   pe->nnmoves.data());
-    assert(_pts_push->nentry == _pts_push->nninput.get_ub());
+    assert(_pts_push->nentry == _pts_push->nn_in_b.get_ub());
     if (_pts_push->nentry == _nb) flush(); }
 
   void end() noexcept {
@@ -366,26 +370,27 @@ static vector<Entry> read_entries(istream *pis) noexcept {
       node.take_action(a);
       path.emplace_back(move(token1)); }
     
-    // read NN input
+    // read features
     uline += 1U;
     if (! getline(*pis, string_line)) die(ERR_INT("bad line %u", uline));
     ss.clear();
     ss.str(string_line);
     ss >> token1;
     if (token1 != "input") die(ERR_INT("bad line %u", uline));
-    vector<double> input_answer;
+    vector<double> features_answer;
     double di;
-    while (ss >> di) input_answer.push_back(di);
+    while (ss >> di) features_answer.push_back(di);
 
-    vector<float> input(NNAux::size_input);
-    node.encode_input(input.data());
-    if (input_answer.size() != NNAux::size_input)
-      die(ERR_INT("bad input size %zu vs %u",
-		  input_answer.size(), NNAux::size_input));
+    vector<float> input(NNAux::size_plane * NNAux::nch_input);
+    node.encode_features(input.data());
+    if (features_answer.size() != NNAux::size_plane * NNAux::nch_input)
+      die(ERR_INT("bad input feature size %zu vs %u",
+		  features_answer.size(),
+		  NNAux::size_plane * NNAux::nch_input));
     
     for (uint uch = 0; uch < NNAux::nch_input; ++uch)
       for (uint usq = 0; usq < Sq::ok_size; ++usq) {
-	double f1 = input_answer[uch * Sq::ok_size + usq];
+	double f1 = features_answer[uch * Sq::ok_size + usq];
 	double f2 = input[uch * Sq::ok_size + usq];
 	if (absolute_error(f1, f2) <= epsilon) continue;
 	cerr << "input (answer): " << f1 << endl;
@@ -452,8 +457,7 @@ static vector<Entry> read_entries(istream *pis) noexcept {
     if (node.get_turn() == white) value_answer = - value_answer;
 
     vec_entry.emplace_back(++no, ms.size(), value_answer, move(policy_answer),
-			   move(nnmove2str));
-    vec_entry.back().input   = move(input);
+			   move(nnmove2str), input.data());
     vec_entry.back().nnmoves = move(nnmoves2); }
 
   return vec_entry; }
