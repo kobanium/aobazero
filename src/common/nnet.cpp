@@ -142,7 +142,6 @@ static void store_plane(float *p, uint uch, float f = 1.0f) noexcept {
 void NNFeatures::reset(const float *features) noexcept {
   assert(features); memcpy(_features, features, sizeof(_features)); }
 
-/*
 void NNEncodedFeatures::reset(uint n_one, const float *encoded_features) 
   noexcept {
   assert(encoded_features);
@@ -152,7 +151,7 @@ void NNEncodedFeatures::reset(uint n_one, const float *encoded_features)
 
 void NNEncodedFeatures::reset(const float *features) noexcept {
   assert(features);
-  float *pvalue = static_cast<float *>(_encoded_features);
+  float *pvalue = _encoded_features;
   for (uint uposi = 0; uposi < 8U; ++uposi)
     for (uint ufplane = 28; ufplane < 45U; ++ufplane) {
       uint ch = 45U * uposi + ufplane;
@@ -160,8 +159,8 @@ void NNEncodedFeatures::reset(const float *features) noexcept {
   *pvalue++ = features[360U * NNAux::size_plane];
   *pvalue++ = features[361U * NNAux::size_plane];
 
-  uint *pindex
-    = static_cast<uint *>(_encoded_features + NNAux::nch_input_fill);
+  uint *pindex = reinterpret_cast<uint *>(_encoded_features
+					  + NNAux::nch_input_fill);
   uint n_one = 0;
   for (uint uposi = 0; uposi < 8U; ++uposi)
     for (uint ufplane = 0; ufplane < 28U; ++ufplane) {
@@ -171,7 +170,6 @@ void NNEncodedFeatures::reset(const float *features) noexcept {
 	assert(NNAux::nch_input_fill + n_one
 	       < NNAux::maxsize_encoded_features);
 	pindex[n_one++] = ch * NNAux::size_plane + u; } } }
-*/
 
 NNInBatch::NNInBatch(uint nb) noexcept : _ub(0), _nb(nb),
   _features(new float [nb * NNAux::size_plane * NNAux::nch_input]),
@@ -237,36 +235,31 @@ NNAux::pack_batch(uint nb0, uint nb, const float *in, const uint *sizes_nnmove,
 		  const ushort *nnmoves, void *out) noexcept {
   assert(nb0 <= nb && in && sizes_nnmove && nnmoves && out);
   float *pvalue = static_cast<float *>(out);
-  uint  *pindex = static_cast<uint *>(out) + NNAux::fill_block_size(nb);
   uint index;
   for (uint ub = 0; ub < nb; ++ub) {
     for (uint uposi = 0; uposi < 8U; ++uposi)
       for (uint ufplane = 28; ufplane < 45U; ++ufplane) {
 	uint ch = 45U * uposi + ufplane;
 	index   = (ub * NNAux::nch_input + ch) * NNAux::size_plane;
-	*pindex++ = (ch * nb + ub) * NNAux::size_plane;
 	*pvalue++ = (ub < nb0) ? in[index] : 0.0f; }
     index     = (ub * NNAux::nch_input + 360U) * NNAux::size_plane;
-    *pindex++ = (360U * nb + ub) * NNAux::size_plane;
     *pvalue++ = (ub < nb0) ? in[index] : 0.0f;
     index     = (ub * NNAux::nch_input + 361U) * NNAux::size_plane;
-    *pindex++ = (361U * nb + ub) * NNAux::size_plane;
     *pvalue++ = (ub < nb0) ? in[index] : 0.0f; }
 
-  pindex = static_cast<uint *>(out) + NNAux::fill_block_size(nb)*2U;
+  uint *pindex = static_cast<uint *>(out) + NNAux::fill_block_size(nb);
   uint n_one = 0;
   for (uint ub = 0; ub < nb0; ++ub)
     for (uint uposi = 0; uposi < 8U; ++uposi)
       for (uint ufplane = 0; ufplane < 28U; ++ufplane) {
-	uint ch  = 45U * uposi + ufplane;
-	uint bch = (ub * NNAux::nch_input + ch) * NNAux::size_plane;
-	uint chb = (ch * nb + ub) * NNAux::size_plane;
+	uint ch   = 45U * uposi + ufplane;
+	uint base = (ub * NNAux::nch_input + ch) * NNAux::size_plane;
 	for (uint u = 0; u < NNAux::size_plane; ++u) {
-	  if (in[bch + u] < 0.5f) continue;
-	  pindex[n_one++] = chb + u; } }
+	  if (in[base + u] < 0.5f) continue;
+	  pindex[n_one++] = base + u; } }
 
   uint ntot_moves = 0;
-  uint index_moves = (NNAux::fill_block_size(nb)*2U
+  uint index_moves = (NNAux::fill_block_size(nb)
 		      + NNAux::ceil_multi(n_one, 32U));
   pindex = static_cast<uint *>(out) + index_moves;
   for (uint ub = 0; ub < nb0; ++ub)

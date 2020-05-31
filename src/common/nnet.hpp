@@ -64,7 +64,6 @@ public:
   const float *get() const noexcept { return _features; }
 };
 
-/*
 class NNEncodedFeatures {
   using uint   = unsigned int;
   using ushort = unsigned short;
@@ -78,10 +77,9 @@ public:
   explicit NNEncodedFeatures(float *features) noexcept { reset(features); }
   void reset(uint n_one, const float *encoded_features) noexcept;
   void reset(const float *features) noexcept;
-  float *get() noexcept { return _features; }
-  const float *get() const noexcept { return _features; }
+  float *get() noexcept { return _encoded_features; }
+  const float *get() const noexcept { return _encoded_features; }
 };
-*/
 
 class NNInBatch {
   using uint   = unsigned int;

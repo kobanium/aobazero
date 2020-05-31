@@ -104,17 +104,31 @@ constexpr float bn_eps               = 1e-5f;
 const string code_decode = R"(
 __kernel void zero_clear(__global float *p) { p[get_global_id(0)] = 0.0f; }
 
+__constant ushort tbl_ch_fill[] = {
+   28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44,
+   73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+  118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,
+  163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,
+  208,209,210,211,212,213,214,215,216,217,218,219,220,221,222,223,224,
+  253,254,255,256,257,258,259,260,261,262,263,264,265,266,267,268,269,
+  298,299,300,301,302,303,304,305,306,307,308,309,310,311,312,313,314,
+  343,344,345,346,347,348,349,350,351,352,353,354,355,356,357,358,359,
+  360,361 };
+
 __kernel __attribute__((reqd_work_group_size(81, 1, 1)))
-void plane_fill(__global const float *pvalue, __global const uint *pindex,
-                __global float *p) {
+void plane_fill(__global const float *pvalue, __global float *p) {
   uint uplane = get_global_id(0);
   uint ich    = get_global_id(1);
-  uint index  = pindex[INDEX_BLOCK + ich];
-  p[index + uplane] = pvalue[ich]; }
+  uint ub     = get_global_id(2);
+  uint index  = (tbl_ch_fill[ich]*NB + ub) * SIZE_PLANE;
+  p[index + uplane] = pvalue[ub*NCH_FILL + ich]; }
 
 __kernel void set_one(__global const uint *pindex, __global float *p) {
-  uint index = pindex[2U*INDEX_BLOCK + get_global_id(0)];
-  p[index] = 1.0f; }
+  uint u = pindex[INDEX_BLOCK + get_global_id(0)];
+  uint sq = u % SIZE_PLANE;
+  uint ch = (u / SIZE_PLANE) % NCH_INPUT;
+  uint ub = (u / SIZE_PLANE) / NCH_INPUT;
+  p[(ch*NB + ub) * SIZE_PLANE + sq] = 1.0f; }
 )";
 
 const string code_compute_policy =
@@ -1249,12 +1263,17 @@ void ManageDecode::start(const OCL::Context &context,
 				       32U);
   _zero_size = maxsize_batch * NNAux::nch_input * NNAux::size_plane;
   _fill_size_l[0] = _fill_size_g[0] = 81U;
-  _fill_size_l[1] = _fill_size_l[2] = _fill_size_g[2] = 1U;
-  _fill_size_g[1] = NNAux::nch_input_fill * maxsize_batch;
-
-  string code = ("#define INDEX_BLOCK " + to_string(index_block) + "U\n"
-		 "#define NB          " + to_string(maxsize_batch) + "U\n"
-		 + code_decode);
+  _fill_size_l[1] = _fill_size_l[2] = 1U;
+  _fill_size_g[1] = NNAux::nch_input_fill;
+  _fill_size_g[2] = maxsize_batch;
+  bool flag_first = true;
+  string code;
+  code += ("#define INDEX_BLOCK " + to_string(index_block)           + "U\n"
+	   "#define NB          " + to_string(maxsize_batch)         + "U\n"
+	   "#define NCH_FILL    " + to_string(NNAux::nch_input_fill) + "U\n"
+	   "#define NCH_INPUT   " + to_string(NNAux::nch_input)      + "U\n"
+	   "#define SIZE_PLANE  " + to_string(NNAux::size_plane)     + "U\n"
+	   + code_decode);
   OCL::Program pg = context.gen_program(code);
 
   for (uint u = 0; u < NNAux::nslot; ++u) {
@@ -1264,8 +1283,7 @@ void ManageDecode::start(const OCL::Context &context,
 
     _ker_plane_fill[u] = pg.gen_kernel("plane_fill");
     _ker_plane_fill[u].set_arg(0, mem_in[u]);
-    _ker_plane_fill[u].set_arg(1, mem_in[u]);
-    _ker_plane_fill[u].set_arg(2, mem_out[u]);
+    _ker_plane_fill[u].set_arg(1, mem_out[u]);
 
     _ker_set_one[u] = pg.gen_kernel("set_one");
     _ker_set_one[u].set_arg(0, mem_in[u]);
@@ -1274,14 +1292,9 @@ void ManageDecode::start(const OCL::Context &context,
 void ManageDecode::push(const OCL::Queue &queue, uint n_one, uint uslot)
   noexcept {
   assert(queue.ok());
-  //nqueue.push_ndrange_kernel(_ker_zero_clear[uslot], 3, _zero_size_g,
-  //_zero_size_l);
   queue.push_kernel(_ker_zero_clear[uslot], _zero_size);
   queue.push_ndrange_kernel(_ker_plane_fill[uslot], 3, _fill_size_g,
 			    _fill_size_l);
-  //_one_size_g[0] = n_one;
-  //queue.push_ndrange_kernel(_ker_set_one[uslot], 3, _one_size_g,
-  //_one_size_l);
   queue.push_kernel(_ker_set_one[uslot], n_one); }
 
 void ManageComputeMatM::start(const OCL::Context &context, uint nbatch,

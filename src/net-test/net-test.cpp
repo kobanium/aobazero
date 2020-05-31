@@ -241,12 +241,12 @@ struct TestSet {
 class QueueTest {
   unique_ptr<NNet> _pnnet;
   mutex _m;
+  bool _flag_quit;
   condition_variable _cv;
   thread _th_worker_wait_test;
   deque<unique_ptr<TestSet>> _deque_wait;
   deque<unique_ptr<TestSet>> _deque_pool;
   unique_ptr<TestSet> _pts_push;
-  bool _flag_quit;
   uint _nb;
   int64_t _neval;
 
@@ -255,7 +255,7 @@ class QueueTest {
     while (true) {
       unique_lock<mutex> lock(_m);
       _cv.wait(lock, [&]{ return (_flag_quit || 0 < _deque_wait.size()); });
-      if (_deque_wait.empty() && _flag_quit) return;
+      if (_deque_wait.size() == 0 && _flag_quit) return;
       pts = move(_deque_wait.front());
       _deque_wait.pop_front();
       lock.unlock();
@@ -298,8 +298,9 @@ class QueueTest {
 public:
   explicit QueueTest(const FName &fname, int device_id, uint nb, bool use_half,
 		     int thread_num) noexcept
-    : _th_worker_wait_test(&QueueTest::worker_wait_test, this),
-    _pts_push(new TestSet(nb)), _flag_quit(false), _nb(nb), _neval(0) {
+    : _flag_quit(false),
+      _th_worker_wait_test(&QueueTest::worker_wait_test, this),
+      _pts_push(new TestSet(nb)), _nb(nb), _neval(0) {
       
     uint version;
     uint64_t digest;
