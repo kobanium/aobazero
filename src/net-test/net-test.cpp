@@ -7,7 +7,6 @@
 #include "option.hpp"
 #include "param.hpp"
 #include "shogibase.hpp"
-#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <deque>
@@ -27,9 +26,9 @@
 #include <climits>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 using std::async;
 using std::cerr;
-using std::copy_n;
 using std::cout;
 using std::condition_variable;
 using std::deque;
@@ -78,20 +77,30 @@ static double policy_max_e  = 0.0;
 static int opt_repeat_num   =  1;
 static int opt_thread_num   = -1;
 static int opt_device_id    = -1;
-static uint opt_batch_size  = 1;
+static uint opt_batch_size  =  1;
 static bool opt_use_half    = false;
 static bool opt_mode_cpu    = false;
 static bool opt_mode_opencl = true;
 static bool opt_verbose     = false;
+static bool opt_compress    = false;
 static string opt_str_wght;
 
 static string gen_usage(const char *cmd) noexcept {
   stringstream ss;
   ss << "Usage: \n"
-     << cmd << " [-i opencl] [-r repeat-num] [-u device-id] [-b batch-size]"
-    " [-v] [-h] weight\n"
-     << cmd << " [-i cpublas] [-r repeat-num] [-t thread-num] [-b batch-size]"
-    " [-v] weight\n";
+     << cmd << " [-i opencl] [-r num] [-u num] [-b size] [-hvz] weight\n"
+     << cmd << " -i cpublas [-r num] [-t num] [-b size] [-vz] weight" << R"(
+  -i code  uses OpenCL if "code" is opencl, uses BLAS for CPU if "code" is
+           cpublas.
+  -u num   let "opencl" code use a device of ID "num". Default is -1.
+  -h       let "opencl" code make use of half precision floating points.
+  -t num   let "cpublas" code make use of "num" threads. Default is -1.
+  -b size  specifies batch size. Default is 1.
+  -c       turns on feature-compress mode.
+  -r num   evaluates each state "num" times. Default is 1.
+  -v       turns on verbose mode.
+)";
+  
   return ss.str(); }
 
 static double absolute_error(double f1, double f2) noexcept {
@@ -103,7 +112,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
   char *endptr;
 
   while (! flag_err) {
-    int opt = Opt::get(argc, argv, "b:i:t:u:r:vh");
+    int opt = Opt::get(argc, argv, "b:i:t:u:r:vhz");
     if (opt < 0) break;
 
     long l;
@@ -148,6 +157,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
 
     case 'h': opt_use_half = true;  break;
     case 'v': opt_verbose  = true;  break;
+    case 'z': opt_compress = true;  break;
     default: flag_err = true; break; } }
 
   if (!flag_err && Opt::ind < argc) {
@@ -163,7 +173,8 @@ class Entry {
   double _value_answer;
   map<string, double> _policy_answers;
   map<ushort, string> _nnmove2str;
-  NNFeatures _nn_ft;
+  float _features[NNAux::size_plane * NNAux::nch_input];
+  float _compressed_features[NNAux::maxsize_compressed_features];
 
 public:
   vector<ushort> nnmoves;
@@ -173,15 +184,14 @@ public:
 		 map<ushort, string> &&nnmove2str,
 		 const float *features) noexcept :
     _no(no), _size_nnmove(size_nnmove), _value_answer(value_answer),
-    _policy_answers(move(policy_answers)), _nnmove2str(move(nnmove2str)),
-    _nn_ft(features) {}
+    _policy_answers(move(policy_answers)), _nnmove2str(move(nnmove2str)) {
+    memcpy(_features, features, sizeof(_features)); }
   Entry(const Entry &e) = default;
   Entry &operator=(const Entry &e) = default;
   Entry(Entry &&e) = default;
   Entry &operator=(Entry &&e) = default;
 
-  const NNFeatures &get_nn_ft() const noexcept { return _nn_ft; }
-  const float *get_features() const noexcept { return _nn_ft.get(); }
+  const float *get_features() const noexcept { return _features; }
   uint get_size_nnmove() const noexcept { return _size_nnmove; }
   uint get_no() const noexcept { return _no; }
   bool ok() const noexcept {
@@ -330,7 +340,7 @@ public:
   void push(const Entry *pe) noexcept {
     assert(pe && pe->ok());
     _pts_push->ppentry[_pts_push->nentry++] = pe;
-    _pts_push->nn_in_b.add(pe->get_nn_ft(), pe->get_size_nnmove(),
+    _pts_push->nn_in_b.add(pe->get_features(), pe->get_size_nnmove(),
 			   pe->nnmoves.data());
     assert(_pts_push->nentry == _pts_push->nn_in_b.get_ub());
     if (_pts_push->nentry == _nb) flush(); }

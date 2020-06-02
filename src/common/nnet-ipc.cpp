@@ -73,20 +73,6 @@ void NNetIPC::end() noexcept {
   _sem_ipc.close();
   _mmap_ipc.close(); }
 
-int NNetIPC::get_id() const noexcept { assert(ok()); return _id; }
-
-float *NNetIPC::get_features() const noexcept {
-  assert(ok() && _pipc); return _pipc->nn_ft.get(); }
-
-ushort *NNetIPC::get_nnmoves() const noexcept {
-  assert(ok() && _pipc); return _pipc->nnmove; }
-
-const float *NNetIPC::get_probs() const noexcept {
-  assert(ok() && _pipc); return _pipc->probs; }
-
-float NNetIPC::get_value() const noexcept {
-  assert(ok() && _pipc); return _pipc->value; }
-
 int NNetIPC::submit_block(uint size_nnmove) noexcept {
   assert(ok() && size_nnmove <= SAux::maxsize_moves && _pipc);
   _pipc->size_nnmove = size_nnmove;

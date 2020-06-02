@@ -58,11 +58,11 @@ public:
 	   0.0f);
     fill_n(_sizes_nnmove.get(), size_batch, 0); }
 
-  void add(const float *input, uint size_nnmove, const ushort *nnmoves,
+  void add(const float *features, uint size_nnmove, const ushort *nnmoves,
 	   uint id) noexcept {
-    assert(_ubatch < _size_batch && input && nnmoves
+    assert(_ubatch < _size_batch && features && nnmoves
 	   && id < NNAux::maxnum_nipc);
-    copy_n(input, NNAux::size_plane * NNAux::nch_input,
+    copy_n(features, NNAux::size_plane * NNAux::nch_input,
 	   &(_input[_ubatch * NNAux::size_plane * NNAux::nch_input]));
     copy_n(nnmoves, size_nnmove, &(_nnmoves[_ubatch * SAux::maxsize_moves]));
     _sizes_nnmove[_ubatch] = size_nnmove;
@@ -227,11 +227,11 @@ void NNetService::worker_srv() noexcept {
 	  if (_entries_pool.empty())
 	    _entries_pool.emplace_back(new Entry(_size_batch));
 
-	  unique_ptr<Entry> p = move(_entries_pool.back());
+	  unique_ptr<Entry> pe = move(_entries_pool.back());
 	  _entries_pool.pop_back();
-	  _entries_push.push_back(move(p)); }
+	  _entries_push.push_back(move(pe)); }
 
-	_entries_push.back()->add(pipc[id]->nn_ft.get(), pipc[id]->size_nnmove,
+	_entries_push.back()->add(pipc[id]->features, pipc[id]->size_nnmove,
 				  pipc[id]->nnmove, id);
 	if (_entries_push.size() == 1 && _entries_push.back()->is_full())
 	  flag_do_notify = true; }

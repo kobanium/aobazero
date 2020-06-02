@@ -31,11 +31,11 @@ public:
   NNetIPC(bool flag_detach = true) noexcept;
   int start(uint nnet_id) noexcept;
   void end() noexcept;
-  int get_id() const noexcept;
-  float *get_features() const noexcept;
-  ushort *get_nnmoves() const noexcept;
-  const float *get_probs() const noexcept;
-  float get_value() const noexcept;
   int submit_block(uint size_nnmove) noexcept;
-  bool ok() const noexcept { return 0 <= _id; }
+  int get_id() const noexcept { return _id; }
+  float *get_features() const noexcept { return _pipc->features; }
+  ushort *get_nnmoves() const noexcept { return _pipc->nnmove; }
+  const float *get_probs() const noexcept { return _pipc->probs; }
+  float get_value() const noexcept { return _pipc->value; }
+  bool ok() const noexcept { return (_pipc && 0 <= _id); }
 };
