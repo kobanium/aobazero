@@ -10,7 +10,6 @@
 #include <chrono>
 #include <condition_variable>
 #include <deque>
-#include <future>
 #include <iostream>
 #include <iomanip>
 #include <map>
@@ -27,16 +26,13 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-using std::async;
 using std::cerr;
 using std::cout;
 using std::condition_variable;
 using std::deque;
 using std::endl;
-using std::future;
 using std::getline;
 using std::istream;
-using std::launch;
 using std::lock_guard;
 using std::map;
 using std::max;
@@ -112,7 +108,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
   char *endptr;
 
   while (! flag_err) {
-    int opt = Opt::get(argc, argv, "b:i:t:u:r:vhz");
+    int opt = Opt::get(argc, argv, "b:i:t:u:r:vhc");
     if (opt < 0) break;
 
     long l;
@@ -157,7 +153,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
 
     case 'h': opt_use_half = true;  break;
     case 'v': opt_verbose  = true;  break;
-    case 'z': opt_compress = true;  break;
+    case 'c': opt_compress = true;  break;
     default: flag_err = true; break; } }
 
   if (!flag_err && Opt::ind < argc) {
@@ -175,6 +171,7 @@ class Entry {
   map<ushort, string> _nnmove2str;
   float _features[NNAux::size_plane * NNAux::nch_input];
   float _compressed_features[NNAux::maxsize_compressed_features];
+  uint _n_one;
 
 public:
   vector<ushort> nnmoves;
@@ -185,13 +182,18 @@ public:
 		 const float *features) noexcept :
     _no(no), _size_nnmove(size_nnmove), _value_answer(value_answer),
     _policy_answers(move(policy_answers)), _nnmove2str(move(nnmove2str)) {
-    memcpy(_features, features, sizeof(_features)); }
+    if (opt_compress)
+      _n_one = NNAux::compress_features(_compressed_features, features);
+    else memcpy(_features, features, sizeof(_features)); }
   Entry(const Entry &e) = default;
   Entry &operator=(const Entry &e) = default;
   Entry(Entry &&e) = default;
   Entry &operator=(Entry &&e) = default;
 
   const float *get_features() const noexcept { return _features; }
+  const float *get_compressed_features() const noexcept {
+    return _compressed_features; }
+  uint get_n_one() const noexcept { return _n_one; }
   uint get_size_nnmove() const noexcept { return _size_nnmove; }
   uint get_no() const noexcept { return _no; }
   bool ok() const noexcept {
@@ -238,14 +240,17 @@ public:
 struct TestSet {
   uint wait_id;
   uint nentry;
-  NNInBatch nn_in_b;
+  unique_ptr<NNInBatch> nn_in_b;
+  unique_ptr<NNInBatchCompressed> nn_in_b_c;
   unique_ptr<const Entry *[]> ppentry;
   unique_ptr<float []> probs;
   unique_ptr<float []> values;
-  explicit TestSet(uint nb_) noexcept : nentry(0), nn_in_b(nb_),
+  explicit TestSet(uint nb_) noexcept : nentry(0),
     ppentry(new const Entry *[nb_]),
     probs(new float [nb_ * SAux::maxsize_moves]),
-    values(new float [nb_]) {};
+    values(new float [nb_]) {
+    if (opt_compress) nn_in_b_c.reset(new NNInBatchCompressed(nb_));
+    else              nn_in_b.reset(new NNInBatch(nb_)); };
 };
 
 class QueueTest {
@@ -254,6 +259,7 @@ class QueueTest {
   bool _flag_quit;
   condition_variable _cv;
   thread _th_worker_wait_test;
+  thread _th_init;
   deque<unique_ptr<TestSet>> _deque_wait;
   deque<unique_ptr<TestSet>> _deque_pool;
   unique_ptr<TestSet> _pts_push;
@@ -280,19 +286,25 @@ class QueueTest {
 	  cout << setw(5) << pts->ppentry[ub]->get_no();
 	cout << " OK" << endl; }
       _neval += 1U;
-      
+
       lock.lock();
       _deque_pool.push_back(move(pts));
       lock.unlock(); } }
 
   void flush() noexcept {
     if (_pts_push->nentry == 0) return;
-    _pts_push->wait_id = _pnnet->push_ff(_pts_push->nn_in_b.get_ub(),
-					 _pts_push->nn_in_b.get_features(),
-					 _pts_push->nn_in_b.get_sizes_nnmove(),
-					 _pts_push->nn_in_b.get_nnmoves(),
-					 _pts_push->probs.get(),
-					 _pts_push->values.get());
+    if (opt_compress)
+      _pts_push->wait_id
+	= _pnnet->push_ff(*_pts_push->nn_in_b_c, _pts_push->probs.get(),
+			  _pts_push->values.get());
+    else
+      _pts_push->wait_id
+	= _pnnet->push_ff(_pts_push->nn_in_b->get_ub(),
+			  _pts_push->nn_in_b->get_features(),
+			  _pts_push->nn_in_b->get_sizes_nnmove(),
+			  _pts_push->nn_in_b->get_nnmoves(),
+			  _pts_push->probs.get(),
+			  _pts_push->values.get());
     unique_lock<mutex> lock(_m);
     _cv.wait(lock, [&]{ return _deque_wait.size() < 16U; });
     _deque_wait.push_back(move(_pts_push));
@@ -303,7 +315,8 @@ class QueueTest {
     _cv.notify_one();
 
     _pts_push->nentry = 0;
-    _pts_push->nn_in_b.erase(); }
+    if (opt_compress) _pts_push->nn_in_b_c->erase();
+    else              _pts_push->nn_in_b->erase(); }
   
 public:
   explicit QueueTest(const FName &fname, int device_id, uint nb, bool use_half,
@@ -311,24 +324,21 @@ public:
     : _flag_quit(false),
       _th_worker_wait_test(&QueueTest::worker_wait_test, this),
       _pts_push(new TestSet(nb)), _nb(nb), _neval(0) {
-      
-    uint version;
-    uint64_t digest;
-    NNAux::wght_t wght = NNAux::read(fname, version, digest);
 
     if (opt_mode_opencl) {
 #if defined(USE_OPENCL_AOBA)
       _pnnet.reset(new NNetOCL);
-      NNetOCL *p = dynamic_cast<NNetOCL *>(_pnnet.get());
-      p->reset(_nb, wght, device_id, use_half);
+      NNetOCL *p = static_cast<NNetOCL *>(_pnnet.get());
+      _th_init = thread([=]{ p->reset(nb, NNAux::read(fname), device_id,
+				      use_half); });
 #else
       die(ERR_INT("No OpenCL support"));
 #endif
     } else if (opt_mode_cpu) {
 #if defined(USE_MKL) || defined(USE_OPENBLAS)
       _pnnet.reset(new NNetCPU);
-      NNetCPU *p = dynamic_cast<NNetCPU *>(_pnnet.get());
-      p->reset(_nb, wght, thread_num);
+      NNetCPU *p = static_cast<NNetCPU *>(_pnnet.get());
+      _th_init = thread([=]{ p->reset(nb, NNAux::read(fname), thread_num); });
 #else
       die(ERR_INT("No CPU BLAS support"));
 #endif
@@ -337,12 +347,24 @@ public:
     (void)device_id;
     (void)use_half; }
 
+  void wait_init() noexcept { _th_init.join(); }
+  bool do_compress() const noexcept { return _pnnet->do_compress(); }
+
   void push(const Entry *pe) noexcept {
     assert(pe && pe->ok());
+
     _pts_push->ppentry[_pts_push->nentry++] = pe;
-    _pts_push->nn_in_b.add(pe->get_features(), pe->get_size_nnmove(),
-			   pe->nnmoves.data());
-    assert(_pts_push->nentry == _pts_push->nn_in_b.get_ub());
+    if (opt_compress) {
+      _pts_push->nn_in_b_c->add(pe->get_n_one(),
+				pe->get_compressed_features(),
+				pe->get_size_nnmove(),
+				pe->nnmoves.data());
+      assert(_pts_push->nentry == _pts_push->nn_in_b_c->get_ub()); }
+    else {
+      _pts_push->nn_in_b->add(pe->get_features(), pe->get_size_nnmove(),
+			      pe->nnmoves.data());
+      assert(_pts_push->nentry == _pts_push->nn_in_b->get_ub()); }
+
     if (_pts_push->nentry == _nb) flush(); }
 
   void end() noexcept {
@@ -475,14 +497,15 @@ static vector<Entry> read_entries(istream *pis) noexcept {
 
 int main(int argc, char **argv) {
   if (get_options(argc, argv) < 0) return 1;
-  cout << "Start reading entries from stdin ..." << endl;
-  future<vector<Entry>> f_vec_entry
-    = async(launch::async, read_entries, &std::cin);
 
   QueueTest queue_test(FName(opt_str_wght.c_str()), opt_device_id,
 		       opt_batch_size, opt_use_half, opt_thread_num);
-  vector<Entry> vec_entry = f_vec_entry.get();
+
+  cout << "Start reading entries from stdin ..." << endl;
+  vector<Entry> vec_entry = read_entries(&std::cin);
   cout << "Finish reading " << vec_entry.size() << " entries" << endl;
+
+  queue_test.wait_init();
 
   vector<const Entry *> vec_pe(opt_repeat_num * vec_entry.size());
   uint index = 0;

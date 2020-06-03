@@ -145,7 +145,7 @@ void NNFeatures::reset(const float *features) noexcept {
 void NNCompressedFeatures::reset(uint n_one, const float *compressed_features) 
   noexcept {
   assert(compressed_features);
-  assert(NNAux::nch_input_fill + n_one <= NNAux::maxsize_comressed_features);
+  assert(NNAux::nch_input_fill + n_one <= NNAux::maxsize_compressed_features);
   memcpy(_compressed_features, compressed_features,
 	 (NNAux::nch_input_fill + n_one) * sizeof(float)); }
 
@@ -191,29 +191,34 @@ NNInBatchCompressed::NNInBatchCompressed(uint nb) noexcept :
 _fills(new float [nb * NNAux::nch_input_fill]),
   _ones(new uint [nb * NNAux::maxn_one]),
   _sizes_nnmove(new uint [nb]),
-  _nnmoves(new ushort [nb * SAux::maxsize_moves]), _ub(0), _nb(nb), _n_one(0),
+  _nnmoves(new uint [nb * SAux::maxsize_moves]), _ub(0), _nb(nb), _n_one(0),
   _ntot_moves(0) {}
 
-void NNInBatchCompressed::add(uint n_one, const float *compressed_features,
+void NNInBatchCompressed::add(uint n_one, const void *compressed_features,
 			      uint size_nnmove, const ushort *nnmoves)
   noexcept {
   assert(compressed_features && size_nnmove < SAux::maxsize_moves && nnmoves);
   assert(_ub < _nb);
-  memcpy(_fills.get() + _ub*NNAux::nch_input_fill, compressed_features,
+
+  const float *pvalue = static_cast<const float *>(compressed_features);
+  memcpy(_fills.get() + _ub*NNAux::nch_input_fill, pvalue,
 	 NNAux::nch_input_fill*sizeof(float));
 
-  uint base = _ub* NNAux::nch_input*NNAux::size_plane;
+  uint base = _ub*NNAux::nch_input*NNAux::size_plane;
+  const uint *pindex  = static_cast<const uint *>(compressed_features);
   for (uint u = 0; u < n_one; ++u)
-    _ones[_n_one + u] = compressed_features[NNAux::nch_input_fill + u] + base;
+    _ones[_n_one + u] = pindex[NNAux::nch_input_fill + u] + base;
 
   _sizes_nnmove[_ub] = size_nnmove;
-  memcpy(_nnmoves.get() + _ntot_moves, nnmoves, size_nnmove*sizeof(ushort));
+  for (uint u = 0; u < size_nnmove; ++u)
+    _nnmoves[_ntot_moves + u]
+      = nnmoves[u] + _ub*NNAux::nch_out_policy*NNAux::size_plane;
   _ub         += 1U;
   _n_one      += n_one;
   _ntot_moves += size_nnmove; }
 
 std::tuple<uint, uint, uint, uint>
-NNInBatchCompressed::compute_pack_batch(void *out) noexcept {
+NNInBatchCompressed::compute_pack_batch(void *out) const noexcept {
   assert(out);
   float *pvalue = static_cast<float *>(out);
   memcpy(pvalue, _fills.get(), _ub*NNAux::nch_input_fill*sizeof(float));
@@ -221,9 +226,12 @@ NNInBatchCompressed::compute_pack_batch(void *out) noexcept {
     pvalue[u] = 0.0f;
 
   uint *pindex = static_cast<uint *>(out) + NNAux::fill_block_size(_nb);
+  memcpy(pindex, _ones.get(), _n_one*sizeof(uint));
   
   uint index_moves = (NNAux::fill_block_size(_nb)
 		      + NNAux::ceil_multi(_n_one, 32U));
+  pindex = static_cast<uint *>(out) + index_moves;
+  memcpy(pindex, _nnmoves.get(), _ntot_moves*sizeof(uint));
 
   uint size_write = (index_moves + _ntot_moves) * sizeof(uint);
   return make_tuple(size_write, _n_one, _ntot_moves, index_moves); }
@@ -241,12 +249,17 @@ void NNAux::softmax(uint n, float *p) noexcept {
   float factor = 1.0f / fsum;
   for (uint u = 0; u < n; ++u) p[u] *= factor; }
 
-vector<pair<uint, row_t>>
+NNAux::wght_t
 NNAux::read(const FName &fwght, uint &version, uint64_t &digest) noexcept {
   wght_t ret;
   try             { ret = read_xz (fwght, version, digest); }
   catch (NotXZ &) { ret = read_txt(fwght, version, digest); }
   return ret; }
+
+NNAux::wght_t NNAux::read(const FName &fwght) noexcept {
+  uint version;
+  uint64_t digest;
+  return NNAux::read(fwght, version, digest); }
 
 ushort NNAux::encode_nnmove(const Action &a, const Color &turn) noexcept {
   assert(a.is_move() && turn.ok());
@@ -272,7 +285,7 @@ ushort NNAux::encode_nnmove(const Action &a, const Color &turn) noexcept {
   assert(us < 10692U);
   return us; }
 
-void NNAux::compress_features(void *out, const float *in) noexcept {
+uint NNAux::compress_features(void *out, const float *in) noexcept {
   assert(out && in);
   float *pvalue = static_cast<float *>(out);
   for (uint uposi = 0; uposi < 8U; ++uposi)
@@ -291,7 +304,8 @@ void NNAux::compress_features(void *out, const float *in) noexcept {
 	if (in[ch * NNAux::size_plane + u] < 0.5f) continue;
 	assert(NNAux::nch_input_fill + n_one
 	       < NNAux::maxsize_compressed_features);
-	pindex[n_one++] = ch * NNAux::size_plane + u; } } }
+	pindex[n_one++] = ch * NNAux::size_plane + u; } }
+  return n_one; }
 
 tuple<uint, uint, uint, uint>
 NNAux::pack_batch(uint nb0, uint nb, const float *in, const uint *sizes_nnmove,
@@ -326,8 +340,8 @@ NNAux::pack_batch(uint nb0, uint nb, const float *in, const uint *sizes_nnmove,
 		      + NNAux::ceil_multi(n_one, 32U));
   pindex = static_cast<uint *>(out) + index_moves;
   for (uint ub = 0; ub < nb0; ++ub)
-    for (uint unn = 0; unn < sizes_nnmove[ub]; ++unn) {
-      uint nnmove = nnmoves[ub * SAux::maxsize_moves + unn];
+    for (uint u = 0; u < sizes_nnmove[ub]; ++u) {
+      uint nnmove = nnmoves[ub * SAux::maxsize_moves + u];
       ntot_moves += 1U;
       assert(nnmove < NNAux::nch_out_policy * NNAux::size_plane);
       *pindex++ = ub * NNAux::nch_out_policy * NNAux::size_plane + nnmove; }
@@ -397,6 +411,10 @@ void NodeNN<Len>::encode_features(float *p) const noexcept {
   store_plane(p, 361U, (1.0f / 512.0f) * static_cast<float>(len_path)); }
 
 template class NodeNN<Param::maxlen_play>;
+
+uint NNet::push_ff(const NNInBatchCompressed &nn_in_b_c, float *probs,
+		   float *values) noexcept {
+  die(ERR_INT("INTERNAL ERROR")); }
 
 /*
   channel 

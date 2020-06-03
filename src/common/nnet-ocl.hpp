@@ -258,6 +258,9 @@ public:
 	  const ushort *nnmoves, float *probs, float *values) noexcept;
   uint push_ff(uint size_batch, const float *input, const uint *sizes_nnmove,
 	       const ushort *nnmoves, float *probs, float *values) noexcept;
+  uint push_ff(const NNInBatchCompressed &nn_in_b_c, float *probs,
+	       float *values) noexcept;
   void wait_ff(uint uslot) noexcept;
+  bool do_compress() const noexcept { return true; }
 };
 #endif

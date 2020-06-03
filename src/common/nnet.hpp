@@ -18,18 +18,19 @@ namespace NNAux {
   constexpr uint size_plane  = width * height;
   void softmax(uint n, float *p) noexcept;
   wght_t read(const FName &fwght, uint &version, uint64_t &digest) noexcept;
+  wght_t read(const FName &fwght) noexcept;
 
   constexpr uint nch_input      = 362U;
   constexpr uint nch_input_fill = 17U * 8U + 2U;
   constexpr uint nch_out_policy = 139U;
-  constexpr uint maxn_one       = 64U;
+  constexpr uint maxn_one       = 64U * 8U;
   constexpr uint maxsize_compressed_features = (size_plane * nch_input) / 16U;
   constexpr uint ceil_multi(uint u, uint mul) noexcept {
     return ((u + mul - 1U) / mul) * mul; }
   unsigned short encode_nnmove(const Action &a, const Color &turn) noexcept;
   constexpr uint fill_block_size(uint nb) noexcept {
     return NNAux::ceil_multi(nb * NNAux::nch_input_fill, 32U); }
-  void compress_features(void *out, const float *in) noexcept;
+  uint compress_features(void *out, const float *in) noexcept;
   std::tuple<uint, uint, uint, uint>
   pack_batch(uint nb0, uint nb, const float *in, const uint *sizes_nnmove,
 	     const ushort *nnmoves, void *out) noexcept;
@@ -107,15 +108,19 @@ class NNInBatchCompressed {
   std::unique_ptr<float []> _fills;
   std::unique_ptr<uint []> _ones;
   std::unique_ptr<uint []> _sizes_nnmove;
-  std::unique_ptr<ushort []> _nnmoves;
+  std::unique_ptr<uint []> _nnmoves;
   uint _ub, _nb, _n_one, _ntot_moves;
 public:
   explicit NNInBatchCompressed(uint nb) noexcept;
-  void add(uint n_one, const float *compressed_features, uint size_nnmove,
+  void add(uint n_one, const void *compressed_features, uint size_nnmove,
 	   const ushort *nnmoves) noexcept;
   void erase() noexcept { _ub = _n_one = _ntot_moves = 0U; }
   std::tuple<uint, uint, uint, uint>
-  compute_pack_batch(void *out) noexcept;
+  compute_pack_batch(void *out) const noexcept;
+  const uint *get_sizes_nnmove() const noexcept { return _sizes_nnmove.get(); }
+  uint get_ub() const noexcept { return _ub; }
+  bool ok() const noexcept {
+    return (_fills && _ones && _sizes_nnmove && _nnmoves && _ub <= _nb); }
 };
 
 class NNet {
@@ -128,6 +133,9 @@ public:
 		       const uint *sizes_nnmove, const ushort *nnmoves,
 		       float *probs, float *values) noexcept = 0;
   virtual void wait_ff(uint) noexcept = 0;
+  virtual uint push_ff(const NNInBatchCompressed &nn_in_b_c, float *probs,
+		       float *values) noexcept;
+  virtual bool do_compress() const noexcept { return false; }
 };
 
 enum class SrvType : uint { Register, FeedForward, FlushON, FlushOFF,

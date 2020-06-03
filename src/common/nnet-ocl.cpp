@@ -2306,6 +2306,49 @@ uint NNetOCL::push_ff(uint size_batch, const float *input,
 			    (_maxsize_batch + ntot_moves) * sizeof(float));
   return uslot; }
 
+uint NNetOCL::push_ff(const NNInBatchCompressed &nn_in_b_c, float *probs,
+		      float *values) noexcept {
+  assert(nn_in_b_c.ok() && probs && values);
+  uint uslot = acquire_slot_wait();
+  size_t size_write;
+  uint n_one, ntot_moves, index_moves;
+  tie(size_write, n_one, ntot_moves, index_moves)
+    = nn_in_b_c.compute_pack_batch(_mem_in[uslot].get_pointer());
+  _slots_sizes_nnmove[uslot] = nn_in_b_c.get_sizes_nnmove();
+  _slots_size_batch[uslot]   = nn_in_b_c.get_ub();
+  _slots_probs[uslot]        = probs;
+  _slots_values[uslot]       = values;
+
+  _queue_a[uslot].push_write(_mem_in[uslot], size_write);
+  _mng_decode.push(_queue_a[uslot], n_one, uslot);
+    
+  // body part
+  uint ulayer = 0U;
+  _mng_compute_matV_first.push(_queue_a[uslot], uslot);
+  for (; ulayer < _nres_block; ++ulayer) {
+    _pmng_compute_matM[ulayer].push(_queue_a[uslot], uslot);
+    _pmng_compute_matAV[ulayer].push(_queue_a[uslot], uslot); }
+  _pmng_compute_matM[ulayer].push(_queue_a[uslot], uslot);
+  _mng_compute_matA_last.push(_queue_a[uslot], uslot);
+  
+  // head part
+  // in:  f1[policy1_nout + value1_nout][size_batch][size_plane]
+  // out: f2[size_batch][value1_nout][size_plane]
+  _mng_head1.push(_queue_a[uslot], uslot);
+  _mng_compute_BNReLU.push(_queue_a[uslot], uslot);
+  _mng_compute_policy.push(_queue_a[uslot], ntot_moves, index_moves, uslot);
+  
+  _mng_transform_value2.push(_queue_a[uslot], uslot);
+  _mng_value2.push(_queue_a[uslot], uslot);
+  
+  _mng_resize_bias_ReLU_value3.push(_queue_a[uslot], uslot);
+  _mng_value3.push(_queue_a[uslot], uslot);
+  
+  _queue_a[uslot].push_read(_mem_out[uslot],
+			    (_maxsize_batch + ntot_moves) * sizeof(float));
+  return uslot; }
+
+
 void NNetOCL::wait_ff(uint uslot) noexcept {
   assert(uslot < NNAux::nslot);
 
