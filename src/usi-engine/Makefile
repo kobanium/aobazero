@@ -67,7 +67,7 @@ CPPFLAGS += -MD -MP
 
 bases  = Network Leela Utils Zobrist GTP Random SMP OpenCL OpenCLScheduler NNCache Tuner CPUPipe
 ifneq ($(CPU_ONLY), 1)
-bases += nnet-ipc osi err xzi iobase
+bases += nnet-ipc nnet osi err xzi iobase shogibase
 endif
 bases += $(addprefix bona/, data main io proce utility ini attack book makemove unmake time csa valid bitop iterate searchr search quiesrch evaluate swap hash root next movgenex genevasn gencap gennocap gendrop mate1ply rand learn1 learn2 evaldiff problem ponder thread sckt debug mate3 genchk phash dfpn dfpnhash ysszero yss_net)
 

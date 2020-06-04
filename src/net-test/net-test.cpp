@@ -78,7 +78,6 @@ static bool opt_use_half    = false;
 static bool opt_mode_cpu    = false;
 static bool opt_mode_opencl = true;
 static bool opt_verbose     = false;
-static bool opt_compress    = false;
 static string opt_str_wght;
 
 static string gen_usage(const char *cmd) noexcept {
@@ -92,7 +91,6 @@ static string gen_usage(const char *cmd) noexcept {
   -h       let "opencl" code make use of half precision floating points.
   -t num   let "cpublas" code make use of "num" threads. Default is -1.
   -b size  specifies batch size. Default is 1.
-  -c       turns on feature-compress mode.
   -r num   evaluates each state "num" times. Default is 1.
   -v       turns on verbose mode.
 )";
@@ -108,7 +106,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
   char *endptr;
 
   while (! flag_err) {
-    int opt = Opt::get(argc, argv, "b:i:t:u:r:vhc");
+    int opt = Opt::get(argc, argv, "b:i:t:u:r:vh");
     if (opt < 0) break;
 
     long l;
@@ -153,7 +151,6 @@ static int get_options(int argc, const char * const *argv) noexcept {
 
     case 'h': opt_use_half = true;  break;
     case 'v': opt_verbose  = true;  break;
-    case 'c': opt_compress = true;  break;
     default: flag_err = true; break; } }
 
   if (!flag_err && Opt::ind < argc) {
@@ -176,13 +173,13 @@ class Entry {
 public:
   vector<ushort> nnmoves;
   explicit Entry() noexcept : _size_nnmove(0) {}
-  explicit Entry(uint no, uint size_nnmove, double value_answer,
-		 map<string, double> &&policy_answers,
+  explicit Entry(bool do_compress, uint no, uint size_nnmove,
+		 double value_answer, map<string, double> &&policy_answers,
 		 map<ushort, string> &&nnmove2str,
 		 const float *features) noexcept :
     _no(no), _size_nnmove(size_nnmove), _value_answer(value_answer),
     _policy_answers(move(policy_answers)), _nnmove2str(move(nnmove2str)) {
-    if (opt_compress)
+    if (do_compress)
       _n_one = NNAux::compress_features(_compressed_features, features);
     else memcpy(_features, features, sizeof(_features)); }
   Entry(const Entry &e) = default;
@@ -245,12 +242,12 @@ struct TestSet {
   unique_ptr<const Entry *[]> ppentry;
   unique_ptr<float []> probs;
   unique_ptr<float []> values;
-  explicit TestSet(uint nb_) noexcept : nentry(0),
+  explicit TestSet(uint nb_, bool do_compress) noexcept : nentry(0),
     ppentry(new const Entry *[nb_]),
     probs(new float [nb_ * SAux::maxsize_moves]),
     values(new float [nb_]) {
-    if (opt_compress) nn_in_b_c.reset(new NNInBatchCompressed(nb_));
-    else              nn_in_b.reset(new NNInBatch(nb_)); };
+    if (do_compress) nn_in_b_c.reset(new NNInBatchCompressed(nb_));
+    else             nn_in_b.reset(new NNInBatch(nb_)); };
 };
 
 class QueueTest {
@@ -293,7 +290,7 @@ class QueueTest {
 
   void flush() noexcept {
     if (_pts_push->nentry == 0) return;
-    if (opt_compress)
+    if (do_compress())
       _pts_push->wait_id
 	= _pnnet->push_ff(*_pts_push->nn_in_b_c, _pts_push->probs.get(),
 			  _pts_push->values.get());
@@ -308,23 +305,23 @@ class QueueTest {
     unique_lock<mutex> lock(_m);
     _cv.wait(lock, [&]{ return _deque_wait.size() < 16U; });
     _deque_wait.push_back(move(_pts_push));
-    if (_deque_pool.empty()) _deque_pool.emplace_back(new TestSet(_nb));
+    if (_deque_pool.empty())
+      _deque_pool.emplace_back(new TestSet(_nb, do_compress()));
     _pts_push = move(_deque_pool.front());
     _deque_pool.pop_front();
     lock.unlock();
     _cv.notify_one();
 
     _pts_push->nentry = 0;
-    if (opt_compress) _pts_push->nn_in_b_c->erase();
-    else              _pts_push->nn_in_b->erase(); }
+    if (do_compress()) _pts_push->nn_in_b_c->erase();
+    else               _pts_push->nn_in_b->erase(); }
   
 public:
   explicit QueueTest(const FName &fname, int device_id, uint nb, bool use_half,
 		     int thread_num) noexcept
     : _flag_quit(false),
-      _th_worker_wait_test(&QueueTest::worker_wait_test, this),
-      _pts_push(new TestSet(nb)), _nb(nb), _neval(0) {
-
+      _th_worker_wait_test(&QueueTest::worker_wait_test, this), _nb(nb),
+      _neval(0) {
     if (opt_mode_opencl) {
 #if defined(USE_OPENCL_AOBA)
       _pnnet.reset(new NNetOCL);
@@ -344,6 +341,7 @@ public:
 #endif
     } else die(ERR_INT("Internal Error"));
 
+    _pts_push.reset(new TestSet(nb, do_compress()));
     (void)device_id;
     (void)use_half; }
 
@@ -354,7 +352,7 @@ public:
     assert(pe && pe->ok());
 
     _pts_push->ppentry[_pts_push->nentry++] = pe;
-    if (opt_compress) {
+    if (do_compress()) {
       _pts_push->nn_in_b_c->add(pe->get_n_one(),
 				pe->get_compressed_features(),
 				pe->get_size_nnmove(),
@@ -379,7 +377,7 @@ public:
   int64_t get_neval() const noexcept { return _neval; }
 };
 
-static vector<Entry> read_entries(istream *pis) noexcept {
+static vector<Entry> read_entries(istream *pis, bool do_compress) noexcept {
   vector<Entry> vec_entry;
   uint no = 0;
 
@@ -489,8 +487,9 @@ static vector<Entry> read_entries(istream *pis) noexcept {
     
     if (node.get_turn() == white) value_answer = - value_answer;
 
-    vec_entry.emplace_back(++no, ms.size(), value_answer, move(policy_answer),
-			   move(nnmove2str), input.data());
+    vec_entry.emplace_back(do_compress, ++no, ms.size(), value_answer,
+			   move(policy_answer), move(nnmove2str),
+			   input.data());
     vec_entry.back().nnmoves = move(nnmoves2); }
 
   return vec_entry; }
@@ -502,7 +501,8 @@ int main(int argc, char **argv) {
 		       opt_batch_size, opt_use_half, opt_thread_num);
 
   cout << "Start reading entries from stdin ..." << endl;
-  vector<Entry> vec_entry = read_entries(&std::cin);
+  vector<Entry> vec_entry = read_entries(&std::cin,
+					 queue_test.do_compress());
   cout << "Finish reading " << vec_entry.size() << " entries" << endl;
 
   queue_test.wait_init();

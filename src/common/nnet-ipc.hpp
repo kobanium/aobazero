@@ -24,7 +24,7 @@ class NNetIPC {
   SharedService *_pservice;
   SharedIPC *_pipc;
   int _id;
-  bool _flag_detach;
+  bool _flag_detach, _do_compress;
   int sem_wait(OSI::Semaphore &sem) noexcept;
 
 public:

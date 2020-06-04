@@ -38,56 +38,47 @@ SeqPRNService::SeqPRNService() noexcept {
   for (uint u = 0; u < Param::len_seq_prn; ++u) p[u] = mt(); }
 
 class Entry {
-  unique_ptr<float []> _input;
-  unique_ptr<uint []> _sizes_nnmove;
-  unique_ptr<ushort []> _nnmoves;
+  unique_ptr<NNInBatch> _nn_in_b;
   unique_ptr<float []> _probs;
   unique_ptr<float []> _values;
   unique_ptr<uint []> _ids;
-  uint _ubatch, _size_batch, _wait_id;
+  uint _size_batch, _wait_id;
 
 public:
   explicit Entry(uint size_batch) noexcept :
-  _input(new float [size_batch * NNAux::size_plane * NNAux::nch_input]),
-    _sizes_nnmove(new uint [size_batch]),
-    _nnmoves(new ushort [size_batch * SAux::maxsize_moves]),
-    _probs(new float [size_batch * SAux::maxsize_moves]),
+  _probs(new float [size_batch * SAux::maxsize_moves]),
     _values(new float [size_batch]), _ids(new uint [size_batch]),
-    _ubatch(0), _size_batch(size_batch), _wait_id(0) {
-    fill_n(_input.get(), size_batch * NNAux::size_plane * NNAux::nch_input,
-	   0.0f);
-    fill_n(_sizes_nnmove.get(), size_batch, 0); }
+    _size_batch(size_batch), _wait_id(0) {
+    _nn_in_b.reset(new NNInBatch(size_batch)); }
 
   void add(const float *features, uint size_nnmove, const ushort *nnmoves,
 	   uint id) noexcept {
-    assert(_ubatch < _size_batch && features && nnmoves
+    assert(_nn_in_b->get_ub() < _size_batch && features && nnmoves
 	   && id < NNAux::maxnum_nipc);
-    copy_n(features, NNAux::size_plane * NNAux::nch_input,
-	   &(_input[_ubatch * NNAux::size_plane * NNAux::nch_input]));
-    copy_n(nnmoves, size_nnmove, &(_nnmoves[_ubatch * SAux::maxsize_moves]));
-    _sizes_nnmove[_ubatch] = size_nnmove;
-    _ids[_ubatch]          = id;
-    _ubatch += 1U; }
+    _ids[ _nn_in_b->get_ub() ] = id;
+    _nn_in_b->add(features, size_nnmove, nnmoves); }
 
   void push_ff(NNet &nnet) noexcept {
-    assert(0 < _ubatch);
-    _wait_id = nnet.push_ff(_ubatch, _input.get(), _sizes_nnmove.get(),
-			    _nnmoves.get(), _probs.get(), _values.get()); }
+    assert(0 < _nn_in_b->get_ub());
+    _wait_id = nnet.push_ff(_nn_in_b->get_ub(), _nn_in_b->get_features(),
+			    _nn_in_b->get_sizes_nnmove(),
+			    _nn_in_b->get_nnmoves(),
+			    _probs.get(), _values.get()); }
 
   void wait_ff(NNet &nnet, OSI::Semaphore sem_ipc[NNAux::maxnum_nipc],
 	       SharedIPC *pipc[NNAux::maxnum_nipc]) noexcept {
     nnet.wait_ff(_wait_id);
-    for (uint u = 0; u < _ubatch; ++u) {
+    for (uint u = 0; u < _nn_in_b->get_ub(); ++u) {
       uint id = _ids[u];
       assert(pipc[id] && sem_ipc[id].ok());
       pipc[id]->value = _values[u];
-      copy_n(&(_probs[u * SAux::maxsize_moves]), _sizes_nnmove[u],
-	     pipc[id]->probs);
+      copy_n(&(_probs[u * SAux::maxsize_moves]),
+	     _nn_in_b->get_sizes_nnmove()[u], pipc[id]->probs);
       sem_ipc[id].inc(); }
-    _ubatch = 0; }
+    _nn_in_b->erase(); }
 
-  bool is_full() const noexcept { return _ubatch == _size_batch; }
-  bool is_empty() const noexcept { return _ubatch == 0; } };
+  bool is_full() const noexcept { return _nn_in_b->get_ub() == _size_batch; }
+  bool is_empty() const noexcept { return _nn_in_b->get_ub() == 0; } };
 
 void NNetService::worker_push() noexcept {
   unique_ptr<Entry> pe;
@@ -175,26 +166,25 @@ void NNetService::worker_srv() noexcept {
       if (!_entries_push.empty()) die(ERR_INT("Internal Error"));
       if (!_entries_wait.empty()) die(ERR_INT("Internal Error"));
 	
-      _sem_service_lock.dec_wait();
-      pservice->id_ipc_next = 0;
-      uint njob = pservice->njob;
-      _sem_service_lock.inc();
-      if (0 < njob) die(ERR_INT("Internal Error"));
-
-      {
-	lock_guard<mutex> lock(_m_nnreset);
-	_flag_cv_nnreset = true;
-	fn = _fname; }
-      _cv_nnreset.notify_one();
-      
-      uint version;
-      uint64_t digest;
-      NNAux::wght_t wght = NNAux::read(fn, version, digest);
       if (_impl == NNet::cpublas) {
 #if defined(USE_OPENBLAS) || defined(USE_MKL)
 	_pnnet.reset(new NNetCPU);
-	dynamic_cast<NNetCPU *>(_pnnet.get())->reset(_size_batch, wght,
-						     _thread_num);
+	_sem_service_lock.dec_wait();
+	pservice->id_ipc_next = 0;
+	pservice->do_compress = _pnnet->do_compress();
+	uint njob = pservice->njob;
+	_sem_service_lock.inc();
+	if (0 < njob) die(ERR_INT("Internal Error"));
+
+	{
+	  lock_guard<mutex> lock(_m_nnreset);
+	  _flag_cv_nnreset = true;
+	  fn = _fname; }
+	_cv_nnreset.notify_one();
+	
+	static_cast<NNetCPU *>(_pnnet.get())->reset(_size_batch,
+						    NNAux::read(fn),
+						    _thread_num);
 #else
 	die(ERR_INT("No CPU BLAS support"));
 #endif
@@ -206,9 +196,21 @@ void NNetService::worker_srv() noexcept {
 	std::cout << s << std::flush;
 	
 	_pnnet.reset(new NNetOCL);
-	NNetOCL *p = dynamic_cast<NNetOCL *>(_pnnet.get());
-	std::cout << p->reset(_size_batch, wght, _device_id, _use_half,
-			      false, true)
+	_sem_service_lock.dec_wait();
+	pservice->id_ipc_next = 0;
+	pservice->do_compress = _pnnet->do_compress();
+	uint njob = pservice->njob;
+	_sem_service_lock.inc();
+	if (0 < njob) die(ERR_INT("Internal Error"));
+	
+	{
+	  lock_guard<mutex> lock(_m_nnreset);
+	  _flag_cv_nnreset = true;
+	  fn = _fname; }
+	_cv_nnreset.notify_one();
+	NNetOCL *p = static_cast<NNetOCL *>(_pnnet.get());
+	std::cout << p->reset(_size_batch, NNAux::read(fn), _device_id,
+			      _use_half, false, true)
 		  << std::flush;
 #else
 	die(ERR_INT("No OpenCL support"));
@@ -233,6 +235,7 @@ void NNetService::worker_srv() noexcept {
 
 	_entries_push.back()->add(pipc[id]->features, pipc[id]->size_nnmove,
 				  pipc[id]->nnmove, id);
+
 	if (_entries_push.size() == 1 && _entries_push.back()->is_full())
 	  flag_do_notify = true; }
 

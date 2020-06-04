@@ -59,6 +59,7 @@ int NNetIPC::start(uint nnet_id) noexcept {
   _pservice->jobs[_pservice->njob].id   = _id;
   _pservice->jobs[_pservice->njob].type = SrvType::Register;
   _pservice->njob += 1U;
+  _do_compress = _pservice->do_compress;
   _sem_service_lock.inc();
   _sem_service.inc();
   return sem_wait(_sem_ipc); }
@@ -76,7 +77,14 @@ void NNetIPC::end() noexcept {
 int NNetIPC::submit_block(uint size_nnmove) noexcept {
   assert(ok() && size_nnmove <= SAux::maxsize_moves && _pipc);
   _pipc->size_nnmove = size_nnmove;
-  
+
+  _pipc->n_one = NNAux::compress_features(_pipc->compressed_features,
+					  _pipc->features);
+
+
+  NNAux::decompress_features(_pipc->features, _pipc->n_one,
+			     _pipc->compressed_features);
+
   assert(_sem_service_lock.ok() && _sem_service.ok());
   if (sem_wait(_sem_service_lock) < 0) return -1;
   assert(_pservice->njob <= NNAux::maxnum_nipc);

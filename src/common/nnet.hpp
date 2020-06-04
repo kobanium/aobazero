@@ -31,6 +31,7 @@ namespace NNAux {
   constexpr uint fill_block_size(uint nb) noexcept {
     return NNAux::ceil_multi(nb * NNAux::nch_input_fill, 32U); }
   uint compress_features(void *out, const float *in) noexcept;
+  void decompress_features(float *out, uint n_one, const void *in) noexcept;
   std::tuple<uint, uint, uint, uint>
   pack_batch(uint nb0, uint nb, const float *in, const uint *sizes_nnmove,
 	     const ushort *nnmoves, void *out) noexcept;
@@ -52,36 +53,6 @@ public:
   void clear() noexcept { Node<Len>::clear(); set_posi(); }
   void take_action(const Action &a) noexcept;
   void encode_features(float *p) const noexcept;
-};
-
-class NNFeatures {
-  using uint   = unsigned int;
-  using ushort = unsigned short;
-  float _features[NNAux::size_plane * NNAux::nch_input];
-
-public:
-  explicit NNFeatures() noexcept {}
-  explicit NNFeatures(const float *features) noexcept { reset(features); }
-  void reset(const float *features) noexcept;
-  float *get() noexcept { return _features; }
-  const float *get() const noexcept { return _features; }
-};
-
-class NNCompressedFeatures {
-  using uint   = unsigned int;
-  using ushort = unsigned short;
-  float _compressed_features[NNAux::maxsize_compressed_features];
-  uint _n_one;
-
-public:
-  explicit NNCompressedFeatures() noexcept {}
-  explicit NNCompressedFeatures(uint n_one, float *compressed_features)
-    noexcept { reset(n_one, compressed_features); }
-  explicit NNCompressedFeatures(float *features) noexcept { reset(features); }
-  void reset(uint n_one, const float *compressed_features) noexcept;
-  void reset(const float *features) noexcept;
-  float *get() noexcept { return _compressed_features; }
-  const float *get() const noexcept { return _compressed_features; }
 };
 
 class NNInBatch {
@@ -131,10 +102,10 @@ public:
   virtual ~NNet() noexcept {}
   virtual uint push_ff(uint size_batch, const float *input,
 		       const uint *sizes_nnmove, const ushort *nnmoves,
-		       float *probs, float *values) noexcept = 0;
-  virtual void wait_ff(uint) noexcept = 0;
+		       float *probs, float *values) noexcept;
   virtual uint push_ff(const NNInBatchCompressed &nn_in_b_c, float *probs,
 		       float *values) noexcept;
+  virtual void wait_ff(uint) noexcept = 0;
   virtual bool do_compress() const noexcept { return false; }
 };
 
@@ -145,11 +116,12 @@ struct SharedService {
   uint id_ipc_next;
   FName fn_weights;
   uint njob;
+  bool do_compress;
   struct { uint id; SrvType type; } jobs[NNAux::maxnum_nipc + 16U];
 };
 
 struct SharedIPC {
-  uint nnet_id;
+  uint nnet_id, n_one;
   float compressed_features[NNAux::maxsize_compressed_features];
   float features[NNAux::size_plane * NNAux::nch_input]; // ~100KB
   unsigned int size_nnmove;
