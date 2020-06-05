@@ -55,43 +55,53 @@ public:
   void encode_features(float *p) const noexcept;
 };
 
-class NNInBatch {
+class NNInBatchBase {
+  using uint = unsigned int;
+  std::unique_ptr<uint []> _sizes_nnmove;
+  uint _ub, _nb;
+public:
+  explicit NNInBatchBase(uint nb) noexcept :
+  _sizes_nnmove(new uint [nb]), _ub(0), _nb(nb) {}
+  virtual ~NNInBatchBase() noexcept {}
+  virtual void erase() noexcept { _ub = 0; }
+  virtual bool ok() const noexcept { return (_ub <= _nb && _sizes_nnmove); }
+  void add(uint size_nnmove) noexcept { _sizes_nnmove[_ub++] = size_nnmove; }
+  const uint *get_sizes_nnmove() const noexcept { return _sizes_nnmove.get(); }
+  uint get_ub() const noexcept { return _ub; }
+  uint get_nb() const noexcept { return _nb; }
+};
+
+class NNInBatch : public NNInBatchBase {
   using uint   = unsigned int;
   using ushort = unsigned short;
   std::unique_ptr<float []> _features;
-  std::unique_ptr<uint []> _sizes_nnmove;
   std::unique_ptr<ushort []> _nnmoves;
-  uint _ub, _nb;
 public:
   explicit NNInBatch(uint nb) noexcept;
   void add(const float *features, uint size_nnmove, const ushort *nnmoves)
     noexcept;
-  void erase() noexcept { _ub = 0; }
-  uint get_ub() const noexcept { return _ub; }
   const float *get_features() const noexcept { return _features.get(); }
-  const uint *get_sizes_nnmove() const noexcept { return _sizes_nnmove.get(); }
   const ushort *get_nnmoves() const noexcept { return _nnmoves.get(); }
+  bool ok() const noexcept {
+    return (NNInBatchBase::ok() && _features && _nnmoves); }
 };
 
-class NNInBatchCompressed {
+class NNInBatchCompressed : public NNInBatchBase {
   using uint   = unsigned int;
   using ushort = unsigned short;
   std::unique_ptr<float []> _fills;
   std::unique_ptr<uint []> _ones;
-  std::unique_ptr<uint []> _sizes_nnmove;
   std::unique_ptr<uint []> _nnmoves;
-  uint _ub, _nb, _n_one, _ntot_moves;
+  uint _n_one, _ntot_moves;
 public:
   explicit NNInBatchCompressed(uint nb) noexcept;
   void add(uint n_one, const void *compressed_features, uint size_nnmove,
 	   const ushort *nnmoves) noexcept;
-  void erase() noexcept { _ub = _n_one = _ntot_moves = 0U; }
+  void erase() noexcept { NNInBatchBase::erase(); _n_one = _ntot_moves = 0U; }
   std::tuple<uint, uint, uint, uint>
   compute_pack_batch(void *out) const noexcept;
-  const uint *get_sizes_nnmove() const noexcept { return _sizes_nnmove.get(); }
-  uint get_ub() const noexcept { return _ub; }
   bool ok() const noexcept {
-    return (_fills && _ones && _sizes_nnmove && _nnmoves && _ub <= _nb); }
+    return (NNInBatchBase::ok() && _fills && _ones && _nnmoves); }
 };
 
 class NNet {

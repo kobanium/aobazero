@@ -247,6 +247,8 @@ class NNetOCL : public NNet {
   uint _maxsize_batch, _nres_block;
   row_t _value3_bias;
   bool _do_sleep;
+  void push(uint uslot, size_t size_write, uint n_one, uint ntot_moves,
+	    uint index_moves) noexcept;
 
 public:
   explicit NNetOCL() noexcept;

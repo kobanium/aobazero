@@ -139,64 +139,60 @@ static void store_plane(float *p, uint uch, float f = 1.0f) noexcept {
   assert(p && uch < NNAux::nch_input);
   fill_n(p + uch * Sq::ok_size, Sq::ok_size, f); };
 
-NNInBatch::NNInBatch(uint nb) noexcept :
+NNInBatch::NNInBatch(uint nb) noexcept : NNInBatchBase(nb),
 _features(new float [nb * NNAux::size_plane * NNAux::nch_input]),
-  _sizes_nnmove(new uint [nb]),
-  _nnmoves(new ushort [nb * SAux::maxsize_moves]), _ub(0), _nb(nb) {}
+  _nnmoves(new ushort [nb * SAux::maxsize_moves]) {}
 
 void NNInBatch::add(const float *features, uint size_nnmove,
 		    const ushort *nnmoves) noexcept {
   assert(features && size_nnmove < SAux::maxsize_moves && nnmoves);
-  assert(_ub < _nb);
+  assert(NNInBatchBase::ok());
   memcpy(_features.get() + get_ub() * NNAux::size_plane * NNAux::nch_input,
 	 features, NNAux::size_plane * NNAux::nch_input * sizeof(float));
-  memcpy(_nnmoves.get() + _ub * SAux::maxsize_moves, nnmoves,
+  memcpy(_nnmoves.get() + get_ub() * SAux::maxsize_moves, nnmoves,
 	 SAux::maxsize_moves * sizeof(ushort));
-  _sizes_nnmove[_ub] = size_nnmove;
-  _ub += 1U; }
+  NNInBatchBase::add(size_nnmove); }
 
-NNInBatchCompressed::NNInBatchCompressed(uint nb) noexcept :
-_fills(new float [nb * NNAux::nch_input_fill]),
+NNInBatchCompressed::NNInBatchCompressed(uint nb) noexcept : NNInBatchBase(nb),
+  _fills(new float [nb * NNAux::nch_input_fill]),
   _ones(new uint [nb * NNAux::maxn_one]),
-  _sizes_nnmove(new uint [nb]),
-  _nnmoves(new uint [nb * SAux::maxsize_moves]), _ub(0), _nb(nb), _n_one(0),
-  _ntot_moves(0) {}
+  _nnmoves(new uint [nb * SAux::maxsize_moves]), _n_one(0), _ntot_moves(0) {}
 
 void NNInBatchCompressed::add(uint n_one, const void *compressed_features,
 			      uint size_nnmove, const ushort *nnmoves)
   noexcept {
+  assert(NNInBatchBase::ok());
   assert(compressed_features && size_nnmove < SAux::maxsize_moves && nnmoves);
-  assert(_ub < _nb);
 
   const float *pvalue = static_cast<const float *>(compressed_features);
-  memcpy(_fills.get() + _ub*NNAux::nch_input_fill, pvalue,
+  memcpy(_fills.get() + get_ub()*NNAux::nch_input_fill, pvalue,
 	 NNAux::nch_input_fill*sizeof(float));
 
-  uint base = _ub*NNAux::nch_input*NNAux::size_plane;
+  uint base = get_ub()*NNAux::nch_input*NNAux::size_plane;
   const uint *pindex  = static_cast<const uint *>(compressed_features);
   for (uint u = 0; u < n_one; ++u)
     _ones[_n_one + u] = pindex[NNAux::nch_input_fill + u] + base;
 
-  _sizes_nnmove[_ub] = size_nnmove;
   for (uint u = 0; u < size_nnmove; ++u)
     _nnmoves[_ntot_moves + u]
-      = nnmoves[u] + _ub*NNAux::nch_out_policy*NNAux::size_plane;
-  _ub         += 1U;
+      = nnmoves[u] + get_ub()*NNAux::nch_out_policy*NNAux::size_plane;
   _n_one      += n_one;
-  _ntot_moves += size_nnmove; }
+  _ntot_moves += size_nnmove;
+  NNInBatchBase::add(size_nnmove); }
 
 std::tuple<uint, uint, uint, uint>
 NNInBatchCompressed::compute_pack_batch(void *out) const noexcept {
   assert(out);
   float *pvalue = static_cast<float *>(out);
-  memcpy(pvalue, _fills.get(), _ub*NNAux::nch_input_fill*sizeof(float));
-  for (uint u = _ub*NNAux::nch_input_fill; u < _nb*NNAux::nch_input_fill; ++u)
+  memcpy(pvalue, _fills.get(), get_ub()*NNAux::nch_input_fill*sizeof(float));
+  for (uint u = get_ub()*NNAux::nch_input_fill;
+       u < get_nb()*NNAux::nch_input_fill; ++u)
     pvalue[u] = 0.0f;
 
-  uint *pindex = static_cast<uint *>(out) + NNAux::fill_block_size(_nb);
+  uint *pindex = static_cast<uint *>(out) + NNAux::fill_block_size(get_nb());
   memcpy(pindex, _ones.get(), _n_one*sizeof(uint));
   
-  uint index_moves = (NNAux::fill_block_size(_nb)
+  uint index_moves = (NNAux::fill_block_size(get_nb())
 		      + NNAux::ceil_multi(_n_one, 32U));
   pindex = static_cast<uint *>(out) + index_moves;
   memcpy(pindex, _nnmoves.get(), _ntot_moves*sizeof(uint));
@@ -259,8 +255,6 @@ uint NNAux::compress_features(void *out, const float *in) noexcept {
   for (uint uposi = 0; uposi < 8U; ++uposi)
     for (uint ufplane = 28; ufplane < 45U; ++ufplane) {
       uint ch = 45U * uposi + ufplane;
-      std::cout << "A: " << ch << " " << in[ch * NNAux::size_plane]
-		<< std::endl;
       *pvalue++ = in[ch * NNAux::size_plane]; }
   *pvalue++ = in[360U * NNAux::size_plane];
   *pvalue++ = in[361U * NNAux::size_plane];

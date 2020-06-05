@@ -12,7 +12,6 @@
 
 class SeqPRNService {
   OSI::MMap _mmap;
-
 public:
   explicit SeqPRNService() noexcept;
   ~SeqPRNService() noexcept {_mmap.close(); };

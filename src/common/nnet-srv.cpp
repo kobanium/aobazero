@@ -38,32 +38,43 @@ SeqPRNService::SeqPRNService() noexcept {
   for (uint u = 0; u < Param::len_seq_prn; ++u) p[u] = mt(); }
 
 class Entry {
-  unique_ptr<NNInBatch> _nn_in_b;
+  unique_ptr<NNInBatchBase> _nn_in_b;
   unique_ptr<float []> _probs;
   unique_ptr<float []> _values;
   unique_ptr<uint []> _ids;
   uint _size_batch, _wait_id;
+  bool _do_compress;
 
 public:
-  explicit Entry(uint size_batch) noexcept :
+  explicit Entry(uint size_batch, bool do_compress) noexcept :
   _probs(new float [size_batch * SAux::maxsize_moves]),
     _values(new float [size_batch]), _ids(new uint [size_batch]),
-    _size_batch(size_batch), _wait_id(0) {
-    _nn_in_b.reset(new NNInBatch(size_batch)); }
+    _size_batch(size_batch), _wait_id(0), _do_compress(do_compress) {
+    if (do_compress) _nn_in_b.reset(new NNInBatchCompressed(size_batch));
+    else             _nn_in_b.reset(new NNInBatch(size_batch)); }
 
-  void add(const float *features, uint size_nnmove, const ushort *nnmoves,
-	   uint id) noexcept {
-    assert(_nn_in_b->get_ub() < _size_batch && features && nnmoves
-	   && id < NNAux::maxnum_nipc);
+  void add(const SharedIPC *pipc, uint id) noexcept {
+    assert(pipc && id < NNAux::maxnum_nipc && ! is_full());
     _ids[ _nn_in_b->get_ub() ] = id;
-    _nn_in_b->add(features, size_nnmove, nnmoves); }
+    if (_do_compress)
+      static_cast<NNInBatchCompressed *>(_nn_in_b.get())
+	->add(pipc->n_one, pipc->compressed_features,
+	      pipc->size_nnmove, pipc->nnmove);
+    else
+      static_cast<NNInBatch *>(_nn_in_b.get())
+	->add(pipc->features, pipc->size_nnmove, pipc->nnmove); }
 
   void push_ff(NNet &nnet) noexcept {
-    assert(0 < _nn_in_b->get_ub());
-    _wait_id = nnet.push_ff(_nn_in_b->get_ub(), _nn_in_b->get_features(),
-			    _nn_in_b->get_sizes_nnmove(),
-			    _nn_in_b->get_nnmoves(),
-			    _probs.get(), _values.get()); }
+    assert(_nn_in_b && ! is_empty());
+    if (_do_compress) {
+      NNInBatchCompressed *p
+	= static_cast<NNInBatchCompressed *>(_nn_in_b.get());
+      _wait_id = nnet.push_ff(*p, _probs.get(), _values.get()); }
+    else {
+      NNInBatch *p = static_cast<NNInBatch *>(_nn_in_b.get());
+      _wait_id = nnet.push_ff(p->get_ub(), p->get_features(),
+			      p->get_sizes_nnmove(), p->get_nnmoves(),
+			      _probs.get(), _values.get()); } }
 
   void wait_ff(NNet &nnet, OSI::Semaphore sem_ipc[NNAux::maxnum_nipc],
 	       SharedIPC *pipc[NNAux::maxnum_nipc]) noexcept {
@@ -76,8 +87,8 @@ public:
 	     _nn_in_b->get_sizes_nnmove()[u], pipc[id]->probs);
       sem_ipc[id].inc(); }
     _nn_in_b->erase(); }
-
-  bool is_full() const noexcept { return _nn_in_b->get_ub() == _size_batch; }
+  
+  bool is_full() const noexcept  { return _nn_in_b->get_ub() == _size_batch; }
   bool is_empty() const noexcept { return _nn_in_b->get_ub() == 0; } };
 
 void NNetService::worker_push() noexcept {
@@ -190,11 +201,6 @@ void NNetService::worker_srv() noexcept {
 #endif
       } else if (_impl == NNet::opencl) {
 #if defined(USE_OPENCL_AOBA)
-	string s("Tuning feed-forward engine of device ");
-	s += to_string(static_cast<int>(_device_id)) + string(" for ");
-	s += string(fn.get_fname()) + string("\n");
-	std::cout << s << std::flush;
-	
 	_pnnet.reset(new NNetOCL);
 	_sem_service_lock.dec_wait();
 	pservice->id_ipc_next = 0;
@@ -208,6 +214,11 @@ void NNetService::worker_srv() noexcept {
 	  _flag_cv_nnreset = true;
 	  fn = _fname; }
 	_cv_nnreset.notify_one();
+	string s("Tuning feed-forward engine of device ");
+	s += to_string(static_cast<int>(_device_id)) + string(" for ");
+	s += string(fn.get_fname()) + string("\n");
+	std::cout << s << std::flush;
+
 	NNetOCL *p = static_cast<NNetOCL *>(_pnnet.get());
 	std::cout << p->reset(_size_batch, NNAux::read(fn), _device_id,
 			      _use_half, false, true)
@@ -227,14 +238,14 @@ void NNetService::worker_srv() noexcept {
 	if (_entries_push.empty()) flag_do_notify = true;
 	if (_entries_push.empty() || _entries_push.back()->is_full()) {
 	  if (_entries_pool.empty())
-	    _entries_pool.emplace_back(new Entry(_size_batch));
+	    _entries_pool.emplace_back(new Entry(_size_batch,
+						 _pnnet->do_compress()));
 
 	  unique_ptr<Entry> pe = move(_entries_pool.back());
 	  _entries_pool.pop_back();
 	  _entries_push.push_back(move(pe)); }
 
-	_entries_push.back()->add(pipc[id]->features, pipc[id]->size_nnmove,
-				  pipc[id]->nnmove, id);
+	_entries_push.back()->add(pipc[id], id);
 
 	if (_entries_push.size() == 1 && _entries_push.back()->is_full())
 	  flag_do_notify = true; }
@@ -296,9 +307,9 @@ NNetService::NNetService(NNet::Impl impl, uint nnet_id, uint nipc,
 
 NNetService::NNetService(NNet::Impl impl, uint nnet_id, uint nipc,
 			 uint size_batch, uint device_id, uint use_half,
-			 uint thread_num, const FName &fname) noexcept
-: NNetService(impl, nnet_id, nipc, size_batch, device_id, use_half,
-	      thread_num) { nnreset(fname); }
+			 uint thread_num, const FName &fname) noexcept :
+NNetService(impl, nnet_id, nipc, size_batch, device_id, use_half, thread_num) {
+  nnreset(fname); }
 
 NNetService::~NNetService() noexcept {
   assert(_mmap_service.ok());

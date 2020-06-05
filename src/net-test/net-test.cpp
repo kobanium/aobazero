@@ -237,16 +237,16 @@ public:
 struct TestSet {
   uint wait_id;
   uint nentry;
-  unique_ptr<NNInBatch> nn_in_b;
-  unique_ptr<NNInBatchCompressed> nn_in_b_c;
+  unique_ptr<NNInBatchBase> nn_in_b;
   unique_ptr<const Entry *[]> ppentry;
   unique_ptr<float []> probs;
   unique_ptr<float []> values;
-  explicit TestSet(uint nb_, bool do_compress) noexcept : nentry(0),
+  bool do_compress;
+  explicit TestSet(uint nb_, bool do_compress_) noexcept : nentry(0),
     ppentry(new const Entry *[nb_]),
     probs(new float [nb_ * SAux::maxsize_moves]),
-    values(new float [nb_]) {
-    if (do_compress) nn_in_b_c.reset(new NNInBatchCompressed(nb_));
+    values(new float [nb_]), do_compress(do_compress_) {
+    if (do_compress) nn_in_b.reset(new NNInBatchCompressed(nb_));
     else             nn_in_b.reset(new NNInBatch(nb_)); };
 };
 
@@ -290,18 +290,17 @@ class QueueTest {
 
   void flush() noexcept {
     if (_pts_push->nentry == 0) return;
-    if (do_compress())
+    if (_pts_push->do_compress) {
+      auto p = static_cast<NNInBatchCompressed *>(_pts_push->nn_in_b.get());
       _pts_push->wait_id
-	= _pnnet->push_ff(*_pts_push->nn_in_b_c, _pts_push->probs.get(),
-			  _pts_push->values.get());
-    else
+	= _pnnet->push_ff(*p, _pts_push->probs.get(),
+			  _pts_push->values.get()); }
+    else {
+      auto p = static_cast<NNInBatch *>(_pts_push->nn_in_b.get());
       _pts_push->wait_id
-	= _pnnet->push_ff(_pts_push->nn_in_b->get_ub(),
-			  _pts_push->nn_in_b->get_features(),
-			  _pts_push->nn_in_b->get_sizes_nnmove(),
-			  _pts_push->nn_in_b->get_nnmoves(),
-			  _pts_push->probs.get(),
-			  _pts_push->values.get());
+	= _pnnet->push_ff(p->get_ub(), p->get_features(),
+			  p->get_sizes_nnmove(), p->get_nnmoves(),
+			  _pts_push->probs.get(), _pts_push->values.get()); }
     unique_lock<mutex> lock(_m);
     _cv.wait(lock, [&]{ return _deque_wait.size() < 16U; });
     _deque_wait.push_back(move(_pts_push));
@@ -313,8 +312,7 @@ class QueueTest {
     _cv.notify_one();
 
     _pts_push->nentry = 0;
-    if (do_compress()) _pts_push->nn_in_b_c->erase();
-    else               _pts_push->nn_in_b->erase(); }
+    _pts_push->nn_in_b->erase(); }
   
 public:
   explicit QueueTest(const FName &fname, int device_id, uint nb, bool use_half,
@@ -350,21 +348,19 @@ public:
 
   void push(const Entry *pe) noexcept {
     assert(pe && pe->ok());
-
     _pts_push->ppentry[_pts_push->nentry++] = pe;
-    if (do_compress()) {
-      _pts_push->nn_in_b_c->add(pe->get_n_one(),
-				pe->get_compressed_features(),
-				pe->get_size_nnmove(),
-				pe->nnmoves.data());
-      assert(_pts_push->nentry == _pts_push->nn_in_b_c->get_ub()); }
-    else {
-      _pts_push->nn_in_b->add(pe->get_features(), pe->get_size_nnmove(),
-			      pe->nnmoves.data());
-      assert(_pts_push->nentry == _pts_push->nn_in_b->get_ub()); }
-
+    if (do_compress())
+      static_cast<NNInBatchCompressed *>(_pts_push->nn_in_b.get())
+	->add(pe->get_n_one(), pe->get_compressed_features(),
+	      pe->get_size_nnmove(), pe->nnmoves.data());
+    else
+      static_cast<NNInBatch *>(_pts_push->nn_in_b.get())
+	->add(pe->get_features(), pe->get_size_nnmove(),
+	      pe->nnmoves.data());
+    
+    assert(_pts_push->nentry == _pts_push->nn_in_b->get_ub());
     if (_pts_push->nentry == _nb) flush(); }
-
+  
   void end() noexcept {
     flush();
     {
