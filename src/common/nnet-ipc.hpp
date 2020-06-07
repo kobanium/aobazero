@@ -36,7 +36,7 @@ public:
   int submit_compressed_block(uint size_nnmove, uint n_one) noexcept;
   int get_id() const noexcept { return _id; }
   float *get_features() const noexcept { return _pipc->features; }
-  float *get_compressed_features() const noexcept {
+  void *get_compressed_features() const noexcept {
     return _pipc->compressed_features; }
   ushort *get_nnmoves() const noexcept { return _pipc->nnmove; }
   const float *get_probs() const noexcept { return _pipc->probs; }
