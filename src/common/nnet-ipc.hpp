@@ -24,18 +24,22 @@ class NNetIPC {
   SharedService *_pservice;
   SharedIPC *_pipc;
   int _id;
-  bool _flag_detach;
+  bool _flag_detach, _do_compress;
   int sem_wait(OSI::Semaphore &sem) noexcept;
+  int submit_block_child(uint size_nnmove) noexcept;
 
 public:
   NNetIPC(bool flag_detach = true) noexcept;
   int start(uint nnet_id) noexcept;
   void end() noexcept;
-  int get_id() const noexcept;
-  float *get_input() const noexcept;
-  ushort *get_nnmoves() const noexcept;
-  const float *get_probs() const noexcept;
-  float get_value() const noexcept;
   int submit_block(uint size_nnmove) noexcept;
-  bool ok() const noexcept { return 0 <= _id; }
+  int submit_compressed_block(uint size_nnmove, uint n_one) noexcept;
+  int get_id() const noexcept { return _id; }
+  float *get_features() const noexcept { return _pipc->features; }
+  void *get_compressed_features() const noexcept {
+    return _pipc->compressed_features; }
+  ushort *get_nnmoves() const noexcept { return _pipc->nnmove; }
+  const float *get_probs() const noexcept { return _pipc->probs; }
+  float get_value() const noexcept { return _pipc->value; }
+  bool ok() const noexcept { return (_pipc && 0 <= _id); }
 };

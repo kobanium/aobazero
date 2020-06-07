@@ -575,8 +575,8 @@ compute_probs(uint nch, uint size_batch, const uint *sizes_nnmove,
 	      const ushort *nnmoves, const float *weight, const float *bias,
 	      const float *fin, float *probs) noexcept {
   for (uint ub = 0; ub < size_batch; ++ub) {
-    const ushort *m = nnmoves + ub * NNAux::nmove;
-    float *probs_b  = probs   + ub * NNAux::nmove;
+    const ushort *m = nnmoves + ub * SAux::maxsize_moves;
+    float *probs_b  = probs   + ub * SAux::maxsize_moves;
     for (uint u = 0; u < sizes_nnmove[ub]; ++u) {
       assert(m[u] < NNAux::nch_out_policy * NNAux::size_plane);
       uint ch = m[u] / NNAux::size_plane;

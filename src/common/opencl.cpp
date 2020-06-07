@@ -28,8 +28,9 @@ using std::vector;
 using namespace OCL;
 using namespace ErrAux;
 
-constexpr char options[] = "-Werror -cl-std=CL1.2";
-//constexpr char options[] = "-Werror -cl-std=CL1.2 -cl-fast-relaxed-math";
+constexpr char options[]            = "-Werror -cl-std=CL1.2";
+constexpr char options_aggressive[] = "-Werror -cl-std=CL1.2 "
+                                      "-cl-fast-relaxed-math";
 
 class OCL::Memory_impl {
   cl_mem _mem;
@@ -210,7 +211,7 @@ cl_ulong OCL::Kernel::gen_private_mem_size() const {
 class OCL::Program_impl {
   cl_program _pg;
 public:
-  explicit Program_impl(const char *code, cl_context context,
+  explicit Program_impl(const char *code, bool flag, cl_context context,
 			cl_device_id dev) {
     assert(code && dev && context);
     cl_int ret;
@@ -218,8 +219,8 @@ public:
     if (ret != CL_SUCCESS)
       throw ERR_INT("clCreateProgramWithSource() failed. Error Code: %d", ret);
 
-    if (clBuildProgram(_pg, 0, nullptr, options, nullptr, nullptr)
-	== CL_SUCCESS) return;
+    if (clBuildProgram(_pg, 0, nullptr, (flag ? options_aggressive : options),
+		       nullptr, nullptr) == CL_SUCCESS) return;
 
     size_t size;
     ret = clGetProgramBuildInfo(_pg, dev, CL_PROGRAM_BUILD_LOG, 0, nullptr,
@@ -365,8 +366,8 @@ public:
       c_impl._id = nullptr; }
     return *this; }
   Queue_impl gen_queue() const { return Queue_impl(_id, _context); }
-  Program_impl gen_program(const char *code) const {
-    assert(code); return Program_impl(code, _context, _id); }
+  Program_impl gen_program(const char *code, bool flag) const {
+    assert(code); return Program_impl(code, flag, _context, _id); }
   MemPinned_impl gen_mem_pinned(const cl_mem_flags &mem_flags,
 				const cl_map_flags &map_flags, size_t size)
     const {
@@ -384,10 +385,10 @@ OCL::Context &Context::operator=(Context &&c) {
   assert(c.ok()); if (this != &c) _impl = move(c._impl); return *this; }
 bool OCL::Context::ok() const { return _impl && _impl->ok(); }
 Queue OCL::Context::gen_queue() const { return Queue(_impl->gen_queue()); }
-Program OCL::Context::gen_program(const char *code) const {
-  assert(code); return Program(_impl->gen_program(code)); }
-Program OCL::Context::gen_program(const std::string &code) const {
-  return Program(_impl->gen_program(code.c_str())); }
+Program OCL::Context::gen_program(const char *code, bool flag) const {
+  assert(code); return Program(_impl->gen_program(code, flag)); }
+Program OCL::Context::gen_program(const std::string &code, bool flag) const {
+  return Program(_impl->gen_program(code.c_str(), flag)); }
 MemPinned OCL::Context::gen_mem_pin_hw_dr(size_t size) const {
   return MemPinned(_impl->gen_mem_pinned(CL_MEM_READ_ONLY, CL_MAP_WRITE,
 					 size)); }

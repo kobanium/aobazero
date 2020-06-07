@@ -104,8 +104,8 @@ void prepare_dummy_data(float *data, std::vector<unsigned short> &nnmoves)
 {
 	int size = nnmoves.size();
 	dummy_nnmoves.resize(size);
-	copy_n(          data, NNAux::size_input, dummy_data           );
-	copy_n(nnmoves.data(),              size, dummy_nnmoves.data() );
+	copy_n(data, NNAux::nch_input*NNAux::size_plane, dummy_data);
+	copy_n(nnmoves.data(), size, dummy_nnmoves.data() );
 
 //	while ( !is_prepare_dummy_data.compare_exchange_weak(false, true) );
 	prepare_dummy_data_unlock();
@@ -162,8 +162,10 @@ void AddDummy::wait_loop() {
 	}
 
 	NNetIPC *p_nnet = p_nnet_v[m_thread_id];
-	copy_n(          dummy_data,    NNAux::size_input, p_nnet->get_input()  );
-	copy_n(dummy_nnmoves.data(), dummy_nnmoves.size(), p_nnet->get_nnmoves());
+	copy_n(dummy_data, NNAux::nch_input*NNAux::size_plane,
+	       p_nnet->get_features()  );
+	copy_n(dummy_nnmoves.data(), dummy_nnmoves.size(),
+	       p_nnet->get_nnmoves());
 
 	while (true) {
 		{
@@ -643,8 +645,9 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 		if ( is_thread_batch() && ! is_prepare_dummy_data ) {
 			prepare_dummy_data(data, nnmoves);
 		}
-		copy_n(          data, NNAux::size_input, p_nnet->get_input()  );
-		copy_n(nnmoves.data(),          move_num, p_nnet->get_nnmoves());
+		copy_n(data, NNAux::nch_input*NNAux::size_plane,
+		       p_nnet->get_features()  );
+		copy_n(nnmoves.data(), move_num, p_nnet->get_nnmoves());
 		submit_block_sub(p_nnet, gnum, move_num);
 
 		const float *nn_probs = p_nnet->get_probs();

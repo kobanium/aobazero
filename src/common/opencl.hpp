@@ -102,8 +102,9 @@ namespace OCL {
     Context &operator=(Context &&q);
     bool ok() const;
     Queue gen_queue() const;
-    Program gen_program(const char *code) const;
-    Program gen_program(const std::string &code) const;
+    Program gen_program(const char *code, bool flag_aggressive = true) const;
+    Program gen_program(const std::string &code,
+			bool flag_aggressive = true) const;
     MemPinned gen_mem_pin_hw_dr(size_t size) const;
     MemPinned gen_mem_pin_hr_dw(size_t size) const;
     Memory gen_mem_hw_dr(size_t size) const;
