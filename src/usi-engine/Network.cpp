@@ -782,8 +782,7 @@ template<typename T> T abs_error(T a, T b) noexcept {
 int Network::compare_net_outputs(std::vector<scored_node>& policy,
 				 std::vector<scored_node>& policy_ref,
 				 float value, float value_ref) {
-//  constexpr float th_abs_error = 0.01f;
-  constexpr float th_abs_error = 0.05f;	// half test for colab
+  constexpr float th_abs_error = 0.05f;
   float err;
 
   for (unsigned int idx = 0; idx < policy.size(); ++idx) {
