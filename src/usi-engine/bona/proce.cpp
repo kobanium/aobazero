@@ -60,6 +60,7 @@ static int CONV proce_usi( tree_t * restrict ptree );
 static int CONV usi_posi( tree_t * restrict ptree, char **lasts );
 static int CONV usi_go( tree_t * restrict ptree, char **lasts );
 static int CONV usi_ignore( tree_t * restrict ptree, char **lasts );
+static int CONV usi_option( tree_t * restrict ptree, char **lasts );
 #endif
 
 #if defined(TLP)
@@ -478,9 +479,16 @@ static int CONV proce_usi( tree_t * restrict ptree )
     usi_newgame();
     return 1;
   }
+  if ( ! strcmp( token,"setoption") ) {
+    iret = usi_option( ptree, &lasts );
+    return iret;
+  }
 
   if ( ! strcmp( token, "position" ) ) { return usi_posi( ptree, &lasts ); }
-  if ( ! strcmp( token, "quit" ) )     { return cmd_quit(); }
+  if ( ! strcmp( token, "quit" ) ) {
+    stop_thread_submit();
+    return cmd_quit();
+  }
   if ( ! strcmp( token, "d" ) ) {
 /*
     fprintf(stderr,"print board\n");
@@ -804,7 +812,29 @@ usi_posi( tree_t * restrict ptree, char **lasts )
   return 1;
 }
 
-#endif
+static int CONV
+usi_option( tree_t *restrict ptree, char **lasts )
+{
+  const char *token;
+  (void)ptree;
+
+  // "setoption name USI_WeightFile value weight/w000000001144.txt"
+  token = strtok_r( NULL, str_delimiters, lasts );
+  if ( token==NULL || strcmp( token, "name" ) !=0 ) { PRT("option needs 'name'\n"); debug(); }
+  token = strtok_r( NULL, str_delimiters, lasts );
+  if ( token==NULL || strcmp( token, "USI_WeightFile" ) !=0 ) { PRT("unknown option\n"); debug(); }
+  token = strtok_r( NULL, str_delimiters, lasts );
+  if ( token==NULL || strcmp( token, "value" ) !=0 ) { PRT("unknown option\n"); debug(); }
+  token = strtok_r( NULL, str_delimiters, lasts );
+  if ( token==NULL ) { PRT("no path\n"); debug(); }
+
+  replace_network(token);
+
+  return 1;
+}
+
+
+#endif	// end of USI
 
 
 static int CONV cmd_move_now( void )

@@ -41,6 +41,7 @@ using std::set_terminate;
 using std::string;
 using std::stringstream;
 using std::to_string;
+using std::terminate;
 using std::unique_ptr;
 using std::vector;
 using ErrAux::die;
@@ -140,6 +141,7 @@ static void on_signal(int signum) { flag_signal = signum; }
 int main(int argc, char **argv) {
   OSI::DirLock dlock(".");
   set_terminate(on_terminate);
+
   if (get_options(argc, argv) < 0) return 1;
   if (flag_b) load_book_file();
 
@@ -389,10 +391,14 @@ static void procedure_io(USIEngine &myself, USIEngine &opponent,
       log_out(myself, "%s", line);
       node_update(myself, opponent, node, startpos, record, line); } }
 
-  if (eof)
+  if (eof) {
+    while (0 < myself.getline_err(line, sizeof(line)))
+      log_out(myself, "%s", line);
+    while (0 < myself.getline_in(line, sizeof(line)))
+      log_out(myself, "%s", line);
     die(ERR_INT("Player %u of game %u terminates.\n%s",
 		myself.get_player_id(), myself.get_game_id(),
-		static_cast<const char *>(node.to_str()))); }
+		static_cast<const char *>(node.to_str()))); } }
 
 static void node_update(USIEngine &myself, USIEngine &opponent,
 			Node<Param::maxlen_play_learn> &node, string &startpos,
@@ -476,25 +482,27 @@ static void start_engine(USIEngine &c) noexcept {
   memcpy(a0, shell.get_fname(), sizeof(a0));
   memcpy(a2, c.get_cmd().c_str(), sizeof(a2));
   char *argv[] = { a0, a1, a2, nullptr };
-
   c.open(shell.get_fname(), argv);
-  child_out(c, "usi");
-  while (true) {
-    uint ret = c.getline_in(line, sizeof(line));
-    if (ret == 0)
-      die(ERR_INT("Player %u of game %u terminates.",
-		  c.get_player_id(), c.get_game_id()));
-    log_out(c, "%s", line);
-    if (strcmp(line, "usiok") == 0) break; }
 
-  child_out(c, "isready");
-  while (true) {
-    uint ret = c.getline_in(line, sizeof(line));
-    if (ret == 0)
-      die(ERR_INT("Player %u of game %u terminates.",
-		  c.get_player_id(), c.get_game_id()));
-    log_out(c, "%s", line);
-    if (strcmp(line, "readyok") == 0) break; } }
+  class EoF {};
+  try {
+    child_out(c, "usi");
+    while (true) {
+      if (c.getline_in(line, sizeof(line)) == 0) throw EoF();
+      log_out(c, "%s", line);
+      if (strcmp(line, "usiok") == 0) break; }
+
+    child_out(c, "isready");
+    while (true) {
+      if (c.getline_in(line, sizeof(line)) == 0) throw EoF();
+      log_out(c, "%s", line);
+      if (strcmp(line, "readyok") == 0) break; } }
+  catch (const EoF &e) {
+    while (0 < c.getline_err(line, sizeof(line))) log_out(c, "%s", line);
+    while (0 < c.getline_in (line, sizeof(line))) log_out(c, "%s", line);
+    die(ERR_INT("Player %u of game %u terminates.",
+		c.get_player_id(), c.get_game_id())); }
+  catch (...) { terminate(); } }
 
 static void child_out(USIEngine &c, const char *fmt, ...) noexcept {
   assert(c.ok() && fmt);
@@ -559,13 +567,11 @@ static void close_flush(USIEngine &c) noexcept {
 
   child_out(c, "quit");
   while (true) {
-    uint ret = c.getline_err(line, sizeof(line));
-    if (ret == 0) break;
+    if (c.getline_err(line, sizeof(line)) == 0) break;
     log_out(c, "%s", line); }
     
   while (true) {
-    uint ret = c.getline_in(line, sizeof(line));
-    if (ret == 0) break;
+    if (c.getline_in(line, sizeof(line)) == 0) break;
     log_out(c, "%s", line); }
 
   c.close(); }
@@ -770,6 +776,8 @@ static void load_book_file() noexcept {
   if (book.size() != size_book) die(ERR_INT("Bad book size %d", book.size()));
 
   std::random_device seed_gen;
-  std::mt19937 engine(seed_gen());
+  auto seed = seed_gen();
+  std::mt19937 engine(seed);
   std::shuffle(book.begin(), book.end(), engine);
-  cout << "'Read " << book.size() << " lines from " << str_book << std::endl; }
+  cout << "'Read " << book.size() << " lines from " << str_book << " seed="
+       << seed << std::endl; }

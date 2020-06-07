@@ -1140,12 +1140,14 @@ P-00AL
 			ZERO_DB *pz = &zdb_one;
 			pz->moves = tesuu;
 			pz->result = ZD_DRAW;
+			pz->result_type = RT_NONE;
 			if ( strstr(lpLine,"TORYO") ) {
 				if ( tesuu & 1 ) {
 					pz->result = ZD_S_WIN;
 				} else {
 					pz->result = ZD_G_WIN;
 				}
+				pz->result_type = RT_TORYO;
 			}
 			if ( strstr(lpLine,"KACHI") ) {
 				if ( tesuu & 1 ) {
@@ -1153,7 +1155,25 @@ P-00AL
 				} else {
 					pz->result = ZD_S_WIN;
 				}
+				pz->result_type = RT_KACHI;
 			}
+			// %+ILLEGAL_ACTION 先手(下手)の反則行為により、後手(上手)の勝ち
+			// %-ILLEGAL_ACTION 後手(上手)の反則行為により、先手(下手)の勝ち
+			if ( strstr(lpLine,"+ILLEGAL_ACTION") ) {	// 2020/03/27 連続王手の後、王側が逃げて千日手確定のみ
+				pz->result = ZD_G_WIN;
+				pz->result_type = RT_S_ILLEGAL_ACTION;
+			}
+			if ( strstr(lpLine,"-ILLEGAL_ACTION") ) {
+				pz->result = ZD_S_WIN;
+				pz->result_type = RT_G_ILLEGAL_ACTION;
+			}
+			if ( strstr(lpLine,"SENNICHITE") ) {
+				pz->result_type = RT_SENNICHITE;
+			}
+			if ( strstr(lpLine,"CHUDAN") ) {
+				pz->result_type = RT_CHUDAN;
+			}
+
 			int i,sum=0;
 			for (i=0;i<(int)pz->vv_move_visit.size();i++) {
 				sum += pz->vv_move_visit[i].size();

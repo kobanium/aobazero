@@ -300,10 +300,10 @@ learn_parse1( tree_t * restrict ptree, book_entry_t *pbook_entry, FILE *pf_tmp,
 
     Out( " done\n" );
     Out( "   Number of Games : %u\n",       precord->games );
-    Out( "   Total Moves     : %"PRIu64"\n",pdata[0]->num_moves );
-    Out( "   Moves Counted   : %"PRIu64"\n",pdata[0]->num_moves_counted);
+    Out( "   Total Moves     : %" PRIu64 "\n",pdata[0]->num_moves );
+    Out( "   Moves Counted   : %" PRIu64 "\n",pdata[0]->num_moves_counted);
     Out( "   Illegal Moves   : %u\n",       pdata[0]->illegal_moves );
-    Out( "   Nodes Searched  : %"PRIu64"\n",pdata[0]->num_nodes );
+    Out( "   Nodes Searched  : %" PRIu64 "\n",pdata[0]->num_nodes );
     Out( "   Max pos_buf     : %x\n",       pdata[0]->max_pos_buf );
     Out( "   Prediction (%)  :" );
     for ( i = 0, dtemp = 0.0; i < NUM_RESULT; i++ )

@@ -614,19 +614,20 @@ void Network::initialize(int /*playouts*/, const std::string & weightsfile) {
         // when doing fp16 vs. fp32 detections
         m_forward_cpu = init_net(channels, std::make_unique<CPUPipe>());
 #endif
-#ifdef USE_HALF
-        // HALF support is enabled, and we are using the GPU.
-        // Select the precision to use at runtime.
-        select_precision(channels);
-#else
+
         if ( is_process_batch() ) {
-            myprintf("Skip Initializing OpenCL (single precision).\n");
+            myprintf("Skip Initializing OpenCL.\n");
         } else {
+#ifdef USE_HALF
+            // HALF support is enabled, and we are using the GPU.
+            // Select the precision to use at runtime.
+            select_precision(channels);
+#else
             myprintf("Initializing OpenCL (single precision).\n");
             m_forward = init_net(channels,
                                 std::make_unique<OpenCLScheduler<float>>());
-        }
 #endif
+        }
     }
 
 #else //!USE_OPENCL
@@ -781,7 +782,8 @@ template<typename T> T abs_error(T a, T b) noexcept {
 int Network::compare_net_outputs(std::vector<scored_node>& policy,
 				 std::vector<scored_node>& policy_ref,
 				 float value, float value_ref) {
-  constexpr float th_abs_error = 0.05f;
+//  constexpr float th_abs_error = 0.01f;
+  constexpr float th_abs_error = 0.05f;	// half test for colab
   float err;
 
   for (unsigned int idx = 0; idx < policy.size(); ++idx) {

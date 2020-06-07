@@ -26,7 +26,7 @@ using namespace std;
 
 #define USE_CAFFE 1
 
-#define YSS_TRAIN 0		// 0ã§test, 1ã§train DBä½œæˆ
+#define YSS_TRAIN 0		// 0¤Çtest, 1¤Çtrain DBºîÀ®
 const int DCNN_CHANNELS = 362;
 
 #define FILE_HEADER "i361_11259_1600self_leveldb"
@@ -47,110 +47,110 @@ const int NET_362 = 2;
 const int LABEL_CHANNELS = 139;
 const int MOVES_MAX = 593;
 
-const int fSelectZeroDB = 1;	// ZERO_DB ã‹ã‚‰é¸æŠä¸­ã€‚åƒæ—¥æ‰‹ã®ãƒã‚§ãƒƒã‚¯ãªã©ãŒé•ã†
+const int fSelectZeroDB = 1;	// ZERO_DB ¤«¤éÁªÂòÃæ¡£ÀéÆü¼ê¤Î¥Á¥§¥Ã¥¯¤Ê¤É¤¬°ã¤¦
 
 
 /*
-å°†æ£‹ã®ãƒ‡ã‚£ãƒ¼ãƒ—ãƒ©ãƒ¼ãƒ‹ãƒ³ã‚°
-Policyã€Value
+¾­´ı¤Î¥Ç¥£¡¼¥×¥é¡¼¥Ë¥ó¥°
+Policy¡¢Value
 
-å…¥åŠ›
-å…ˆæ‰‹ã®æ­©ã€é¦™ã€æ¡‚ã€éŠ€ã€é‡‘ã€è§’ã€é£›ã€ã¨ã€è»Šã€åœ­ã€å…¨ã€é¦¬ã€ç«œ
-é§’ã”ã¨ã® 01 ã®map
+ÆşÎÏ
+Àè¼ê¤ÎÊâ¡¢¹á¡¢·Ë¡¢¶ä¡¢¶â¡¢³Ñ¡¢Èô¡¢¤È¡¢¼Ö¡¢·½¡¢Á´¡¢ÇÏ¡¢Îµ
+¶ğ¤´¤È¤Î 01 ¤Îmap
 
-æ­©ãŒæ‰“ã¦ã‚‹å ´æ‰€
-åˆ©ãã®map 0,1,2,3ä»¥ä¸Š
+Êâ¤¬ÂÇ¤Æ¤ë¾ì½ê
+Íø¤­¤Îmap 0,1,2,3°Ê¾å
 
-ç›´å‰ã®æ‰‹ã€‚ç§»å‹•å…ƒã€ç§»å‹•å…ˆã€ã©ã®é§’ã‚’å–ã£ãŸã‹ã€æˆã£ãŸã‹
+Ä¾Á°¤Î¼ê¡£°ÜÆ°¸µ¡¢°ÜÆ°Àè¡¢¤É¤Î¶ğ¤ò¼è¤Ã¤¿¤«¡¢À®¤Ã¤¿¤«
 
-å¤§é§’ã®å‹•ã‘ã‚‹ãƒã‚¹
+Âç¶ğ¤ÎÆ°¤±¤ë¥Ş¥¹
 
 
-æŒã¡é§’
-æ­©0,1,2,3,4, é¦™ã€æ¡‚ã€éŠ€ã€é‡‘ã€è§’ã€é£› 0,1,2
+»ı¤Á¶ğ
+Êâ0,1,2,3,4, ¹á¡¢·Ë¡¢¶ä¡¢¶â¡¢³Ñ¡¢Èô 0,1,2
 5 + 3*6 = 21
 4 + 2*6 = 16
 
 
-Ponanzaã¯å‡ºåŠ›ã‚’å¯èƒ½æ‰‹ã§å›ºå®š
-å–ã£ãŸé§’ã¯ç„¡è¦–ã€‚ç§»å‹•å…ƒã‹ã‚‰ç§»å‹•å…ˆã«æˆã£ãŸã‹ã€æˆã‚‰ãšã‹
+Ponanza¤Ï½ĞÎÏ¤ò²ÄÇ½¼ê¤Ç¸ÇÄê
+¼è¤Ã¤¿¶ğ¤ÏÌµ»ë¡£°ÜÆ°¸µ¤«¤é°ÜÆ°Àè¤ËÀ®¤Ã¤¿¤«¡¢À®¤é¤º¤«
 
-ç›¤ä¸Šã®æ­© 90é€šã‚Š
-9-5æ®µç›® 1é€šã‚Š         45
-4-3æ®µç›® 2é€šã‚Š(æˆ)     18*2=36
-2æ®µç›®   1é€šã‚Š         9
+È×¾å¤ÎÊâ 90ÄÌ¤ê
+9-5ÃÊÌÜ 1ÄÌ¤ê         45
+4-3ÃÊÌÜ 2ÄÌ¤ê(À®)     18*2=36
+2ÃÊÌÜ   1ÄÌ¤ê         9
 
-é¦™ 441é€šã‚Š
-9æ®µç›® 10é€šã‚Š  9*10 = 90
-8æ®µç›®  9é€šã‚Š  9*9  = 81
-7æ®µç›®  8      9*8  = 72
-6æ®µç›®  7      9*7  = 63
-5æ®µç›®  6      9*6  = 54
-4æ®µç›®  5      9*5  = 45
-3æ®µç›®  3      9*3  = 27
-2æ®µç›®  1      9*1  =  9
+¹á 441ÄÌ¤ê
+9ÃÊÌÜ 10ÄÌ¤ê  9*10 = 90
+8ÃÊÌÜ  9ÄÌ¤ê  9*9  = 81
+7ÃÊÌÜ  8      9*8  = 72
+6ÃÊÌÜ  7      9*7  = 63
+5ÃÊÌÜ  6      9*6  = 54
+4ÃÊÌÜ  5      9*5  = 45
+3ÃÊÌÜ  3      9*3  = 27
+2ÃÊÌÜ  1      9*1  =  9
 
-æ¡‚ 128é€šã‚Š   
-9-6æ®µç›®   1+2*7+1  16    16*4
-5æ®µç›®     2+4*7+2  32    32 
-4-3æ®µç›®   1+2*7+1  16    16*2
+·Ë 128ÄÌ¤ê   
+9-6ÃÊÌÜ   1+2*7+1  16    16*4
+5ÃÊÌÜ     2+4*7+2  32    32 
+4-3ÃÊÌÜ   1+2*7+1  16    16*2
 
-éŠ€
-9æ®µç›®    2+3*7+2 25   25
-8-5æ®µç›®  3+5*7+3 41   41*4
-4æ®µç›®
+¶ä
+9ÃÊÌÜ    2+3*7+2 25   25
+8-5ÃÊÌÜ  3+5*7+3 41   41*4
+4ÃÊÌÜ
 
-ã„ã‚„ã€ã“ã‚Œã ã¨ã†ã¾ãè¡¨ç¾ã§ããªã„ã‹ã€‚ç§»å‹•å…ƒ -> ç§»å‹•å…ˆ(æˆ) ã®å…¨çµ„ã¿åˆã‚ã›ï¼Ÿ
+¤¤¤ä¡¢¤³¤ì¤À¤È¤¦¤Ş¤¯É½¸½¤Ç¤­¤Ê¤¤¤«¡£°ÜÆ°¸µ -> °ÜÆ°Àè(À®) ¤ÎÁ´ÁÈ¤ß¹ç¤ï¤»¡©
 
-(99)ã‹ã‚‰ç§»å‹•å¯èƒ½ãªå ´æ‰€ã¯ 11+8+11 = 31
-ä¸Šã«8+3
-å³ 8
-æ–œã‚å³ 8+3
-æ¡‚é¦¬ 1
+(99)¤«¤é°ÜÆ°²ÄÇ½¤Ê¾ì½ê¤Ï 11+8+11 = 31
+¾å¤Ë8+3
+±¦ 8
+¼Ğ¤á±¦ 8+3
+·ËÇÏ 1
 (89)             11+8+9+1 = 29
-ä¸Šã«8+3
-å·¦å³ 8    
-æ–œã‚å³ 7+2
-æ–œã‚å·¦ 1
+¾å¤Ë8+3
+º¸±¦ 8    
+¼Ğ¤á±¦ 7+2
+¼Ğ¤áº¸ 1
 (88)             
 
-0-3873 ã¾ã§ã®åˆ†é¡ã™ã‚‹softmaxã«ãªã‚‹ã€‚
+0-3873 ¤Ş¤Ç¤ÎÊ¬Îà¤¹¤ësoftmax¤Ë¤Ê¤ë¡£
 
-ç§»å‹•å…ƒ(81)-ç§»å‹•å…ˆ(81) ã®2ã¤ã‚’ä½¿ã†åˆ©ç‚¹ã¯åŒï½ã€ã¨ã„ã†ã®ã‚’ç†è§£ã—ã‚„ã™ã„ã‹ï¼Ÿ
-å®Ÿéš›ã«ç›¤ä¸Šã«é§’ãŒã‚ã‚‹ã—ã€‚
-ç§»å‹•å…ˆ(81)ã‚’å…ƒã«ä¸¦ã¹ã‚‹ã¨å¤šå°‘ç†è§£ã—ã‚„ã™ã„ï¼Ÿ
-3813é€šã‚Šï¼Ÿ
+°ÜÆ°¸µ(81)-°ÜÆ°Àè(81) ¤Î2¤Ä¤ò»È¤¦ÍøÅÀ¤ÏÆ±¡Á¡¢¤È¤¤¤¦¤Î¤òÍı²ò¤·¤ä¤¹¤¤¤«¡©
+¼Âºİ¤ËÈ×¾å¤Ë¶ğ¤¬¤¢¤ë¤·¡£
+°ÜÆ°Àè(81)¤ò¸µ¤ËÊÂ¤Ù¤ë¤ÈÂ¿¾¯Íı²ò¤·¤ä¤¹¤¤¡©
+3813ÄÌ¤ê¡©
 
-50å„„å±€é¢=5000000000,1æ£‹è­œã‹ã‚‰100ã¨ã—ã¦ã‚‚5000ä¸‡æ£‹è­œã€‚1ãƒ¶æœˆã€4å°ã®12CPUã§ä½œã‚‹ã¨ã™ã‚‹ã¨ã€1å°ã§1200ä¸‡/æœˆã€‚100ä¸‡/1CPUæœˆ
-3ä¸‡æ£‹è­œ/1CPUæ—¥ã€‚1250æ£‹è­œ/1CPUæ™‚é–“ã€‚1åˆ†20æ£‹è­œã€3ç§’ã§1å±€ã€‚
+50²¯¶ÉÌÌ=5000000000,1´ıÉè¤«¤é100¤È¤·¤Æ¤â5000Ëü´ıÉè¡£1¥ö·î¡¢4Âæ¤Î12CPU¤Çºî¤ë¤È¤¹¤ë¤È¡¢1Âæ¤Ç1200Ëü/·î¡£100Ëü/1CPU·î
+3Ëü´ıÉè/1CPUÆü¡£1250´ıÉè/1CPU»ş´Ö¡£1Ê¬20´ıÉè¡¢3ÉÃ¤Ç1¶É¡£
 
-ã©ã®å±€é¢ã‚’å­¦ç¿’ã•ã›ã‚‹ã‹ã€‚å¹³æ‰‹ã®åˆæœŸå±€é¢ã‚’ä½•åº¦ã‚‚å­¦ç¿’ã•ã›ã¦ã‚‚ä»•æ–¹ãŒãªã„ã€‚
-åˆæ‰‹76æ­©ã€åˆæ‰‹26æ­©ã€ã“ã‚Œã‚’æŒ‡ã—ãŸã¨ãã®å‹ç‡ãŒåˆ†ã‹ã‚‹ç¨‹åº¦ã§ååˆ†ã€‚
-å…¨ä½“ã®å­¦ç¿’æ£‹è­œæ•°ã‚’10000ã¨ã™ã‚‹ã¨ã€
+¤É¤Î¶ÉÌÌ¤ò³Ø½¬¤µ¤»¤ë¤«¡£Ê¿¼ê¤Î½é´ü¶ÉÌÌ¤ò²¿ÅÙ¤â³Ø½¬¤µ¤»¤Æ¤â»ÅÊı¤¬¤Ê¤¤¡£
+½é¼ê76Êâ¡¢½é¼ê26Êâ¡¢¤³¤ì¤ò»Ø¤·¤¿¤È¤­¤Î¾¡Î¨¤¬Ê¬¤«¤ëÄøÅÙ¤Ç½½Ê¬¡£
+Á´ÂÎ¤Î³Ø½¬´ıÉè¿ô¤ò10000¤È¤¹¤ë¤È¡¢
 
 
-AlphaZeroã®æ§‹é€ ã‚’çœŸä¼¼ã—ã¦ã¿ã‚‹ã€‚
-æ­©ã€é¦™ã€æ¡‚ã€éŠ€ã€é‡‘ã€è§’ã€é£›ã€ç‹ã€ã¨ã€è»Šã€åœ­ã€å…¨ã€é¦¬ã€ç«œ
-14ç¨®é¡ã€‚1å›ç›®ã®åŒä¸€å±€é¢ã€2ã€3ã€‚æŒã¡é§’ã®æ•°ã€1,2,3...
-æ‰‹ç•ªã€æ‰‹æ•°(1,2,...)
+AlphaZero¤Î¹½Â¤¤ò¿¿»÷¤·¤Æ¤ß¤ë¡£
+Êâ¡¢¹á¡¢·Ë¡¢¶ä¡¢¶â¡¢³Ñ¡¢Èô¡¢²¦¡¢¤È¡¢¼Ö¡¢·½¡¢Á´¡¢ÇÏ¡¢Îµ
+14¼ïÎà¡£1²óÌÜ¤ÎÆ±°ì¶ÉÌÌ¡¢2¡¢3¡£»ı¤Á¶ğ¤Î¿ô¡¢1,2,3...
+¼êÈÖ¡¢¼ê¿ô(1,2,...)
 
-å‡ºåŠ›
-æ­©ã€1
-é¦™ã€7
-æ¡‚ã€2
-éŠ€ã€5
-é‡‘ã€6
-è§’ã€8 x 4
-é£›ã€8 x 4
-é¦¬ã€8 x 8
-é§’æ‰“ 7
-4æš
-81ãƒã‚¹ã‹ã‚‰ã©ã®æ–¹å‘ã¸ã€ä½•ãƒã‚¹å‹•ã„ãŸã‹ï¼Ÿ8æ–¹å‘ã€‚æœ€å¤§8ãƒã‚¹ã€‚ã‚ˆã£ã¦
+½ĞÎÏ
+Êâ¡¢1
+¹á¡¢7
+·Ë¡¢2
+¶ä¡¢5
+¶â¡¢6
+³Ñ¡¢8 x 4
+Èô¡¢8 x 4
+ÇÏ¡¢8 x 8
+¶ğÂÇ 7
+4Ëç
+81¥Ş¥¹¤«¤é¤É¤ÎÊı¸ş¤Ø¡¢²¿¥Ş¥¹Æ°¤¤¤¿¤«¡©8Êı¸ş¡£ºÇÂç8¥Ş¥¹¡£¤è¤Ã¤Æ
 81 x 8x8 = 64
-æ¡‚ã¯2ã¤
+·Ë¤Ï2¤Ä
 
-76æ­©ãªã‚‰ã€‚        22è§’æˆ(88)ã¯
-ä¸Šæ–¹å‘ã«1ã¤ã€‚    å³æ–œã‚ã«6ã¤ 
+76Êâ¤Ê¤é¡£        22³ÑÀ®(88)¤Ï
+¾åÊı¸ş¤Ë1¤Ä¡£    ±¦¼Ğ¤á¤Ë6¤Ä 
 000000000        000000000
 000000000		 000000000
 000000000		 000000000
@@ -280,7 +280,7 @@ void finish_data_datum() {}
 
 
 
-const int unique_max = 3781;	// ä»¥å‰ã¯ 3813;
+const int unique_max = 3781;	// °ÊÁ°¤Ï 3813;
 short unique_from_to[81][81][2];
 short unique_hit_to[81][7];
 int te_unique[unique_max];
@@ -304,11 +304,11 @@ void make_unique_from_to()
 		int nari = 0;
 		if ( bz < 0x40 || az < 0x40 ) nari = 1;
 		int ok = 0;
-		if ( ax==bx || ay==by ) ok = 1;			// é£›
-		if ( abs(ax-bx) == abs(ay-by) ) ok = 1;	// è§’
+		if ( ax==bx || ay==by ) ok = 1;			// Èô
+		if ( abs(ax-bx) == abs(ay-by) ) ok = 1;	// ³Ñ
 		int must_nari = 0;
 		if ( az == bz - 0x21 || az == bz - 0x1f ) {
-			ok = 1;	// æ¡‚
+			ok = 1;	// ·Ë
 			if ( az < 0x30 ) must_nari = 1;
 		}
 		if ( ok == 0 ) continue;
@@ -341,7 +341,7 @@ void make_unique_from_to()
 
 int get_unique_from_te(int bz,int az, int tk, int nf)
 {
-	// å…ˆæ‰‹ãŒåŸºæœ¬ã€‚å¾Œæ‰‹ç•ªã§ã¯åè»¢ã•ã›ã‚‹ã€‚
+	// Àè¼ê¤¬´ğËÜ¡£¸å¼êÈÖ¤Ç¤ÏÈ¿Å¾¤µ¤»¤ë¡£
 	if ( bz==0xff ) {
 		return unique_hit_to[get81(az)][(tk & 0x0f)-1];
 	}
@@ -353,13 +353,13 @@ int get_te_from_unique(int u)
 }
 
 
-const int STOCK_MAX = 2400*5;	// 1æ£‹è­œã‹ã‚‰100æ‰‹ã€å·¦å³ã§200å€‹å–ã‚Œã‚‹ã€‚*400(9GB), 362  *200(20GB)
+const int STOCK_MAX = 2400*5;	// 1´ıÉè¤«¤é100¼ê¡¢º¸±¦¤Ç200¸Ä¼è¤ì¤ë¡£*400(9GB), 362  *200(20GB)
 
 unsigned char (*dcnn_data)[DCNN_CHANNELS][B_SIZE][B_SIZE];
 const uint64 DCNN_DATA_SIZE = (uint64)STOCK_MAX * DCNN_CHANNELS * B_SIZE * B_SIZE;
 
 //float *dcnn_label_data;
-int (*dcnn_labels)[2];	// [0]...æ‰‹, [1]...å‹æ•—
+int (*dcnn_labels)[2];	// [0]...¼ê, [1]...¾¡ÇÔ
 const int DCNN_LABELS_SIZE = STOCK_MAX * sizeof(int) * 2;
 
 void clear_dcnn_data()
@@ -434,7 +434,7 @@ int get_one_v_file(char *filename, const char *dir_list[])
 	for (;;) {
 		if ( p_current_dir ) {
 			const char *sKifExt[2] = { "csa","kif" };
-			int nExt = 0;	// æ‹¡å¼µå­ã®ç¨®é¡(csaãŒåŸºæœ¬)
+			int nExt = 0;	// ³ÈÄ¥»Ò¤Î¼ïÎà(csa¤¬´ğËÜ)
 			if ( strstr(p_current_dir, "uuun"  ) ) nExt = 1;
 			if ( strstr(p_current_dir, "prokif") ) nExt = 1;
 			const char *pExt = sKifExt[nExt];
@@ -581,9 +581,9 @@ void shogi::make_policy_leveldb()
 	if ( dcnn_labels == NULL ) { PRT("fail malloc()\n"); debug(); }
 	memset(dcnn_labels, 0, DCNN_LABELS_SIZE );
 
-	// i362_pro_flood, 6254 æ£‹è­œ(Test), 448365 æ£‹è­œ (20279263å±€é¢) 217545-716-230104 å…ˆæ‰‹å‹ç‡0.514
+	// i362_pro_flood, 6254 ´ıÉè(Test), 448365 ´ıÉè (20279263¶ÉÌÌ) 217545-716-230104 Àè¼ê¾¡Î¨0.514
 
-//	init_rand_yss();	// å¸¸ã«åŒã˜é †ç•ªã«ã™ã‚‹
+//	init_rand_yss();	// ¾ï¤ËÆ±¤¸½çÈÖ¤Ë¤¹¤ë
 #if defined(_MSC_VER)
 	if ( change_dir("C:\\Yss_smp\\20170515")==0 ) return;
 //	if ( change_dir("W:\\prokif\\20140703_79942")==0 ) return;
@@ -616,7 +616,7 @@ void shogi::make_policy_leveldb()
 		int ignore_muda[2];
 		ignore_muda[0] = ignore_muda[1] = 0;
 
-		int i,j,rn[2];	// rating 3000ä»¥ä¸Šã®player
+		int i,j,rn[2];	// rating 3000°Ê¾å¤Îplayer
 		rn[0] = rn[1] = 0;
 		for (i=0; i<(int)flood_players.size(); i++) {
 			for (j=0;j<2;j++) {
@@ -624,15 +624,15 @@ void shogi::make_policy_leveldb()
 			}
 		}
 		if ( fFlood==0 ) rn[0] = rn[1] = 1;
-		// ç‹æ‰‹ã®æ°´å¹³ç·šã‚’å‰Šé™¤ã™ã‚‹
+		// ²¦¼ê¤Î¿åÊ¿Àş¤òºï½ü¤¹¤ë
 		int type = 0;
 		if ( strstr(KifBuf,"%TORYO")     ) type = 1;
 		if ( strstr(KifBuf,"%KACHI")     ) type = 1;
 		if ( strstr(KifBuf,"sennichite") ) type = 2;	// 'summary:sennichite:ye_Cortex-A17_4c draw:Gikou_7700K draw
-		if ( strstr(KifBuf,"time up")    ) type = 1;	// 'summary:time up:sonic win:Gikou_2_6950XEE lose   ... æ™‚é–“åˆ‡ã‚Œã¯ã€å‹ã£ãŸã»ã†ã®æ‰‹ã§çµ‚ã‚ã£ã¦ã„ã‚‹
+		if ( strstr(KifBuf,"time up")    ) type = 1;	// 'summary:time up:sonic win:Gikou_2_6950XEE lose   ... »ş´ÖÀÚ¤ì¤Ï¡¢¾¡¤Ã¤¿¤Û¤¦¤Î¼ê¤Ç½ª¤ï¤Ã¤Æ¤¤¤ë
 		if ( strstr(KifBuf,"max_moves:") ) type = 2;
-		if ( strstr(KifBuf,"å…ˆæ‰‹ã®å‹ã¡") || "å¾Œæ‰‹ã®å‹ã¡" ) type = 1;
-		if ( strstr(KifBuf,"æ‰‹ã§åƒæ—¥æ‰‹") ) type = 2;
+		if ( strstr(KifBuf,"Àè¼ê¤Î¾¡¤Á") || "¸å¼ê¤Î¾¡¤Á" ) type = 1;
+		if ( strstr(KifBuf,"¼ê¤ÇÀéÆü¼ê") ) type = 2;
 
 		if ( type == 0 ) continue;
 		int result = 0;
@@ -653,7 +653,7 @@ void shogi::make_policy_leveldb()
 			int *p = &kifu[tesuu+1][0];
 			Move  m = (Move)pack_te( *(p+0),*(p+1),*(p+2),*(p+3) );
 			Color c = (Color)(i&1);
-			// åŒï½ã¨å–ã‚‰ã‚Œã¦ã„ã‚‹ç‹æ‰‹ã€‚è² ã‘ã¦ã‚‹å´ã€‚28æ‰‹å‰ã§ã‚‚ã€‚36æ‰‹å‰ã€‚40æ‰‹å‰ã€ä¸€å›ç™ºç”Ÿã—ãŸã‚‰ãã‚Œä»¥é™ã®è² ã‘ãŸå´ã®æ‰‹ã¯å…¨éƒ¨ç„¡è¦–ã€‚
+			// Æ±¡Á¤È¼è¤é¤ì¤Æ¤¤¤ë²¦¼ê¡£Éé¤±¤Æ¤ëÂ¦¡£28¼êÁ°¤Ç¤â¡£36¼êÁ°¡£40¼êÁ°¡¢°ì²óÈ¯À¸¤·¤¿¤é¤½¤ì°Ê¹ß¤ÎÉé¤±¤¿Â¦¤Î¼ê¤ÏÁ´ÉôÌµ»ë¡£
 			if ( is_move_gives_check(m, c) && c != win_c && i < all_tesuu-1 && kifu[tesuu+1][1] == kifu[tesuu+2][1] ) {
 				int bz = get_bz(m);
 				int az = get_az(m);
@@ -667,30 +667,30 @@ void shogi::make_policy_leveldb()
 				if ( c==BLACK && bz!=0xff && kiki_c[az]==1 && kiki_m[az] && (tk&0x07)==1 && (init_ban[bz]&0x07)>=0x02 ) muda=1;
 				if ( muda ) {
 					if ( all_tesuu-i <= 40 ) ignore_muda[i&1] = 1;
-//					PRT("ç„¡é§„ç‹æ‰‹%3d(%3d):",i+1,all_tesuu-i); print_te(m); PRT("%s\n",filename);
+//					PRT("ÌµÂÌ²¦¼ê%3d(%3d):",i+1,all_tesuu-i); print_te(m); PRT("%s\n",filename);
 				}
 			}
 			int fOK = 1;
 			if ( rn[i&1] == 0 ) fOK = 0;
 			if ( fBot && ignore_muda[i&1]==1 ) fOK = 0;
 			if ( i>=256 ) fOK = 0;
-//			if ( rn[i&1] && (fBot && ignore_muda[i&1]==0) ) {	// i128ã¯ãƒ—ãƒ­ã®æ£‹è­œã¯ç„¡è¦–ã—ã¦ãŸ
+//			if ( rn[i&1] && (fBot && ignore_muda[i&1]==0) ) {	// i128¤Ï¥×¥í¤Î´ıÉè¤ÏÌµ»ë¤·¤Æ¤¿
 			if ( fOK ) {
 //				if ( (i&1)==1 ) hanten_with_hash_kifu();
 
 				int bz = *(p+0), az = *(p+1), tk = *(p+2), nf = *(p+3);
 				int j;
-				for (j=0;j<1;j++) {	// 2ã§å·¦å³åè»¢ã‚‚ç™»éŒ²
+				for (j=0;j<1;j++) {	// 2¤Çº¸±¦È¿Å¾¤âÅĞÏ¿
 					if ( j==1 ) {
 						az = (az & 0xf0) + (10 - (az & 0x0f));
 						if ( bz != 0xff ) bz = (bz & 0xf0) + (10 - (bz & 0x0f));
 					}
-//					int u = get_unique_from_te(bz,az,tk,nf);	// ç›¤é¢åè»¢ã§ *p (kifu) ã‚‚åè»¢ã—ã¦ã‚‹
+//					int u = get_unique_from_te(bz,az,tk,nf);	// È×ÌÌÈ¿Å¾¤Ç *p (kifu) ¤âÈ¿Å¾¤·¤Æ¤ë
 //					if ( u < 0 ) DEBUG_PRT("i=%d,u=%d,%02x,%02x,%02x,%02x\n",i,u,bz,az,tk,nf);
 					int win_r = result;
 					if ( (i&1)==1 ) {
-						hanten_sasite(&bz,&az,&tk,&nf);	// æŒ‡ã—æ‰‹ã‚’å…ˆå¾Œåè»¢
-						win_r = -win_r;	// å‹æ•—ã¾ã§åè»¢ã¯ã—ãªãã¦ã‚ˆã„ï¼Ÿ åè»¢ã—ãŸæ–¹ãŒå­¦ç¿’ãŒç°¡å˜ãªã¯ãšã€‚å‡ºã¦ããŸçµæœã‚’åè»¢
+						hanten_sasite(&bz,&az,&tk,&nf);	// »Ø¤·¼ê¤òÀè¸åÈ¿Å¾
+						win_r = -win_r;	// ¾¡ÇÔ¤Ş¤ÇÈ¿Å¾¤Ï¤·¤Ê¤¯¤Æ¤è¤¤¡© È¿Å¾¤·¤¿Êı¤¬³Ø½¬¤¬´ÊÃ±¤Ê¤Ï¤º¡£½Ğ¤Æ¤­¤¿·ë²Ì¤òÈ¿Å¾
 					}
 //					dcnn_labels[stock_num][0] = u;
 					dcnn_labels[stock_num][0] = get_move_id_c_y_x(pack_te(bz,az,tk,nf));	//pack_te(bz,az,tk,nf);
@@ -891,8 +891,8 @@ int get_move_from_c_y_x(int c, int y, int x)
 }
 
 
-int move_id_c_y_x[LABEL_CHANNELS][B_SIZE][B_SIZE];	// idãŒå…¥ã‚‹ã€‚-1ã§ç€æ‰‹ä¸å¯
-int move_from_id_c_y_x_id[MOVE_C_Y_X_ID_MAX];		// idã‹ã‚‰moveã‚’
+int move_id_c_y_x[LABEL_CHANNELS][B_SIZE][B_SIZE];	// id¤¬Æş¤ë¡£-1¤ÇÃå¼êÉÔ²Ä
+int move_from_id_c_y_x_id[MOVE_C_Y_X_ID_MAX];		// id¤«¤émove¤ò
 
 void make_move_id_c_y_x()
 {
@@ -1071,10 +1071,10 @@ void shogi::set_dcnn_channels(Color sideToMove, const int ply, float *p_data, in
 	int base = 0;
 	int add_base = 0;
 	int x,y;
-	int flip = (ply&1);		// å¾Œæ‰‹ã®æ™‚ã¯å…¨éƒ¨ã²ã£ãã‚Šè¿”ã™
-	int current_t = ply;	// ç¾å±€é¢ã®æ‰‹æ•°ã€‚æ£‹è­œï¼‹æ¢ç´¢æ·±ã•
+	int flip = (ply&1);		// ¸å¼ê¤Î»ş¤ÏÁ´Éô¤Ò¤Ã¤¯¤êÊÖ¤¹
+	int current_t = ply;	// ¸½¶ÉÌÌ¤Î¼ê¿ô¡£´ıÉè¡ÜÃµº÷¿¼¤µ
 
-	// move_hit_kif[], move_hit_hashcode[] ã«æ£‹è­œ+æ¢ç´¢æ·±ã•ã®æ£‹è­œã¨ãƒãƒƒã‚·ãƒ¥å€¤ã‚’å…¥ã‚Œã‚‹ã“ã¨ 
+	// move_hit_kif[], move_hit_hashcode[] ¤Ë´ıÉè+Ãµº÷¿¼¤µ¤Î´ıÉè¤È¥Ï¥Ã¥·¥åÃÍ¤òÆş¤ì¤ë¤³¤È 
 	
 //if ( net_type==NET_361 || net_type==NET_362 ) {
 	int loop,back_num=0;
@@ -1088,7 +1088,7 @@ void shogi::set_dcnn_channels(Color sideToMove, const int ply, float *p_data, in
 			int m = k & 0x0f;
 			if ( m>=0x0e ) m--;	// m = 1...14
 			m--;
-			// å…ˆæ‰‹ã®æ­©ã€é¦™ã€æ¡‚ã€éŠ€ã€é‡‘ã€è§’ã€é£›ã€ç‹ã€ã¨ã€æã€åœ­ã€å…¨ã€é¦¬ã€ç«œ ... 14ç¨®é¡ã€+å…ˆæ‰‹ã®é§’ãŒå…¨éƒ¨1ã€ã§15ç¨®é¡
+			// Àè¼ê¤ÎÊâ¡¢¹á¡¢·Ë¡¢¶ä¡¢¶â¡¢³Ñ¡¢Èô¡¢²¦¡¢¤È¡¢°É¡¢·½¡¢Á´¡¢ÇÏ¡¢Îµ ... 14¼ïÎà¡¢+Àè¼ê¤Î¶ğ¤¬Á´Éô1¡¢¤Ç15¼ïÎà
 			if ( k > 0x80 ) m += 14;
 			int yy = y, xx = x;
 			if ( flip ) {
@@ -1111,7 +1111,7 @@ void shogi::set_dcnn_channels(Color sideToMove, const int ply, float *p_data, in
 				n0 = n1;
 				n1 = tmp;
 			} 
-			// æŒã¡é§’ã®æœ€å¤§æ•°
+			// »ı¤Á¶ğ¤ÎºÇÂç¿ô
 			float mo_div[8] = { 0, 18, 4, 4, 4, 4, 2, 2 }; 
 			float f0 = (float)n0 / mo_div[i];
 			float f1 = (float)n1 / mo_div[i];
@@ -1138,7 +1138,7 @@ void shogi::set_dcnn_channels(Color sideToMove, const int ply, float *p_data, in
 			}
 		}
 //		if ( 1 || sum > 0 ) PRT("repeat=%d,t=%3d,loop=%d,sideToMove=%d,ply=%d\n",sum,tesuu,loop,sideToMove,ply);
-		if ( sum > 3 ) sum = 3;	// åŒä¸€å±€é¢5å›ä»¥ä¸Šã€‚4å›ã¨åŒã˜ã§
+		if ( sum > 3 ) sum = 3;	// Æ±°ì¶ÉÌÌ5²ó°Ê¾å¡£4²ó¤ÈÆ±¤¸¤Ç
 
 		add_base = 3;
 		for (i=0;i<3;i++) {
@@ -1149,7 +1149,7 @@ void shogi::set_dcnn_channels(Color sideToMove, const int ply, float *p_data, in
 		base += add_base;
 
 		if ( (fSelectZeroDB && current_t == 0) || (fSelectZeroDB==0 && tesuu == 0)) {
-			base += (28 + 14 + 3) * (T_STEP - (loop+1));	// æœ€å¾Œãªã‚‰ä½•ã‚‚ã—ãªã„
+			base += (28 + 14 + 3) * (T_STEP - (loop+1));	// ºÇ¸å¤Ê¤é²¿¤â¤·¤Ê¤¤
 			break;
 		}
 		
@@ -1304,8 +1304,8 @@ float getResultCNN(Color sideToMove, int moves, shogi *pso, float *result,int ne
 	Net<float> *net = p_caffe_net[gpu_id];
 	Blob<float> *input_layer = net->input_blobs()[0];
 	input_layer->Reshape(mini_batch, input_dim, size, size);
-//	net->Reshape();	// ã“ã‚Œã¯å¿…è¦ï¼Ÿãªãã¦ã‚‚æ­£å¸¸å‹•ä½œ
-	input_layer->set_cpu_data(data);	// ãƒã‚¤ãƒ³ã‚¿ã‚’ã‚»ãƒƒãƒˆã—ã¦ã‚‹ã ã‘
+//	net->Reshape();	// ¤³¤ì¤ÏÉ¬Í×¡©¤Ê¤¯¤Æ¤âÀµ¾ïÆ°ºî
+	input_layer->set_cpu_data(data);	// ¥İ¥¤¥ó¥¿¤ò¥»¥Ã¥È¤·¤Æ¤ë¤À¤±
 	const vector<Blob<float>*>& rr = net->Forward();
 
 	if ( 0 ) {
@@ -1328,7 +1328,7 @@ if ( 1 ) {
 
 		int m = get_move_from_c_y_x(c, y, x);
 //		PRT("%08x ",m);
-		if ( m==0 ) a = 0;	// ã“ã‚“ãªã“ã¨ã—ã¦ãªãã¦ã‚‚æœ€åˆã‹ã‚‰a=0ã€‚DLå„ªç§€
+		if ( m==0 ) a = 0;	// ¤³¤ó¤Ê¤³¤È¤·¤Æ¤Ê¤¯¤Æ¤âºÇ½é¤«¤éa=0¡£DLÍ¥½¨
 
 		sum += a;
 //		PRT("%5.3f ",a);
@@ -1360,7 +1360,7 @@ if ( 1 ) {
 						break;
 					}
 				}
-//				if ( i==move_num ) DEBUG_PRT("move not found! mm=%08x,a=%f\n",mm,a);	// ç‹æ‰‹ç„¡è¦–ãŒã‚ã‚‹
+//				if ( i==move_num ) DEBUG_PRT("move not found! mm=%08x,a=%f\n",mm,a);	// ²¦¼êÌµ»ë¤¬¤¢¤ë
 
 			}
 		}
@@ -1400,7 +1400,7 @@ if ( 1 ) {
 		p_a[c] *= mul;
 		sum_adj += p_a[c];
 	}
-	float row_v = rr[1]->cpu_data()[0];	// -1 ï½ +1 ã¾ã§ã€‚+1 ã§å‹ã¡ã®å±€é¢ã€‚å¸¸ã«å…ˆæ‰‹ç•ªã¨ã—ã¦è©•ä¾¡(å¾Œæ‰‹ã¯ã²ã£ãã‚Šè¿”ã—ã¦ã‚‹)
+	float row_v = rr[1]->cpu_data()[0];	// -1 ¡Á +1 ¤Ş¤Ç¡£+1 ¤Ç¾¡¤Á¤Î¶ÉÌÌ¡£¾ï¤ËÀè¼êÈÖ¤È¤·¤ÆÉ¾²Á(¸å¼ê¤Ï¤Ò¤Ã¤¯¤êÊÖ¤·¤Æ¤ë)
 	float v_fix = row_v;
 	if ( sideToMove==BLACK ) v_fix = -v_fix;
 
@@ -1526,7 +1526,7 @@ int shogi::get_cnn_next_move()
 //	if ( sideToMove == BLACK ) hanten_with_hash_kifu();
 	if ( sideToMove == BLACK && ret_m != 0 ) {
 		int bz = get_bz(ret_m), az = get_az(ret_m), tk = get_tk(ret_m), nf = get_nf(ret_m);
-		hanten_sasite(&bz,&az,&tk,&nf);	// æŒ‡ã—æ‰‹ã‚’å…ˆå¾Œåè»¢
+		hanten_sasite(&bz,&az,&tk,&nf);	// »Ø¤·¼ê¤òÀè¸åÈ¿Å¾
 		ret_m = pack_te(bz,az,tk,nf);
 	}
 
@@ -1544,7 +1544,7 @@ int shogi::get_cnn_next_move()
 
 													  
 HASH_SHOGI *hash_shogi_table = NULL;
-int Hash_Shogi_Table_Size = 1024*4*1;	// 9è·¯ 16*16ã§754MB, 19è·¯ 16*4ã§793MB, 16*16ã§3.2GB, 16*16*4ã§12.7GB
+int Hash_Shogi_Table_Size = 1024*4*1;	// 9Ï© 16*16¤Ç754MB, 19Ï© 16*4¤Ç793MB, 16*16¤Ç3.2GB, 16*16*4¤Ç12.7GB
 int Hash_Shogi_Mask;
 int hash_shogi_use = 0;		
 int hash_shogi_sort_num = 0;
@@ -1597,12 +1597,12 @@ void hash_half_del()
 	int i,sum = 0;
 	for (i=0;i<Hash_Shogi_Table_Size;i++) if ( hash_shogi_table[i].deleted==0 ) sum++;
 	if ( sum != hash_shogi_use ) PRT("warning! sum=%d,hash_shogi_use=%d\n",sum,hash_shogi_use);
-	hash_shogi_use = sum;	// hash_shogi_useã¯ãƒ­ãƒƒã‚¯ã—ã¦ãªã„ã®ã§12ã‚¹ãƒ¬ãƒƒãƒ‰ã ã¨é »ç¹ã«ãšã‚Œã‚‹
+	hash_shogi_use = sum;	// hash_shogi_use¤Ï¥í¥Ã¥¯¤·¤Æ¤Ê¤¤¤Î¤Ç12¥¹¥ì¥Ã¥É¤À¤ÈÉÑÈË¤Ë¤º¤ì¤ë
 
 	int max_sum = 0;
-	int del_games = max_sum * 5 / 10000;	// 0.05%ä»¥ä¸Šã€‚5%ç¨‹åº¦æ®‹ã‚‹ã€‚ãƒ¡ãƒ¢ãƒªã‚’æœ€å¤§é™ã¾ã§ä½¿ã„åˆ‡ã£ã¦ã‚‹å ´åˆã®ã¿ã€‚age_minus = 2 ã«ã€‚
+	int del_games = max_sum * 5 / 10000;	// 0.05%°Ê¾å¡£5%ÄøÅÙ»Ä¤ë¡£¥á¥â¥ê¤òºÇÂç¸Â¤Ş¤Ç»È¤¤ÀÚ¤Ã¤Æ¤ë¾ì¹ç¤Î¤ß¡£age_minus = 2 ¤Ë¡£
 
-	const double limit_occupy = 50;		// 50%ä»¥ä¸Šç©ºãã¾ã§å‰Šé™¤
+	const double limit_occupy = 50;		// 50%°Ê¾å¶õ¤¯¤Ş¤Çºï½ü
 	const int    limit_use    = (int)(limit_occupy*Hash_Shogi_Table_Size / 100);
 	int del=0,age_minus = 4;
 	for (;age_minus>=0;age_minus--) {
@@ -1611,11 +1611,11 @@ void hash_half_del()
 			if ( pt->deleted == 0 && pt->used && (pt->age <= thinking_age - age_minus || pt->games_sum < del_games) ) {
 				memset(pt,0,sizeof(HASH_SHOGI));
 				pt->deleted = 1;
-//				pt->used = 0;	// memsetã§æ—¢ã«0
+//				pt->used = 0;	// memset¤Ç´û¤Ë0
 				hash_shogi_use--;
 				del++;
 			}
-//			if ( hash_go_use < limit_use ) break;	// ã„ããªã‚Š10åˆ†äºˆæ¸¬èª­ã¿ã—ã¦åŸ‹ã‚ã¦ã—ã¾ã£ã¦ã‚‚å…¨éƒ¨æ¶ˆã•ãªã„ã‚ˆã†ã« --> å‰åŠã°ã£ã‹ã‚Šæ¶ˆã—ã¦å†ãƒãƒƒã‚·ãƒ¥ã§ã‚¨ãƒ©ãƒ¼ã«ãªã‚‹ã€‚
+//			if ( hash_go_use < limit_use ) break;	// ¤¤¤­¤Ê¤ê10Ê¬Í½Â¬ÆÉ¤ß¤·¤ÆËä¤á¤Æ¤·¤Ş¤Ã¤Æ¤âÁ´Éô¾Ã¤µ¤Ê¤¤¤è¤¦¤Ë --> Á°È¾¤Ğ¤Ã¤«¤ê¾Ã¤·¤ÆºÆ¥Ï¥Ã¥·¥å¤Ç¥¨¥é¡¼¤Ë¤Ê¤ë¡£
 		}
 		double occupy = hash_shogi_use*100.0/Hash_Shogi_Table_Size;
 		PRT("hash del=%d,age=%d,minus=%d, %.0f%%(%d/%d)\n",del,thinking_age,age_minus,occupy,hash_shogi_use,Hash_Shogi_Table_Size);
@@ -1648,7 +1648,7 @@ research_empty_block:
 
 	for (;;) {
 		HASH_SHOGI *pt = &pt_base[n];
-		Lock(pt->entry_lock);		// Lockã‚’ã‹ã‘ã£ã±ãªã—ã«ã™ã‚‹ã‚ˆã†ã«
+		Lock(pt->entry_lock);		// Lock¤ò¤«¤±¤Ã¤Ñ¤Ê¤·¤Ë¤¹¤ë¤è¤¦¤Ë
 		if ( pt->deleted == 0 ) {
 			if ( hashcode64 == pt->hashcode64 ) {
 				return pt;
@@ -1658,19 +1658,19 @@ research_empty_block:
 		}
 
 		UnLock(pt->entry_lock);
-		// é•ã†å±€é¢ã ã£ãŸ
-		if ( loop == REHASH_SHOGI ) break;	// è¦‹ã¤ã‹ã‚‰ãš
-		if ( loop >= 2 && pt_first ) break;	// å¦¥å”ã€‚2å›æ¢ã—ã¦ãªã‘ã‚Œã°æœªç™»éŒ²æ‰±ã„ã€‚
+		// °ã¤¦¶ÉÌÌ¤À¤Ã¤¿
+		if ( loop == REHASH_SHOGI ) break;	// ¸«¤Ä¤«¤é¤º
+		if ( loop >= 2 && pt_first ) break;	// ÂÅ¶¨¡£2²óÃµ¤·¤Æ¤Ê¤±¤ì¤ĞÌ¤ÅĞÏ¿°·¤¤¡£
 		n = (rehash[loop++] + first_n ) & Hash_Shogi_Mask;
 	}
 	if ( pt_first ) {
-		// æ¤œç´¢ä¸­ã«æ—¢ã«pt_firstãŒä½¿ã‚ã‚Œã¦ã—ã¾ã£ã¦ã„ã‚‹ã“ã¨ã‚‚ã‚ã‚Šã†ã‚‹ã€‚ã‚‚ã—ãã¯åŒæ™‚ã«åŒã˜å ´æ‰€ã‚’é¸ã‚“ã§ã—ã¾ã†ã‚±ãƒ¼ã‚¹ã‚‚ã€‚
+		// ¸¡º÷Ãæ¤Ë´û¤Ëpt_first¤¬»È¤ï¤ì¤Æ¤·¤Ş¤Ã¤Æ¤¤¤ë¤³¤È¤â¤¢¤ê¤¦¤ë¡£¤â¤·¤¯¤ÏÆ±»ş¤ËÆ±¤¸¾ì½ê¤òÁª¤ó¤Ç¤·¤Ş¤¦¥±¡¼¥¹¤â¡£
 		Lock(pt_first->entry_lock);
-		if ( pt_first->deleted == 0 ) {	// å…ˆã«ä½¿ã‚ã‚Œã¦ã—ã¾ã£ãŸï¼
+		if ( pt_first->deleted == 0 ) {	// Àè¤Ë»È¤ï¤ì¤Æ¤·¤Ş¤Ã¤¿¡ª
 			UnLock(pt_first->entry_lock);
 			goto research_empty_block;
 		}
-		return pt_first;	// æœ€åˆã«ã¿ã¤ã‘ãŸå‰Šé™¤æ¸ˆã¿ã®å ´æ‰€ã‚’åˆ©ç”¨
+		return pt_first;	// ºÇ½é¤Ë¤ß¤Ä¤±¤¿ºï½üºÑ¤ß¤Î¾ì½ê¤òÍøÍÑ
 	}
 	int sum = 0;
 	for (int i=0;i<Hash_Shogi_Table_Size;i++) { sum = hash_shogi_table[i].deleted; PRT("%d",hash_shogi_table[i].deleted); }
@@ -1679,7 +1679,7 @@ research_empty_block:
 
 float f_rnd()
 {
-	double rnd();	// å†…éƒ¨ã§rnd521()ã‚’å‘¼ã‚“ã§ã„ã‚‹
+	double rnd();	// ÆâÉô¤Çrnd521()¤ò¸Æ¤ó¤Ç¤¤¤ë
 	return (float)rnd();
 }
 
@@ -1729,7 +1729,7 @@ int shogi::uct_search_start(Color sideToMove)
 {
 	static int fDone = 0;
 	if ( fDone==0 ) {
-		init_rnd521( (int)time(NULL)+getpid_YSS() );		// èµ·å‹•ã”ã¨ã«ç•°ãªã‚‹ä¹±æ•°åˆ—ã‚’ç”Ÿæˆ
+		init_rnd521( (int)time(NULL)+getpid_YSS() );		// µ¯Æ°¤´¤È¤Ë°Û¤Ê¤ëÍğ¿ôÎó¤òÀ¸À®
 		fDone = 1;
 	}
 
@@ -1755,7 +1755,7 @@ int shogi::uct_search_start(Color sideToMove)
 		uct_tree(sideToMove);
 
 //		if ( IsNegaMaxTimeOver() ) break;
-//		if ( is_main_thread() ) PassWindowsSystem();	// GUIã‚¹ãƒ¬ãƒƒãƒ‰ä»¥å¤–ã«æ¸¡ã™ã¨ä¸­æ–­ãŒåˆ©ã‹ãªã„å ´åˆã‚ã‚Š
+//		if ( is_main_thread() ) PassWindowsSystem();	// GUI¥¹¥ì¥Ã¥É°Ê³°¤ËÅÏ¤¹¤ÈÃæÃÇ¤¬Íø¤«¤Ê¤¤¾ì¹ç¤¢¤ê
 		if ( IsHashFull() ) break;
 	}
 	double ct = get_spend_time(ct1);
@@ -1880,7 +1880,7 @@ int shogi::uct_search_start(Color sideToMove)
 void shogi::create_node(Color sideToMove, HASH_SHOGI *phg)
 {
 	if ( phg->used ) {
-		PRT("åˆ¥çµŒè·¯ã§ä½œæˆï¼Ÿæ·±=%d,games_sum=%d,å­=%d, ",fukasa,phg->games_sum,phg->child_num); print_tejun();
+		PRT("ÊÌ·ĞÏ©¤ÇºîÀ®¡©¿¼=%d,games_sum=%d,»Ò=%d, ",fukasa,phg->games_sum,phg->child_num); print_tejun();
 		return;
 	}
 
@@ -1906,7 +1906,7 @@ void shogi::create_node(Color sideToMove, HASH_SHOGI *phg)
 	if ( sideToMove==BLACK ) v = -v;
 
 	phg->hashcode64     = get_hashcode64();
-	phg->games_sum      = 0;	// ã“ã®å±€é¢ã«æ¥ãŸå›æ•°(å­å±€é¢ã®å›æ•°ã®åˆè¨ˆ)
+	phg->games_sum      = 0;	// ¤³¤Î¶ÉÌÌ¤ËÍè¤¿²ó¿ô(»Ò¶ÉÌÌ¤Î²ó¿ô¤Î¹ç·×)
 	phg->used           = 1;
 	phg->age            = thinking_age;
 	phg->deleted        = 0;
@@ -1922,10 +1922,10 @@ double shogi::uct_tree(Color sideToMove)
 	int create_new_node_limit = 1;
 
 //	uct_nodes++;
-	HASH_SHOGI *phg = HashShogiReadLock();	// phgã«è§¦ã‚‹å ´åˆã¯å¿…ãšãƒ­ãƒƒã‚¯ï¼
+	HASH_SHOGI *phg = HashShogiReadLock();	// phg¤Ë¿¨¤ë¾ì¹ç¤ÏÉ¬¤º¥í¥Ã¥¯¡ª
 
-	if ( phg->used == 0 ) {	// 1æ‰‹ç›®ã«å¯¾ã—ã¦2æ‰‹ç›®ãŒã™ã¹ã¦ã®åŒã˜(çµ¶å¯¾æ‰‹)ã®å ´åˆ
-		PRT("not created? æ·±=%d,col=%d,c_num=%d\n",fukasa,phg->col,phg->child_num);
+	if ( phg->used == 0 ) {	// 1¼êÌÜ¤ËÂĞ¤·¤Æ2¼êÌÜ¤¬¤¹¤Ù¤Æ¤ÎÆ±¤¸(ÀäÂĞ¼ê)¤Î¾ì¹ç
+		PRT("not created? ¿¼=%d,col=%d,c_num=%d\n",fukasa,phg->col,phg->child_num);
 		debug();
 //		create_node(sideToMove, phg);
 	}
@@ -1963,7 +1963,7 @@ select_again:
 		return v;
 	}
 
-	// å®Ÿéš›ã«ç€æ‰‹
+	// ¼Âºİ¤ËÃå¼ê
 	CHILD *pc = &phg->child[select];
 
 	do_moveYSS((Move)pc->move);
@@ -1971,7 +1971,7 @@ select_again:
 //	PRT("%2d:%08x(%3d/%5d):select=%3d,v=%.3f\n",fukasa,pc->move,pc->games,phg->games_sum,select,max_value);
 	if ( Check(sideToMove) ) {
 //		hyouji();	
-		PRT("ç‹æ‰‹å›é¿ãƒŸã‚¹%2d:%08x(%2d/%3d):selt=%3d,v=%.3f\n",fukasa,pc->move,pc->games,phg->games_sum,select,max_value);
+		PRT("²¦¼ê²óÈò¥ß¥¹%2d:%08x(%2d/%3d):selt=%3d,v=%.3f\n",fukasa,pc->move,pc->games,phg->games_sum,select,max_value);
 		undo_moveYSS((Move)pc->move);
 		pc->value = ILLEGAL_MOVE;
 		select = -1;
@@ -1979,7 +1979,7 @@ select_again:
 		goto select_again;
 	}
 	if ( Check(flip_color(sideToMove) ) && (pc->move & 0xff000fff)==0xff000100 ) {
-		// æ‰“æ­©è©°ï¼Ÿ
+		// ÂÇÊâµÍ¡©
 		int k;
 		if ( sideToMove==WHITE ) {
 			k = tunderu_m(0);
@@ -1987,7 +1987,7 @@ select_again:
 			k = tunderu(0);
 		}
 		if ( k==TUMI ) {
-			PRT("æ‰“æ­©è©°%2d:%08x(%2d/%3d):selt=%3d,v=%.3f\n",fukasa,pc->move,pc->games,phg->games_sum,select,max_value);
+			PRT("ÂÇÊâµÍ%2d:%08x(%2d/%3d):selt=%3d,v=%.3f\n",fukasa,pc->move,pc->games,phg->games_sum,select,max_value);
 			undo_moveYSS((Move)pc->move);
 			pc->value = ILLEGAL_MOVE;
 			select = -1;
@@ -1996,7 +1996,7 @@ select_again:
 		}
 	}
 
-	path[fukasa] = pc->move;	// æ‰‹é †ã‚’ï¼ˆä½ç½®ã‚’ï¼‰è¨˜æ†¶
+	path[fukasa] = pc->move;	// ¼ê½ç¤ò¡Ê°ÌÃÖ¤ò¡Ëµ­²±
 	hash_path[fukasa] = get_hashcode64();
 	fukasa++;
 	if ( fukasa >= D_MAX ) { PRT("depth over=%d\n",fukasa); debug(); }
@@ -2010,9 +2010,9 @@ select_again:
 	if ( do_playout ) {	// evaluate this position
 		UnLock(phg->entry_lock);
 
-		HASH_SHOGI *phg2 = HashShogiReadLock();	// 1æ‰‹é€²ã‚ãŸå±€é¢ã®ãƒ‡ãƒ¼ã‚¿
+		HASH_SHOGI *phg2 = HashShogiReadLock();	// 1¼ê¿Ê¤á¤¿¶ÉÌÌ¤Î¥Ç¡¼¥¿
 		if ( phg2->used ) {
-//			PRT("has come already?\n"); //debug();	// æ‰‹é †å‰å¾Œ?
+//			PRT("has come already?\n"); //debug();	// ¼ê½çÁ°¸å?
 		} else {
 			create_node(flip_color(sideToMove), phg2);
 		}
@@ -2026,10 +2026,10 @@ select_again:
 		const int fVirtualLoss = 1;
 		const int VL_N = 1;
 		int one_win = -1;
-		if ( fVirtualLoss ) {	// ã“ã®æ‰‹ãŒè² ã‘ãŸã€ã¨ã™ã‚‹ã€‚è¤‡æ•°ã‚¹ãƒ¬ãƒƒãƒ‰ã®æ™‚ã«ã€ãªã‚‹ã¹ãåˆ¥ã®æ‰‹ã‚’æ¢ç´¢ã™ã‚‹ã‚ˆã†ã«
-			pc->value = (float)(((double)pc->games * pc->value + one_win*VL_N) / (pc->games + VL_N));	// games==0 ã®æ™‚ã¯pc->value ã¯ç„¡è¦–ã•ã‚Œã‚‹ã®ã§å•é¡Œãªã—
+		if ( fVirtualLoss ) {	// ¤³¤Î¼ê¤¬Éé¤±¤¿¡¢¤È¤¹¤ë¡£Ê£¿ô¥¹¥ì¥Ã¥É¤Î»ş¤Ë¡¢¤Ê¤ë¤Ù¤¯ÊÌ¤Î¼ê¤òÃµº÷¤¹¤ë¤è¤¦¤Ë
+			pc->value = (float)(((double)pc->games * pc->value + one_win*VL_N) / (pc->games + VL_N));	// games==0 ¤Î»ş¤Ïpc->value ¤ÏÌµ»ë¤µ¤ì¤ë¤Î¤ÇÌäÂê¤Ê¤·
 			pc->games      += VL_N;
-			phg->games_sum += VL_N;	// æœ«ç«¯ã®ãƒãƒ¼ãƒ‰ã§æ¸›ã‚‰ã—ã¦ã‚‚æ„å‘³ãŒãªã„ã€ã®ã§UCTã®æœ¨ã ã‘ã§æ¸›ã‚‰ã™
+			phg->games_sum += VL_N;	// ËöÃ¼¤Î¥Î¡¼¥É¤Ç¸º¤é¤·¤Æ¤â°ÕÌ£¤¬¤Ê¤¤¡¢¤Î¤ÇUCT¤ÎÌÚ¤À¤±¤Ç¸º¤é¤¹
 		}
 
 		UnLock(phg->entry_lock);
@@ -2038,7 +2038,7 @@ select_again:
 
 		if ( fVirtualLoss ) {
 			phg->games_sum -= VL_N;
-			pc->games      -= VL_N;		// gamesã‚’æ¸›ã‚‰ã™ã®ã¯éå¸¸ã«å±é™ºï¼ ã‚ã¡ã“ã¡ã§ games==0 ã§åˆ¤å®šã—ã¦ã‚‹ã®ã§
+			pc->games      -= VL_N;		// games¤ò¸º¤é¤¹¤Î¤ÏÈó¾ï¤Ë´í¸±¡ª ¤¢¤Á¤³¤Á¤Ç games==0 ¤ÇÈ½Äê¤·¤Æ¤ë¤Î¤Ç
 			if ( pc->games < 0 ) { PRT("Err pc->games=%d\n",pc->games); debug(); }
 			if ( pc->games == 0 ) pc->value = 0;
 			else                  pc->value = (float)((((double)pc->games+VL_N) * pc->value - one_win*VL_N) / pc->games);
@@ -2048,10 +2048,10 @@ select_again:
 	fukasa--;
 	undo_moveYSS((Move)pc->move);
 
-	double win_prob = ((double)pc->games * pc->value + win) / (pc->games + 1);	// å˜ç´”å¹³å‡
+	double win_prob = ((double)pc->games * pc->value + win) / (pc->games + 1);	// Ã±½ãÊ¿¶Ñ
 
 	pc->value = (float)win_prob;
-	pc->games++;			// ã“ã®æ‰‹ã‚’æ¢ç´¢ã—ãŸå›æ•°
+	pc->games++;			// ¤³¤Î¼ê¤òÃµº÷¤·¤¿²ó¿ô
 	phg->games_sum++;
 	phg->age = thinking_age;
 
@@ -2065,7 +2065,7 @@ int shogi::think_kifuset()
 	int ct1 = get_clock();
 
 	if ( IsSenteTurn() ) hanten_with_hash();
-	hash_calc(0,1);	// ãƒãƒƒã‚·ãƒ¥å€¤ã‚’ä½œã‚ŠãªãŠã™
+	hash_calc(0,1);	// ¥Ï¥Ã¥·¥åÃÍ¤òºî¤ê¤Ê¤ª¤¹
 	
 	int bz,az,tk,nf;
 	int k = thinking_with_level( &bz,&az,&tk,&nf );
@@ -2076,7 +2076,7 @@ int shogi::think_kifuset()
 
 	if ( k == -TUMI ) return k;
 
-	if ( IsSenteTurn() ) hanten_sasite(&bz,&az,&tk,&nf);	// æŒ‡ã—æ‰‹ã‚’å…ˆå¾Œåè»¢
+	if ( IsSenteTurn() ) hanten_sasite(&bz,&az,&tk,&nf);	// »Ø¤·¼ê¤òÀè¸åÈ¿Å¾
 	kifu_set_move_sennitite(bz,az,tk,nf,t);
 
 	return k;
@@ -2116,7 +2116,7 @@ float shogi::get_network_policy_value(Color sideToMove, int ply, HASH_SHOGI *phg
 /*
 	for (i=0;i<fukasa;i++) {
 		move_hit_kif[tesuu+i] = path[i];
-		move_hit_hashcode[tesuu+i][0] = hash_path[i];	// æ‰‹æŠœã
+		move_hit_hashcode[tesuu+i][0] = hash_path[i];	// ¼êÈ´¤­
 		move_hit_hashcode[tesuu+i][1] = hash_path[i]; 
 		move_hit_hashcode[tesuu+i][2] = hash_path[i];
 	}
@@ -2140,7 +2140,7 @@ float shogi::get_network_policy_value(Color sideToMove, int ply, HASH_SHOGI *phg
 	float net_v = getResultCNN( sideToMove, ply, this, result, NET_362, 0, phg);
 	if ( fukasa==0 ) PRT("root v=%f\n",net_v);
 //	float v = (net_v + 1.0f) / 2.0f;	// 0 <= v <= 1
-//    if ( sideToMove ) {	// DCNNã¯è‡ªåˆ†ãŒå‹ã¡ãªã‚‰+1ã€è² ã‘ãªã‚‰-1ã‚’è¿”ã™ã€‚æ¢ç´¢ä¸­ã¯å…ˆæ‰‹ã¯+1ï½0, å¾Œæ‰‹ã¯ 0ï½-1ã‚’è¿”ã™ã€‚
+//    if ( sideToMove ) {	// DCNN¤Ï¼«Ê¬¤¬¾¡¤Á¤Ê¤é+1¡¢Éé¤±¤Ê¤é-1¤òÊÖ¤¹¡£Ãµº÷Ãæ¤ÏÀè¼ê¤Ï+1¡Á0, ¸å¼ê¤Ï 0¡Á-1¤òÊÖ¤¹¡£
 //        v = v - 1;
 //    }
 //	float v = f_rnd();
@@ -2174,7 +2174,7 @@ float shogi::get_network_policy_value(Color sideToMove, int ply, HASH_SHOGI *phg
 		int promotion = nf >> 3;
 		int bona_m = (promotion << 14) | (from <<7) | to;
 		if ( yss_m == 0 ) bona_m = 0;
-		// "piece to move" ã¯ moveã®ã¿ã€‚dropã§ã¯ 0
+		// "piece to move" ¤Ï move¤Î¤ß¡£drop¤Ç¤Ï 0
 		
 	    if ( id < 100 ) PRT("%4d,%08x(%08x),%f\n",id,yss_m,bona_m, node.first);
     }
@@ -2240,10 +2240,10 @@ float shogi::get_network_policy_value(Color sideToMove, int ply, HASH_SHOGI *phg
 
 void self_mcts_loop()
 {
-#ifdef SELFPLAY_COM	// YSSåŒå£«ã®ã‚·ãƒªã‚¢ãƒ«å¯¾æˆ¦ã®å ´åˆã€ã™ãã«çµ‚ã‚ã‚‹ã€‚
+#ifdef SELFPLAY_COM	// YSSÆ±»Î¤Î¥·¥ê¥¢¥ëÂĞÀï¤Î¾ì¹ç¡¢¤¹¤°¤Ë½ª¤ï¤ë¡£
 	PRT("SELFPLAY_COM Err\n"); debug();
 #endif
-    { extern int fNowPlaying; fNowPlaying = 0; }	// å®šè·¡ç„¡è¦–
+    { extern int fNowPlaying; fNowPlaying = 0; }	// ÄêÀ×Ìµ»ë
 	int save_games = 0;
 	int draw = 0, swin = 0;
 	for (;;) {
@@ -2253,7 +2253,7 @@ void self_mcts_loop()
 		PRT_OFF();
 		for (loop=0;loop<max_loop;loop++) {
 			int k = PS->think_kifuset();
-			if ( k == -TUMI ) break;	// æŠ•äº†ã®æ™‚ã¯ãƒ«ãƒ¼ãƒ—ã‚’æŠœã‘ã‚‹ã€‚
+			if ( k == -TUMI ) break;	// ÅêÎ»¤Î»ş¤Ï¥ë¡¼¥×¤òÈ´¤±¤ë¡£
 		}
 		PRT_ON();
 		
@@ -2290,37 +2290,37 @@ void self_mcts_loop()
 #endif
 
 /*
-50ä¸‡æ£‹è­œã‹ã‚‰1ä¸‡æ£‹è­œã‚’ãƒ©ãƒ³ãƒ€ãƒ ã«å–ã‚Šå‡ºã—ã¦ã€ãƒ—ãƒ¼ãƒ«ã«å…¥ã‚Œã¦
-æ£‹è­œã‚’å­¦ç¿’ç”¨ãƒ‡ãƒ¼ã‚¿ã«å¤‰æ›ã€‚
+50Ëü´ıÉè¤«¤é1Ëü´ıÉè¤ò¥é¥ó¥À¥à¤Ë¼è¤ê½Ğ¤·¤Æ¡¢¥×¡¼¥ë¤ËÆş¤ì¤Æ
+´ıÉè¤ò³Ø½¬ÍÑ¥Ç¡¼¥¿¤ËÊÑ´¹¡£
 
 361
  (28 + 14 + 3) * (T_STEP)
  45 * 8 + 1 = 361
 361* 9*9 = 29241
-1å€‹ã®ãƒ‡ãƒ¼ã‚¿ã«ã¤ã 29241 å¿…è¦
-50ä¸‡æ£‹è­œã€å¹³å‡100æ‰‹ã¨ã—ã¦ 500000 * 100 * 29241 = 1462050000000
+1¸Ä¤Î¥Ç¡¼¥¿¤Ë¤Ä¤­ 29241 É¬Í×
+50Ëü´ıÉè¡¢Ê¿¶Ñ100¼ê¤È¤·¤Æ 500000 * 100 * 29241 = 1462050000000
 = 1394319 MB = 1361 GB / 8 = 170GB
 
-35783413189  ... Train LevelDBã®ã‚µã‚¤ã‚º, = 34125 MB = 33GB, snappyã¨ã‚„ã‚‰ã§åœ§ç¸®ã•ã‚Œã¦ã‚‹ã‚‰ã—ã„ã€‚
-æ£‹è­œã‚’ãã®ã¾ã¾æŒã£ã¦ã€ãã®éƒ½åº¦å¤‰æ›ã™ã‚‹ã€‚æ™‚é–“ã‹ã‹ã‚Šãã†ã ã‘ã©ã€‚
-50ä¸‡æ£‹è­œãªã‚‰è»½ã„ã€‚å¹³å‡100æ‰‹ã¨ã—ã¦ã€1æ‰‹2byteã€‚500000*100*2=100000000 = 95MB
-1æ£‹è­œã€400æ‰‹ã¾ã§ã€‚ãƒãƒƒã‚·ãƒ¥å€¤ã€æ—¥ä»˜ã‚‚ã€‚
+35783413189  ... Train LevelDB¤Î¥µ¥¤¥º, = 34125 MB = 33GB, snappy¤È¤ä¤é¤Ç°µ½Ì¤µ¤ì¤Æ¤ë¤é¤·¤¤¡£
+´ıÉè¤ò¤½¤Î¤Ş¤Ş»ı¤Ã¤Æ¡¢¤½¤ÎÅÔÅÙÊÑ´¹¤¹¤ë¡£»ş´Ö¤«¤«¤ê¤½¤¦¤À¤±¤É¡£
+50Ëü´ıÉè¤Ê¤é·Ú¤¤¡£Ê¿¶Ñ100¼ê¤È¤·¤Æ¡¢1¼ê2byte¡£500000*100*2=100000000 = 95MB
+1´ıÉè¡¢400¼ê¤Ş¤Ç¡£¥Ï¥Ã¥·¥åÃÍ¡¢ÆüÉÕ¤â¡£
 
 
-archive/ ã®ä¸‹ã«10000æ£‹è­œå˜ä½ã§åœ§ç¸®ã•ã‚Œã¦å…¥ã‚‹ã€‚1å€‹ã®æ£‹è­œã¯ '/' ã§åŒºåˆ‡ã‚‰ã‚Œã¦10000å€‹ç¶šã
+archive/ ¤Î²¼¤Ë10000´ıÉèÃ±°Ì¤Ç°µ½Ì¤µ¤ì¤ÆÆş¤ë¡£1¸Ä¤Î´ıÉè¤Ï '/' ¤Ç¶èÀÚ¤é¤ì¤Æ10000¸ÄÂ³¤¯
 arch000000000000.csa.xz
 arch000000000100.csa.xz
 
-pool/ ã®ä¸‹ã« åœ§ç¸®ã•ã‚Œã¦å…¥ã£ã¦ã„ã‚‹ã€‚æ£‹è­œã¯1å€‹ã¥ã¤ã€‚
+pool/ ¤Î²¼¤Ë °µ½Ì¤µ¤ì¤ÆÆş¤Ã¤Æ¤¤¤ë¡£´ıÉè¤Ï1¸Ä¤Å¤Ä¡£
 no000000000000.csa.xz
 no000000000001.csa.xz
 
-æ£‹è­œã ã‘ã§ãªãã€1æ‰‹ã”ã¨ã«Rootã®é¸æŠå›æ•°ãŒå…¥ã‚‹ã€‚(æ‰‹,é¸æŠå›æ•°)ã€æœ€å¤§593æ‰‹ã€‚
-æ£‹è­œç•ªå·ã‚‚å¿…è¦ã‹ã€‚ã‚ã‚Œã°ä¾¿åˆ©ã€‚å›ºå®šã‚µã‚¤ã‚ºã ã¨ä½¿ã„ã«ãã„ã‹ã€‚å¯å¤‰DB
-1æ‰‹ã«ã¤ã30æ‰‹ã®å€™è£œã€‚å¹³å‡120æ‰‹ã¨ã—ã¦
-1æ£‹è­œ 120 * 31 = 3720æ‰‹ã€‚1æ‰‹ã«2byteã€æ¢ç´¢å›æ•°ã«2byteã€3720*4 = 14880
-50ä¸‡æ£‹è­œã ã¨ 14880 * 500000 = 7440000000 byte = 7095 MB = 7GB
-u8700(32GB), i7(14GB), ãƒ¡ãƒ¢ãƒªã«è¼‰ã‚‹ã“ã¨ã¯ä¹—ã‚‹ã‹ã€‚i7ã ã¨å³ã—ã„ã€‚
+´ıÉè¤À¤±¤Ç¤Ê¤¯¡¢1¼ê¤´¤È¤ËRoot¤ÎÁªÂò²ó¿ô¤¬Æş¤ë¡£(¼ê,ÁªÂò²ó¿ô)¡¢ºÇÂç593¼ê¡£
+´ıÉèÈÖ¹æ¤âÉ¬Í×¤«¡£¤¢¤ì¤ĞÊØÍø¡£¸ÇÄê¥µ¥¤¥º¤À¤È»È¤¤¤Ë¤¯¤¤¤«¡£²ÄÊÑDB
+1¼ê¤Ë¤Ä¤­30¼ê¤Î¸õÊä¡£Ê¿¶Ñ120¼ê¤È¤·¤Æ
+1´ıÉè 120 * 31 = 3720¼ê¡£1¼ê¤Ë2byte¡¢Ãµº÷²ó¿ô¤Ë2byte¡¢3720*4 = 14880
+50Ëü´ıÉè¤À¤È 14880 * 500000 = 7440000000 byte = 7095 MB = 7GB
+u8700(32GB), i7(14GB), ¥á¥â¥ê¤ËºÜ¤ë¤³¤È¤Ï¾è¤ë¤«¡£i7¤À¤È¸·¤·¤¤¡£
 
 
 */
@@ -2432,6 +2432,7 @@ void free_zero_db_struct(ZERO_DB *p)
 	p->weight_n = 0;
 	p->index = 0;
 	p->result = 0;
+	p->result_type = 0;
 	p->moves = 0;
 	std::vector<unsigned short>().swap(p->v_kif);			// memory free hack for vector. 
 	std::vector<unsigned short>().swap(p->v_playouts_sum);
@@ -2439,21 +2440,21 @@ void free_zero_db_struct(ZERO_DB *p)
 }
 
 const int ZERO_DB_SIZE = 500000;	// 100000,  500000
-const int MAX_ZERO_MOVES = 513;	// 512æ‰‹ç›®ã‚’å¾Œæ‰‹ãŒæŒ‡ã—ã¦è©°ã‚“ã§ãªã‘ã‚Œã°ã€‚513æ‰‹ç›®ã‚’å…ˆæ‰‹ãŒæŒ‡ã›ã°ç„¡æ¡ä»¶ã§å¼•ãåˆ†ã‘ã€‚
+const int MAX_ZERO_MOVES = 513;	// 512¼êÌÜ¤ò¸å¼ê¤¬»Ø¤·¤ÆµÍ¤ó¤Ç¤Ê¤±¤ì¤Ğ¡£513¼êÌÜ¤òÀè¼ê¤¬»Ø¤»¤ĞÌµ¾ò·ï¤Ç°ú¤­Ê¬¤±¡£
 ZERO_DB zdb_one;
 
-//ZERO_DB *pZDB = NULL;	// å‹•çš„ç¢ºä¿ã¯ã§ããªã„
+//ZERO_DB *pZDB = NULL;	// Æ°Åª³ÎÊİ¤Ï¤Ç¤­¤Ê¤¤
 ZERO_DB zdb[ZERO_DB_SIZE];
 int *pZDBsum = NULL;
 int zdb_count = 0;
-int zdb_count_start = 0;	// 400ä¸‡æ£‹è­œã‹ã‚‰èª­ã¿è¾¼ã‚€å ´åˆã¯4000000
+int zdb_count_start = 5200000;	// 400Ëü´ıÉè¤«¤éÆÉ¤ß¹ş¤à¾ì¹ç¤Ï4000000
 int zero_kif_pos_num = 0;
 int zero_kif_games = 0;
-const int MINI_BATCH = 128;	// aoba_zero.prototxt ã® cross_entroy_scale ã‚‚åŒæ™‚ã«å¤‰æ›´ã™ã‚‹ã“ã¨ï¼layerã®nameã‚‚è¦å¤‰æ›´
-const int ONE_SIZE = DCNN_CHANNELS*B_SIZE*B_SIZE;	// 362*9*9; *4= 117288 *64 = 7506432,  7MBã«ã‚‚ãªã‚‹ mini_batch=64
+const int MINI_BATCH = 128;	// aoba_zero.prototxt ¤Î cross_entroy_scale ¤âÆ±»ş¤ËÊÑ¹¹¤¹¤ë¤³¤È¡ªlayer¤Îname¤âÍ×ÊÑ¹¹
+const int ONE_SIZE = DCNN_CHANNELS*B_SIZE*B_SIZE;	// 362*9*9; *4= 117288 *64 = 7506432,  7MB¤Ë¤â¤Ê¤ë mini_batch=64
 
-const int fReplayLearning = 0;	// ã™ã§ã«ä½œã‚‰ã‚ŒãŸæ£‹è­œã‹ã‚‰Windowã‚’ãšã‚‰ã›ã¦å­¦ç¿’ã•ã›ã‚‹
-const int fWwwSample = 0;		// fReplayLearning ã‚‚åŒæ™‚ã«1
+const int fReplayLearning = 0;	// ¤¹¤Ç¤Ëºî¤é¤ì¤¿´ıÉè¤«¤éWindow¤ò¤º¤é¤»¤Æ³Ø½¬¤µ¤»¤ë
+const int fWwwSample = 0;		// fReplayLearning ¤âÆ±»ş¤Ë1
 
 //const char ZERO_KIF_DB_FILENAME[] = "zerokif.db";
 
@@ -2470,9 +2471,9 @@ void init_zero_kif_db()
 	PRT("pDB=%7d,sizeof(ZERO_DB)=%d\n",ZERO_DB_SIZE,sizeof(ZERO_DB));
 }
 
-// æœ€å¾Œã«èª¿ã¹ãŸarchiveã®ã¿ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã™ã‚‹
+// ºÇ¸å¤ËÄ´¤Ù¤¿archive¤Î¤ß¥­¥ã¥Ã¥·¥å¤¹¤ë
 static char recent_arch_file[TMP_BUF_LEN];
-static uint64_t recent_arch_table[10000];	// nç•ªç›®ã®æ£‹è­œã®é–‹å§‹ä½ç½®
+static uint64_t recent_arch_table[10000];	// nÈÖÌÜ¤Î´ıÉè¤Î³«»Ï°ÌÃÖ
 static char *p_recent_arch = NULL;
 static uint64_t recent_arch_size;
 
@@ -2480,9 +2481,9 @@ const int USE_XZ_NONE      = 0;
 const int USE_XZ_POOL_ONLY = 1;
 const int USE_XZ_BOTH      = 2;
 
-const int USE_XZ = USE_XZ_POOL_ONLY;	//  1...poolã®ã¿ xz ã§ã€‚2...poolã‚‚archiveã‚‚ xz ã§
+const int USE_XZ = USE_XZ_POOL_ONLY;	//  1...pool¤Î¤ß xz ¤Ç¡£2...pool¤âarchive¤â xz ¤Ç
 
-// archiveã‹ã‚‰æ£‹è­œç•ªå·=n ã®æ£‹è­œã‚’å–ã‚Šå‡ºã™ã€‚KifBuf[] ã«å…¥ã‚‹ã€‚é€Ÿåº¦ç„¡è¦–ã€‚fpã§ã¯100ç•ªç›®ä»¥é™ãŒé…ã™ãã¦ç„¡ç†ã€‚
+// archive¤«¤é´ıÉèÈÖ¹æ=n ¤Î´ıÉè¤ò¼è¤ê½Ğ¤¹¡£KifBuf[] ¤ËÆş¤ë¡£Â®ÅÙÌµ»ë¡£fp¤Ç¤Ï100ÈÖÌÜ°Ê¹ß¤¬ÃÙ¤¹¤®¤ÆÌµÍı¡£
 int find_kif_from_archive(int search_n)
 {
 //search_n = search_n % 190000;
@@ -2550,7 +2551,7 @@ int find_kif_from_archive(int search_n)
 		strcpy(recent_arch_file, filename);
 		recent_arch_size = size;
 		if ( g != 10000 - 1 ) PRT("Err g=%d\n",g);
-		PRT("lines=%d,g=%d,%.3f\n",lines,g,get_spend_time(ct1));	// 100ã§36ç§’ã€‚1å›0.36ç§’
+		PRT("lines=%d,g=%d,%.3f\n",lines,g,get_spend_time(ct1));	// 100¤Ç36ÉÃ¡£1²ó0.36ÉÃ
 //		for (i=0;i<10;i++) PRT("%d:%d\n",i,recent_arch_table[i]); exit(0);
 	}
 
@@ -2563,7 +2564,7 @@ int find_kif_from_archive(int search_n)
 
 	uint64_t start_i = recent_arch_table[n];
 	uint64_t next_i  = recent_arch_size;
-	if ( n < 9999 ) next_i = recent_arch_table[n+1] - 1;	// '/' ã‚’å…¥ã‚Œãªã„
+	if ( n < 9999 ) next_i = recent_arch_table[n+1] - 1;	// '/' ¤òÆş¤ì¤Ê¤¤
 	uint64_t one_size = next_i - start_i;
 
 	if ( one_size > KIF_BUF_MAX-256 || one_size == 0 ) {
@@ -2635,18 +2636,38 @@ int find_kif_from_pool(int search_n)
 	return 1;
 }
 
-//int result_sum[4] = { 0,0,0,0 };
+int get_guess_resign_moves(int moves)
+{
+	if ( moves == 0 ) return 0;
+//	double y = 3.187 * exp(0.201*((double)moves/20.0 - 0));
+	double y = 28.76 * log(moves / 20.0) - 37.35;	// 80¼ê¤Ç2¼ê¡¢100¼ê¤Ç8¼ê¡¢150¼ê¤Ç20¼ê¡¢300¼ê¤Ç40¼êºï¤ë
+	if ( y < 0 ) y = 0;
+	return (int)y;
+}
+
 void shogi::add_one_kif_to_db()
 {
-	ZERO_DB *pdb = &zdb[zdb_count % ZERO_DB_SIZE];	// å¤ã„ã®ã¯ä¸Šæ›¸ã
+	ZERO_DB *pdb = &zdb[zdb_count % ZERO_DB_SIZE];	// ¸Å¤¤¤Î¤Ï¾å½ñ¤­
 	ZERO_DB *p   = &zdb_one;
 	free_zero_db_struct(pdb);
+	if ( 0 ) {	// ÅêÎ»¤ò¼ÂÁõ¤·¤¿¾ì¹ç¤Î¥Æ¥¹¥È¡£ÅêÎ»¼ê¿ô¤òÍ½ÁÛ¤·¤ÆºÇ¸å¤Î¿ô¼ê¤òºï¤ë
+		int t = get_guess_resign_moves(p->moves);
+		int t2 = t & 0xfffe;	// ¶ö¿ô¤Ë
+		if ( p->result == ZD_DRAW ) t2 = 0;
+		if ( (rand_m521() % 10)==0 ) t2 = 0;	// 10%¤ÏÅêÎ»¤Ê¤·
+		p->moves -= t2;
+		if ( p->moves <= 0 ) DEBUG_PRT("Err get_guess_resign_moves\n");
+		p->v_kif.resize(p->moves);
+		p->v_playouts_sum.resize(p->moves);
+		p->vv_move_visit.resize(p->moves);
+	}
 //	pdb->date           = st.st_ctime;
 	pdb->hash           = get_hashcode64();
 	pdb->index          = zdb_count;
 	pdb->weight_n       = p->weight_n;
 	pdb->moves          = p->moves;
 	pdb->result         = p->result;
+	pdb->result_type    = p->result_type;
 //	copy(p->v_kif.begin(), p->v_kif.end(), back_inserter(pdb->v_kif));
 //	copy(p->v_playouts_sum.begin(), p->v_playouts_sum.end(), back_inserter(pdb->v_playouts_sum));
 	pdb->v_kif          = p->v_kif;
@@ -2654,10 +2675,9 @@ void shogi::add_one_kif_to_db()
 	pdb->vv_move_visit  = p->vv_move_visit;
 //	PRT("%6d:index=%d,res=%d,%3d:%08x %08x %08x\n",zdb_count,pdb->index,p->result,p->moves,hash_code1,hash_code2,hash_motigoma);
 	zdb_count++;
-//	result_sum[p->result]++;
 }
 
-// æ£‹è­œãŒå­˜åœ¨ã™ã‚‹ã‹ã€‚ã™ã‚Œã°åŒæ™‚ã«èª­ã¿è¾¼ã‚€
+// ´ıÉè¤¬Â¸ºß¤¹¤ë¤«¡£¤¹¤ì¤ĞÆ±»ş¤ËÆÉ¤ß¹ş¤à
 int is_exist_kif_file(int search_n)
 {
 	if ( find_kif_from_pool(search_n) == 0 ) {
@@ -2678,6 +2698,8 @@ void update_pZDBsum()
 	int    mv_recent_sum = 0;
 	int    mv_total_inc = 0;
 	int    mv_recent_inc = 0;
+	int res_kind[4] = { 0,0,0,0 };
+	int res_type[7] = { 0,0,0,0,0,0,0 };
 	
 	zero_kif_pos_num = 0;
 	zero_kif_games   = 0;
@@ -2698,6 +2720,14 @@ void update_pZDBsum()
 		res_total_sum[p->result]++;
 		moves_total_sum += p->moves;
 
+		if ( p->index >= zdb_count - 10000) {
+			if ( p->result_type == RT_KACHI ) {
+				res_kind[p->result]++;
+				res_kind[3]++;
+			}
+	    	res_type[p->result_type]++;
+		}
+		
 		int j;
 		for (j=0;j<p->moves;j++) {
 			int n = p->vv_move_visit[j].size();
@@ -2712,18 +2742,21 @@ void update_pZDBsum()
 	if ( loop > 0 ) {
 		if ( mv_recent_inc == 0 ) mv_recent_inc = 1;
 		if ( mv_total_inc  == 0 ) mv_total_inc  = 1;
-		PRT("%7d:move_ave=%5.1f(%5.1f) mv_ave=%.1f(%.1f), recent D=%3d,S=%3d,G=%3d(%5.3f) total %3d,%3d,%3d(%5.3f)\n",
+//		PRT("%7d:move_ave=%5.1f(%5.1f) mv_ave=%.1f(%.1f), recent D=%3d,S=%3d,G=%3d(%5.3f) total %3d,%3d,%3d(%5.3f), %d,%d,%d,%d,rt=%d,%d,%d,%d,%d,%d,%d\n",
+		PRT("%7d:%5.1f(%5.1f) %.1f(%.1f),D=%3d,S=%3d,G=%3d(%5.3f)t=%3d,%3d,%3d(%5.3f),%d,%3d,%3d,%3d,rt=%d,%d,%d,%d,%d,%d,%d\n",
 			zdb_count,(float)moves_total_sum/loop, (float)moves_recent_sum/1000,
 			(float)mv_total_sum/mv_total_inc, (float)mv_recent_sum/mv_recent_inc,
 			res_recent_sum[0],res_recent_sum[1],res_recent_sum[2], (float)(res_recent_sum[1] + res_recent_sum[0]/2.0)/(res_recent_sum[0]+res_recent_sum[1]+res_recent_sum[2]),
- 			res_total_sum[0],res_total_sum[1],res_total_sum[2], (float)(res_total_sum[1] + res_total_sum[0]/2.0)/(res_total_sum[0]+res_total_sum[1]+res_total_sum[2]) );
+ 			res_total_sum[0],res_total_sum[1],res_total_sum[2], (float)(res_total_sum[1] + res_total_sum[0]/2.0)/(res_total_sum[0]+res_total_sum[1]+res_total_sum[2]),
+ 			res_kind[0],res_kind[1],res_kind[2],res_kind[3],
+			res_type[0],res_type[1],res_type[2],res_type[3],res_type[4],res_type[5],res_type[6] );
 	}
 }
 
 void shogi::load_exist_all_kif()
 {
 	int ct1 = get_clock();
-	fSkipLoadKifBuf = 1;	// å¸¸ã«ãƒ¡ãƒ¢ãƒªã‹ã‚‰æ£‹è­œã‚’èª­ã‚€
+	fSkipLoadKifBuf = 1;	// ¾ï¤Ë¥á¥â¥ê¤«¤é´ıÉè¤òÆÉ¤à
 	zdb_count = zdb_count_start;
 	int count = 0;
 	for (;;) {
@@ -2751,7 +2784,6 @@ void shogi::load_exist_all_kif()
 	if ( zdb_count_start != 0 && count < ZERO_DB_SIZE ) { PRT("Err. replay buf is not filled.\n"); debug(); }
 }
 
-
 int shogi::wait_and_get_new_kif(int next_weight_n)
 {
 	int new_kif_n = zdb_count;
@@ -2766,7 +2798,7 @@ int shogi::wait_and_get_new_kif(int next_weight_n)
 		sleep(sleep_sec);
 		int ret = system("/home/yss/tcp_backup/rsync_one.sh");
 		PRT("ret=%d\n",ret);
-		// æ–°è¦ã«è¿½åŠ ã•ã‚ŒãŸãƒ•ã‚¡ã‚¤ãƒ«ã‚’èª¿ã¹ã‚‹
+		// ¿·µ¬¤ËÄÉ²Ã¤µ¤ì¤¿¥Õ¥¡¥¤¥ë¤òÄ´¤Ù¤ë
 		for (;;) {
 			if ( is_exist_kif_file(new_kif_n)==0 ) {
 				break;
@@ -2896,7 +2928,7 @@ int shogi::make_www_samples()
 }
 
 
-// move_hash() ã§å¤‰æ›´ã•ã‚Œã‚‹ã®ã¯ ban, init_ban, mo_c, kn, kn_stn, tume_hyouka, nifu_table_com, hash_code1
+// move_hash() ¤ÇÊÑ¹¹¤µ¤ì¤ë¤Î¤Ï ban, init_ban, mo_c, kn, kn_stn, tume_hyouka, nifu_table_com, hash_code1
 void shogi::copy_restore_dccn_init_board(int fCopy)
 {
 	static int cp_init_ban[BAN_SIZE];
@@ -2951,7 +2983,7 @@ void shogi::init_prepare_kif_db()
 {
 //	fSelectZeroDB = 1;
 	if ( fMAKE_LEVELDB ) { PRT("fMAKE_LEVELDB=1 ! Err\n"); debug(); }
-	init_rnd521( (int)time(NULL)+getpid_YSS() );		// èµ·å‹•ã”ã¨ã«ç•°ãªã‚‹ä¹±æ•°åˆ—ã‚’ç”Ÿæˆ
+	init_rnd521( (int)time(NULL)+getpid_YSS() );		// µ¯Æ°¤´¤È¤Ë°Û¤Ê¤ëÍğ¿ôÎó¤òÀ¸À®
 
 	init_zero_kif_db();
 	load_exist_all_kif();
@@ -2962,12 +2994,12 @@ void shogi::init_prepare_kif_db()
 
 int binary_search_kif_db(int r)
 {
-	int min = 0;				//æœ€å°ã®æ·»å­—
-	int max = zero_kif_games-1;	//æœ€å¤§ã®æ·»å­—
+	int min = 0;				//ºÇ¾®¤ÎÅº»ú
+	int max = zero_kif_games-1;	//ºÇÂç¤ÎÅº»ú
 	int mid = -1;
 	int prev_mid = -1;
 
-	//æœ€å¤§å€¤ã¨æœ€å°å€¤ãŒä¸€è‡´ã™ã‚‹ã¾ã§ãƒ«ãƒ¼ãƒ—
+	//ºÇÂçÃÍ¤ÈºÇ¾®ÃÍ¤¬°ìÃ×¤¹¤ë¤Ş¤Ç¥ë¡¼¥×
 	while ( min <= max ) {
 		mid = (min + max) / 2;
 
@@ -2975,10 +3007,10 @@ int binary_search_kif_db(int r)
 			return mid + 1;
 		}
 		if ( pZDBsum[mid] < r ) {
-			//ç›®çš„å€¤ãŒä¸­å¤®å€¤ã‚ˆã‚Šã‚‚ä¸Šãªã‚‰ã€æœ€å°å€¤ã‚’ä¸­å¤®å€¤ã®ä¸€ã¤ä¸Šã«è¨­å®š
+			//ÌÜÅªÃÍ¤¬Ãæ±ûÃÍ¤è¤ê¤â¾å¤Ê¤é¡¢ºÇ¾®ÃÍ¤òÃæ±ûÃÍ¤Î°ì¤Ä¾å¤ËÀßÄê
 			min = mid + 1;
 		} else if ( pZDBsum[mid] > r ) {
-			//ç›®çš„å€¤ãŒä¸­å¤®å€¤ã‚ˆã‚Šã‚‚ä¸‹ãªã‚‰ã€æœ€å¤§å€¤ã‚’ä¸­å¤®å€¤ã®ä¸€ã¤ä¸‹ã«è¨­å®š
+			//ÌÜÅªÃÍ¤¬Ãæ±ûÃÍ¤è¤ê¤â²¼¤Ê¤é¡¢ºÇÂçÃÍ¤òÃæ±ûÃÍ¤Î°ì¤Ä²¼¤ËÀßÄê
 			max = mid - 1;
 		}
 		if ( prev_mid == mid ) break;
@@ -3038,11 +3070,11 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 //	int ct1 = get_clock();
 //	float *data = new float[DCNN_CHANNELS*B_SIZE*B_SIZE];
 
-	// pos_sum ã®ä¸­ã‹ã‚‰64å€‹ãƒ©ãƒ³ãƒ€ãƒ ã§é¸ã¶
+	// pos_sum ¤ÎÃæ¤«¤é64¸Ä¥é¥ó¥À¥à¤ÇÁª¤Ö
 	int *ri = new int[mini_batch];
 	int i;
 	for (i=0;i<mini_batch;i++) {
-		int r = rand_m521() % zero_kif_pos_num;	// 0 <= r < zero_kif_pos_num, æœ€åˆã«å³è¾ºãŒunsigned longã§è©•ä¾¡ã•ã‚Œã‚‹ã‚ˆã†ã§ã€ãƒã‚¤ãƒŠã‚¹ã«ã¯ãªã‚‰ãªã„ã€‚gccã§ã‚‚
+		int r = rand_m521() % zero_kif_pos_num;	// 0 <= r < zero_kif_pos_num, ºÇ½é¤Ë±¦ÊÕ¤¬unsigned long¤ÇÉ¾²Á¤µ¤ì¤ë¤è¤¦¤Ç¡¢¥Ş¥¤¥Ê¥¹¤Ë¤Ï¤Ê¤é¤Ê¤¤¡£gcc¤Ç¤â
 		int j;
 		for (j=0;j<i;j++) {
 			if ( ri[j] == r ) break;
@@ -3064,7 +3096,7 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 				break;
 			}
 		}
-		int bi = binary_search_kif_db(r);	// 16ç§’ãŒ1ç§’ã«
+		int bi = binary_search_kif_db(r);	// 16ÉÃ¤¬1ÉÃ¤Ë
 		ZERO_DB *p = &zdb[bi];
 		t = r - (pZDBsum[bi] - zdb[bi].moves);
 		if ( t < 0 || t >= MAX_ZERO_MOVES ) { PRT("t=%d(%d) err.j=%d,r=%d\n",t,p->moves,j,r); debug(); }
@@ -3077,13 +3109,13 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 
 		for (j=0;j<t;j++) {
 			int bz,az,tk,nf;
-			// æ£‹æ³‰å½¢å¼ã®2ãƒã‚¤ãƒˆã‚’4ãƒã‚¤ãƒˆã«å¤‰æ›ã€‚numã¯ç¾åœ¨ã®æ‰‹æ•°ã€‚num=0ã‹ã‚‰å§‹ã¾ã‚‹ã€‚
+			// ´ıÀô·Á¼°¤Î2¥Ğ¥¤¥È¤ò4¥Ğ¥¤¥È¤ËÊÑ´¹¡£num¤Ï¸½ºß¤Î¼ê¿ô¡£num=0¤«¤é»Ï¤Ş¤ë¡£
 //			trans_4_to_2_KDB( p->kif[j*2+0], p->kif[j*2+1], j, &bz, &az, &tk, &nf);
 			trans_4_to_2_KDB( p->v_kif[j]>>8, p->v_kif[j]&0xff, j, &bz, &az, &tk, &nf);
 
 			move_hit_hash(bz,az,tk,nf);
 			move_hit_kif[j] = pack_te( bz,az,tk,nf );
-			move_hit_hashcode[j][0] = hash_code1;	// æŒ‡ã—ãŸå¾Œã®å±€é¢ã®ãƒãƒƒã‚·ãƒ¥å€¤ã‚’å…¥ã‚Œã‚‹
+			move_hit_hashcode[j][0] = hash_code1;	// »Ø¤·¤¿¸å¤Î¶ÉÌÌ¤Î¥Ï¥Ã¥·¥åÃÍ¤òÆş¤ì¤ë
 			move_hit_hashcode[j][1] = hash_code2;
 			move_hit_hashcode[j][2] = hash_motigoma;
 		}
@@ -3099,8 +3131,8 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 		if ( p->result == ZD_DRAW  ) win_r = 0;
 		
 		if ( (t&1)==1 ) {
-			hanten_sasite(&bz,&az,&tk,&nf);	// æŒ‡ã—æ‰‹ã‚’å…ˆå¾Œåè»¢
-			win_r = -win_r;	// å‹æ•—ã¾ã§åè»¢ã¯ã—ãªãã¦ã‚ˆã„ï¼Ÿ åè»¢ã—ãŸæ–¹ãŒå­¦ç¿’ãŒç°¡å˜ãªã¯ãšã€‚å‡ºã¦ããŸçµæœã‚’åè»¢
+			hanten_sasite(&bz,&az,&tk,&nf);	// »Ø¤·¼ê¤òÀè¸åÈ¿Å¾
+			win_r = -win_r;	// ¾¡ÇÔ¤Ş¤ÇÈ¿Å¾¤Ï¤·¤Ê¤¯¤Æ¤è¤¤¡© È¿Å¾¤·¤¿Êı¤¬³Ø½¬¤¬´ÊÃ±¤Ê¤Ï¤º¡£½Ğ¤Æ¤­¤¿·ë²Ì¤òÈ¿Å¾
 		}
 		int playmove_id = get_move_id_c_y_x(pack_te(bz,az,tk,nf));
 		label_policy[i] = (float)playmove_id;
@@ -3112,7 +3144,7 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 				label_policy_visit[i][k] = 0.0f;
 			}
 			int playout_sum = p->v_playouts_sum[j];
-			label_policy_visit[i][playmove_id] = 1.0f / (float)playout_sum;		// å­˜åœ¨ã—ãªã„å ´åˆã¯1å›æ¢ç´¢ã—ãŸã€ã¨ã™ã‚‹
+			label_policy_visit[i][playmove_id] = 1.0f / (float)playout_sum;		// Â¸ºß¤·¤Ê¤¤¾ì¹ç¤Ï1²óÃµº÷¤·¤¿¡¢¤È¤¹¤ë
 
 			int found = 0;
 			int n = p->vv_move_visit[j].size();
@@ -3123,7 +3155,7 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 				int visit = x&0xffff;
 				int bz,az,tk,nf;
 				trans_4_to_2_KDB( b0, b1, j, &bz, &az, &tk, &nf);
-				if ( (t&1)==1 ) hanten_sasite(&bz,&az,&tk,&nf);	// æŒ‡ã—æ‰‹ã‚’å…ˆå¾Œåè»¢
+				if ( (t&1)==1 ) hanten_sasite(&bz,&az,&tk,&nf);	// »Ø¤·¼ê¤òÀè¸åÈ¿Å¾
 //				PRT("r=%5d:b0=%3d,b1=%3d,[%3d][%3d] (%02x,%02x,%02x,%02x)v=%3d\n",r,b0,b1,j,k,bz,az,tk,nf,visit);
 				int id = get_move_id_c_y_x(pack_te(bz,az,tk,nf));
 				label_policy_visit[i][id] = (float)visit / playout_sum;
@@ -3163,7 +3195,8 @@ void prepare_kif_db_test()
 
 void convert_caffemodel(int iteration, int weight_number)
 {
-	PRT("convert_caffemodel. weight_number=%4d,zdb_count=%10d,iteration=%d\n",weight_number,zdb_count,iteration);
+	print_time();
+	PRT(",convert_caffemodel. weight_number=%4d,zdb_count=%10d,iteration=%d\n",weight_number,zdb_count,iteration);
 	FILE *fp = fopen("/home/yss/test/extract/aoba.sh","w");
 	if ( fp==NULL ) DEBUG_PRT("");
 	fprintf(fp,"#!/bin/bash\n");
@@ -3315,15 +3348,21 @@ using namespace std;
 const int ITER_SIZE = 1;
 //const int ITER_SIZE = 32;
 
-constexpr auto kDataSize = MINI_BATCH * ITER_SIZE;	// ITER_SIZE=1 ã§ 7MB
-
-//const int TEST_SIZE = 1;
-//array<float, kDataSize * ONE_SIZE * TEST_SIZE> test_input_data;
-//array<float, kDataSize * TEST_SIZE>            test_policy_data;
-//array<float, kDataSize * TEST_SIZE>            test_value_data;
+constexpr auto kDataSize = MINI_BATCH * ITER_SIZE;	// ITER_SIZE=1 ¤Ç 7MB
 
 float policy_visit[kDataSize][MOVE_C_Y_X_ID_MAX];
 array<float, kDataSize * MOVE_C_Y_X_ID_MAX> dummy_policy_visit;
+
+string get_short_float(float f)
+{
+//	PRT("%f:%.3g:",f,f);
+	char str[TMP_BUF_LEN];
+	sprintf(str,"%.3g",f);	// %.6g¤¬°ÂÁ´¤«¡£LZ ¤Ï %.3g
+	string s = str;
+	if ( strncmp(str,"-0.",3)==0 ) s = "-."+(string)(str+3);
+	if ( strncmp(str,"0." ,2)==0 ) s = (str+1);
+	return s;
+}
 
 void load_aoba_txt_weight( const caffe::shared_ptr<caffe::Net<float>> &net, std::string filename )
 {
@@ -3336,7 +3375,7 @@ void load_aoba_txt_weight( const caffe::shared_ptr<caffe::Net<float>> &net, std:
 //	auto names = net->blob_names();		// include "slice", "silence"
 	auto names = net->layer_names();
 
-	PRT("%d\n",nLayersSize);
+	PRT("Load aoba txt weight. %s, nLayersSize=%d\n",filename.c_str(), nLayersSize);
 	int sum = 0;
 	for (size_t i = 0; i < nLayersSize; i++) {
 		auto layer = layers[i];
@@ -3365,6 +3404,7 @@ void load_aoba_txt_weight( const caffe::shared_ptr<caffe::Net<float>> &net, std:
 //				if ( fabs(*(p+i) - wt_keep[set_num]) > 0.01 ) PRT(".");
 				*(p+i) = wt_keep[set_num++];
 //				PRT("%.6f,",*(p+i));
+//				if ( i==10 ) { PRT("%s",get_short_float(*(p+i)).c_str()); PRT(","); }
 			}
 //			PRT("\n");
 		}
@@ -3377,7 +3417,7 @@ void load_aoba_txt_weight( const caffe::shared_ptr<caffe::Net<float>> &net, std:
 
 void start_zero_train(int *p_argc, char ***p_argv )
 {
-	FLAGS_alsologtostderr = 1;		// ã‚³ãƒ³ã‚½ãƒ¼ãƒ«ã¸ã®ãƒ­ã‚°å‡ºåŠ›ON
+	FLAGS_alsologtostderr = 1;		// ¥³¥ó¥½¡¼¥ë¤Ø¤Î¥í¥°½ĞÎÏON
 	GlobalInit(p_argc, p_argv);
 
 	PS->init_prepare_kif_db();
@@ -3385,16 +3425,16 @@ void start_zero_train(int *p_argc, char ***p_argv )
 //exit(0);
 	if ( fWwwSample ) { PS->make_www_samples(); return; }
 
-	// MemoryDataLayerã¯ãƒ¡ãƒ¢ãƒªä¸Šã®å€¤ã‚’å‡ºåŠ›ã§ãã‚‹DataLayerï¼
-	// å„MemoryDataLayerã«ã¯å…¥åŠ›ãƒ‡ãƒ¼ã‚¿ã¨ãƒ©ãƒ™ãƒ«ãƒ‡ãƒ¼ã‚¿ï¼ˆ1æ¬¡å…ƒã®å®Ÿæ•°ï¼‰ã®2ã¤ã‚’ä¸ãˆã‚‹å¿…è¦ãŒã‚ã‚‹ãŒï¼Œ
-	// ãƒ©ãƒ™ãƒ«1ã¤ã¯ä½¿ã‚ãªã„ã®ã§ãƒ€ãƒŸãƒ¼ã®å€¤ã‚’ä¸ãˆã¦ãŠãï¼
+	// MemoryDataLayer¤Ï¥á¥â¥ê¾å¤ÎÃÍ¤ò½ĞÎÏ¤Ç¤­¤ëDataLayer¡¥
+	// ³ÆMemoryDataLayer¤Ë¤ÏÆşÎÏ¥Ç¡¼¥¿¤È¥é¥Ù¥ë¥Ç¡¼¥¿¡Ê1¼¡¸µ¤Î¼Â¿ô¡Ë¤Î2¤Ä¤òÍ¿¤¨¤ëÉ¬Í×¤¬¤¢¤ë¤¬¡¤
+	// ¥é¥Ù¥ë1¤Ä¤Ï»È¤ï¤Ê¤¤¤Î¤Ç¥À¥ß¡¼¤ÎÃÍ¤òÍ¿¤¨¤Æ¤ª¤¯¡¥
 	static array<float, kDataSize> dummy_data;
 	fill(dummy_data.begin(), dummy_data.end(), 0.0);
 	fill(dummy_policy_visit.begin(), dummy_policy_visit.end(), 0.0);
 
 	setModeDevice(0);
 
-	// Solverã®è¨­å®šã‚’ãƒ†ã‚­ã‚¹ãƒˆãƒ•ã‚¡ã‚¤ãƒ«ã‹ã‚‰èª­ã¿è¾¼ã‚€
+	// Solver¤ÎÀßÄê¤ò¥Æ¥­¥¹¥È¥Õ¥¡¥¤¥ë¤«¤éÆÉ¤ß¹ş¤à
 	SolverParameter solver_param;
 	if ( ITER_SIZE==1 ) {
 		ReadProtoFromTextFileOrDie("aoba_zero_solver.prototxt", &solver_param);
@@ -3410,7 +3450,7 @@ void start_zero_train(int *p_argc, char ***p_argv )
 	std::shared_ptr<Solver<float>> solver;
 	solver.reset(SolverRegistry<float>::CreateSolver(solver_param));
 
-	//è©•ä¾¡ç”¨ã®ãƒ‡ãƒ¼ã‚¿ã‚’å–å¾—
+	//É¾²ÁÍÑ¤Î¥Ç¡¼¥¿¤ò¼èÆÀ
 	const auto net      = solver->net();
 //	const char sNet[] = "20190419replay_lr001_wd00002_100000_1018000/_iter_36000.caffemodel";	// w449
 //	const char sNet[] = "/home/yss/shogi/yssfish/snapshots/_iter_300376.caffemodel";
@@ -3424,17 +3464,17 @@ void start_zero_train(int *p_argc, char ***p_argv )
 //	const char sNet[] = "/home/yss/shogi/yssfish/snapshots/20191029/_iter_200000.caffemodel";	// w774
 //	const char sNet[] = "/home/yss/shogi/learn/snapshots/20191029/_iter_312.caffemodel";	// w775
 //	const char sNet[] = "/home/yss/shogi/learn/snapshots/20191107/_iter_3432.caffemodel";	// w786
-	const char sNet[] = "/home/yss/w689_iter_160000.caffemodel";
+	const char sNet[] = "/home/yss/shogi/learn/snapshots/20200328/_iter_1370000.caffemodel";	// w923
 
-	int next_weight_number =787;	// ç¾åœ¨ã®æœ€æ–°ã®ç•ªå· +1
+	int next_weight_number =924;	// ¸½ºß¤ÎºÇ¿·¤ÎÈÖ¹æ +1
 
-	net->CopyTrainedLayersFrom(sNet);	// caffemodelã‚’èª­ã¿è¾¼ã‚“ã§å­¦ç¿’ã‚’å†é–‹ã™ã‚‹å ´åˆ
-	load_aoba_txt_weight( net, "/home/yss/w000000000689.txt" );	// æ—¢å­˜ã®w*.txtã‚’èª­ã¿è¾¼ã‚€ã€‚*.caffemodelã‚’ä½•ã‹èª­ã¿è¾¼ã‚“ã å¾Œã«
+	net->CopyTrainedLayersFrom(sNet);	// caffemodel¤òÆÉ¤ß¹ş¤ó¤Ç³Ø½¬¤òºÆ³«¤¹¤ë¾ì¹ç
+//	load_aoba_txt_weight( net, "/home/yss/w000000000689.txt" );	// ´ûÂ¸¤Îw*.txt¤òÆÉ¤ß¹ş¤à¡£*.caffemodel¤ò²¿¤«ÆÉ¤ß¹ş¤ó¤À¸å¤Ë
 	LOG(INFO) << "Solving ";
 	PRT("fReplayLearning=%d\n",fReplayLearning);
 
-	int iteration = 0;	// å­¦ç¿’å›æ•°
-	int add = 0;		// è¿½åŠ ã•ã‚ŒãŸæ£‹è­œæ•°
+	int iteration = 0;	// ³Ø½¬²ó¿ô
+	int add = 0;		// ÄÉ²Ã¤µ¤ì¤¿´ıÉè¿ô
 	int remainder = 0;
 	int div = 0;
 	int update = 0;
@@ -3443,21 +3483,21 @@ wait_again:
 	if ( fReplayLearning ) {
 		add = PS->add_a_little_from_archive();
 		if ( add < 0 ) { PRT("done..\n"); solver->Snapshot(); return; }
-		if ( zdb_count <=  120000 ) goto wait_again;	// no000000121031.csa ã¾ã§ã¯random æ£‹è­œãªã®ã§
+		if ( zdb_count <=  120000 ) goto wait_again;	// no000000121031.csa ¤Ş¤Ç¤Ïrandom ´ıÉè¤Ê¤Î¤Ç
 //		if ( zdb_count <= 2520000 ) goto wait_again;
 //		if ( zdb_count >  2948000 ) { PRT("done..w648.\n"); solver->Snapshot(); return; }
 	} else {
 		if ( 0 && iteration==0 && next_weight_number==1 ) {
-			add = 2000;	// åˆå›ã®ã¿ãƒ€ãƒŸãƒ¼ã§2000æ£‹è­œè¿½åŠ ã—ãŸã“ã¨ã«ã™ã‚‹(é€”ä¸­å†é–‹ã¯ 0 && ã«)
+			add = 2000;	// ½é²ó¤Î¤ß¥À¥ß¡¼¤Ç2000´ıÉèÄÉ²Ã¤·¤¿¤³¤È¤Ë¤¹¤ë(ÅÓÃæºÆ³«¤Ï 0 && ¤Ë)
 		} else {
 			add = PS->wait_and_get_new_kif(next_weight_number);
 		}
 	}
 
-	const int AVE_MOVES = 128;	// 1å±€ã®å¹³å‡æ‰‹æ•°
+	const int AVE_MOVES = 128;	// 1¶É¤ÎÊ¿¶Ñ¼ê¿ô
 	float add_mul = (float)AVE_MOVES / MINI_BATCH;
-	int nLoop = (int)((float)add*add_mul); // MB=64ã§add*2, MB=128ã§add*1, MB=180ã§add*0.711
-	// (ITER_SIZE*MINI_BATCH)=4096 ãªã‚‰æœ€ä½ã§ã‚‚32æ£‹è­œå¿…è¦(32*128=4096)
+	int nLoop = (int)((float)add*add_mul); // MB=64¤Çadd*2, MB=128¤Çadd*1, MB=180¤Çadd*0.711
+	// (ITER_SIZE*MINI_BATCH)=4096 ¤Ê¤éºÇÄã¤Ç¤â32´ıÉèÉ¬Í×(32*128=4096)
 	int min_n = ITER_SIZE*MINI_BATCH / AVE_MOVES;
 	if ( min_n > 1 ) {
 		add += remainder;
@@ -3468,21 +3508,21 @@ wait_again:
 	PRT("nLoop=%d,add=%d,add_mul=%.5f,MINI_BATCH=%d,kDataSize=%d,remainder=%d,iteration=%d(%d/%d)\n",nLoop,add,add_mul,MINI_BATCH,kDataSize,remainder,iteration,update,div);
 	int loop;
 	for (loop=0;loop<nLoop;loop++) {
-		static array<float, kDataSize * ONE_SIZE> input_data;	// å¤§ãã„ã®ã§staticã§
+		static array<float, kDataSize * ONE_SIZE> input_data;	// Âç¤­¤¤¤Î¤Çstatic¤Ç
 		static array<float, kDataSize>            policy_data;
 		static array<float, kDataSize>            value_data;
 
 		int fPW = 0;
-		if ( ITER_SIZE== 1 && loop==0 && (iteration % 4)==0 ) fPW = 1;
-		if ( ITER_SIZE>=32 && loop==0 && (iteration % 8)==0 ) fPW = 1;
+		if ( ITER_SIZE== 1 && loop==0 && (iteration % 16)==0 ) fPW = 1;
+		if ( ITER_SIZE>=32 && loop==0 && (iteration %  8)==0 ) fPW = 1;
 		if ( fPW ) PRT("%d:",next_weight_number);
 		PS->prepare_kif_db(fPW, kDataSize, input_data.data(), policy_data.data(), value_data.data(), policy_visit);
 
-		// å…¥åŠ›ãƒ‡ãƒ¼ã‚¿ã‚’MemoryDataLayer"data"ã«ã‚»ãƒƒãƒˆ
+		// ÆşÎÏ¥Ç¡¼¥¿¤òMemoryDataLayer"data"¤Ë¥»¥Ã¥È
 		const auto input_layer  = boost::dynamic_pointer_cast<MemoryDataLayer<float>>(net->layer_by_name("data"));
 		assert(input_layer);
 		input_layer->Reset(input_data.data(), dummy_data.data(), kDataSize);
-		// æ•™å¸«ãƒ‡ãƒ¼ã‚¿ã‚’MemoryDataLayer"label_policy"ã«ã‚»ãƒƒãƒˆ
+		// ¶µ»Õ¥Ç¡¼¥¿¤òMemoryDataLayer"label_policy"¤Ë¥»¥Ã¥È
 		if ( POLICY_VISIT ) {
 			const auto policy_visit_layer = boost::dynamic_pointer_cast<MemoryDataLayer<float>>(net->layer_by_name("label_policy"));
 			assert(policy_visit_layer);
@@ -3497,13 +3537,13 @@ wait_again:
 		assert(value_layer);
 		value_layer->Reset(value_data.data(), dummy_data.data(), kDataSize);
 
-		// Solverã®è¨­å®šé€šã‚Šã«å­¦ç¿’ã‚’è¡Œã†
+		// Solver¤ÎÀßÄêÄÌ¤ê¤Ë³Ø½¬¤ò¹Ô¤¦
 		solver->Step(1);
 //		solver->Solve();
-//		solver->Snapshot();	// prototxt ã®è¨­å®šã§ä¿å­˜ã•ã‚Œã‚‹
+//		solver->Snapshot();	// prototxt ¤ÎÀßÄê¤ÇÊİÂ¸¤µ¤ì¤ë
 		iteration++;
 
-		div = 10000*AVE_MOVES / (ITER_SIZE*MINI_BATCH);	// 10000æ£‹è­œ(å¹³å‡128æ‰‹)ã”ã¨ã«weightã‚’ä½œæˆ
+		div = 10000*AVE_MOVES / (ITER_SIZE*MINI_BATCH);	// 10000´ıÉè(Ê¿¶Ñ128¼ê)¤´¤È¤Ëweight¤òºîÀ®
 		update = iteration % div;
 		if ( fReplayLearning==0 && update==0 ) {
 			solver->Snapshot();
