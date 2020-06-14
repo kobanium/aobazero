@@ -199,7 +199,8 @@ void NNetService::worker_srv() noexcept {
 #else
 	die(ERR_INT("No CPU BLAS support"));
 #endif
-      } else if (_impl == NNet::opencl) {
+      }
+      else if (_impl == NNet::opencl) {
 #if defined(USE_OPENCL_AOBA)
 	_pnnet.reset(new NNetOCL);
 	_sem_service_lock.dec_wait();

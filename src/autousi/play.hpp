@@ -24,12 +24,10 @@ class PlayManager {
 public:
   static PlayManager & get() noexcept;
   void start(const char *cname, const char *dlog,
-	     const std::vector<std::string> &devices, uint verbose_eng)
-    noexcept;
-  void engine_start(const FNameID &wfname, uint64_t crc64) noexcept;
-  void engine_terminate() noexcept;
-  std::deque<std::string> manage_play(bool has_conn) noexcept;
+	     const std::vector<std::string> &devices, uint verbose_eng,
+	     const FNameID &wfname, uint64_t crc64) noexcept;
   void end() noexcept;
+  std::deque<std::string> manage_play(bool has_conn) noexcept;
   bool get_moves_eid0(std::string &move) noexcept;
   uint get_nengine() const noexcept { return _engines.size(); }
   uint get_ngen_records() const noexcept { return _ngen_records; };

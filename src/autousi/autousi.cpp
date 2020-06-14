@@ -60,9 +60,15 @@ static uint print_status, print_csa;
 static steady_clock::time_point time_start;
 static FName opt_dname_csa;
 static uint opt_max_csa;
+
+static const char *cstr_cname;
+static const char *cstr_dlog;
+static uint verbose_eng;
+static vector<string> devices;
+
 static deque<OSI::DirLock> dirlocks;
 
-static bool is_posi(uint u) { return 0 < u; }
+constexpr bool is_posi(uint u) { return 0 < u; }
 
 static void on_terminate() {
   exception_ptr p = current_exception();
@@ -83,7 +89,6 @@ static void on_terminate() {
 static void on_signal(int signum) { flag_signal = signum; }
 
 static void init() noexcept {
-  vector<string> devices;
   map<string, string> m = {{"WeightSave",    "./weight_save"},
 			   {"CmdPath",       "bin/aobaz"},
 			   {"DirLog",        "./log"},
@@ -104,31 +109,30 @@ static void init() noexcept {
 			   {"Port",          "20000"}};
   try { Config::read("autousi.cfg", m); } catch (exception &e) { die(e); }
   const char *cstr_dwght = Config::get_cstr(m, "WeightSave", maxlen_path);
-  const char *cstr_cname = Config::get_cstr(m, "CmdPath",    maxlen_path);
-  const char *cstr_dlog  = Config::get_cstr(m, "DirLog",     maxlen_path);
+  cstr_cname             = Config::get_cstr(m, "CmdPath",    maxlen_path);
+  cstr_dlog              = Config::get_cstr(m, "DirLog",     maxlen_path);
   const char *cstr_csa   = Config::get_cstr(m, "DirCSA",     maxlen_path);
   const char *cstr_addr  = Config::get_cstr(m, "Addr",       64);
-  uint size_queue   = Config::get<uint>  (m, "SizeSendQueue", is_posi);
-  uint recvTO       = Config::get<uint>  (m, "RecvTO",        is_posi);
-  uint sendTO       = Config::get<uint>  (m, "SendTO",        is_posi);
-  uint recv_bufsiz  = Config::get<uint>  (m, "RecvBufSiz",    is_posi);
-  uint send_bufsiz  = Config::get<uint>  (m, "SendBufSiz",    is_posi);
-  uint max_retry    = Config::get<uint>  (m, "MaxRetry",      is_posi);
-  opt_max_csa       = Config::get<uint>  (m, "MaxCSA");
-  uint keep_wght    = Config::get<uint>  (m, "KeepWeight");
-  uint verbose_eng  = Config::get<uint>  (m, "VerboseEngine");
-  uint port         = Config::get<ushort>(m, "Port");
-  devices           = Config::get_vecstr (m, "Device");
-  print_status      = Config::get<uint>  (m, "PrintStatus");
-  print_csa         = Config::get<uint>  (m, "PrintCSA");
+  uint size_queue        = Config::get<uint>  (m, "SizeSendQueue", is_posi);
+  uint recvTO            = Config::get<uint>  (m, "RecvTO",        is_posi);
+  uint sendTO            = Config::get<uint>  (m, "SendTO",        is_posi);
+  uint recv_bufsiz       = Config::get<uint>  (m, "RecvBufSiz",    is_posi);
+  uint send_bufsiz       = Config::get<uint>  (m, "SendBufSiz",    is_posi);
+  uint max_retry         = Config::get<uint>  (m, "MaxRetry",      is_posi);
+  opt_max_csa            = Config::get<uint>  (m, "MaxCSA");
+  uint keep_wght         = Config::get<uint>  (m, "KeepWeight");
+  verbose_eng            = Config::get<uint>  (m, "VerboseEngine");
+  uint port              = Config::get<ushort>(m, "Port");
+  devices                = Config::get_vecstr (m, "Device");
+  print_status           = Config::get<uint>  (m, "PrintStatus");
+  print_csa              = Config::get<uint>  (m, "PrintCSA");
 
   opt_dname_csa.reset_fname(cstr_csa);
   dirlocks.emplace_back(cstr_dwght);
   dirlocks.emplace_back(cstr_dlog);
   dirlocks.emplace_back(cstr_csa);
   Client::get().start(cstr_dwght, cstr_addr, port, recvTO, recv_bufsiz, sendTO,
-		      send_bufsiz, max_retry, size_queue, keep_wght);
-  PlayManager::get().start(cstr_cname, cstr_dlog, devices, verbose_eng); }
+		      send_bufsiz, max_retry, size_queue, keep_wght); }
 
 static void output() noexcept {
   static bool first = true;
@@ -231,9 +235,11 @@ int main() {
   set_terminate(on_terminate);
   init();
   std::shared_ptr<const WghtFile> wght = Client::get().get_wght();
+  PlayManager::get().start(cstr_cname, cstr_dlog, devices, verbose_eng,
+			   wght->get_fname(), wght->get_crc64());
+
   OSI::handle_signal(on_signal);
   time_start = steady_clock::now();
-  PlayManager::get().engine_start(wght->get_fname(), wght->get_crc64());
 
   cout << "self-play started" << endl;
   while (! flag_signal) {
@@ -246,14 +252,13 @@ int main() {
       write_record(rec.c_str(), rec.size(),
 		   opt_dname_csa.get_fname(), opt_max_csa); }
 
-    if (wght->get_id() == Client::get().get_wght()->get_id()) continue;
-    wght = Client::get().get_wght();
-    PlayManager::get().engine_terminate();
-    PlayManager::get().engine_start(wght->get_fname(), wght->get_crc64()); }
+    // if (wght->get_id() == Client::get().get_wght()->get_id()) continue;
+    // wght = Client::get().get_wght();
+    // PlayManager::get().engine_terminate();
+    // PlayManager::get().engine_start(wght->get_fname(), wght->get_crc64());
+  }
   
   cout << "\nsignal " << flag_signal << " caught" << endl;
-
-  PlayManager::get().engine_terminate();
   PlayManager::get().end();
   Client::get().end();
   return 0; }

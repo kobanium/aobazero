@@ -138,7 +138,7 @@ void Client::get_new_wght() {
   int64_t no_wght = bytes_to_int<int64_t>(buf);
   uint nblock     = bytes_to_int<uint>(buf + 8);
   if (nblock == 0) die(ERR_INT("invalid nblock value %d", nblock));
-  if (no_wght < 0) die(ERR_INT("invalid weight no %" PRIi64 , no_wght));
+  if (no_wght < 0) die(ERR_INT("invalid weight no %" PRIi64, no_wght));
   if (no_wght == _wght_id) return;
   if (no_wght < _wght_id) die(ERR_INT(corrupt_fmt, _dwght.get_fname()));
 
