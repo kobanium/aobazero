@@ -64,7 +64,8 @@ class Device {
 		     thread_num) {
       lock_guard<mutex> lock(m_seq);
       if (seq_s.empty()) seq_s.emplace_back(); }
-    void nnreset(const FName &fname) noexcept { _nnet.nnreset(fname); } };
+    void nnreset(const FName &fname) noexcept { _nnet.nnreset(fname); }
+    void wait() noexcept { _nnet.wait(); } };
   unique_ptr<DataNNService> _data_nnservice;
   int _nnet_id, _device_id;
   uint _size_parallel;
@@ -146,6 +147,7 @@ public:
       _type = aobaz; } }
   void nnreset(const FName &wfname) noexcept {
     if (_type == nnservice) _data_nnservice->nnreset(wfname); }
+  void wait() noexcept { if (_type == nnservice) _data_nnservice->wait(); }
   int get_device_id() const noexcept { return _device_id; }
   int get_nnet_id() const noexcept { return _nnet_id; }
   char get_id_option_character() const noexcept {
@@ -162,8 +164,10 @@ class USIEngine : public Child {
   double _time_average_nume, _time_average_deno, _time_average;
   FName _logname;
   ofstream _ofs;
-  string _startpos, _record_main, _record_header, _fingerprint;
+  string _startpos, _record_main, _fingerprint;
   string _record_wght, _record_version, _record_settings;
+  int64_t _id_wght;
+  uint64_t _crc64_wght;
   int _device_id, _nnet_id, _version;
   uint _eid, _nmove;
   bool _flag_playing, _flag_ready, _flag_thinking;
@@ -198,6 +202,7 @@ public:
   _time_average_nume(0.0), _time_average_deno(0.0), _time_average(0.0),
     _logname(logname),
     _fingerprint(to_string(nnet_id) + string("-") + to_string(eid)),
+    _id_wght(wfname.get_id()), _crc64_wght(crc64),
     _device_id(device_id), _nnet_id(nnet_id), _version(-1), _eid(eid),
     _nmove(0),
     _flag_playing(false), _flag_ready(false), _flag_thinking(false) {
@@ -250,13 +255,7 @@ public:
     _logname.add_fmt_fname(fmt_log, nnet_id, eid);
     _ofs.open(_logname.get_fname(), ios::trunc);
     if (!_ofs) die(ERR_INT("cannot write to log"));
-    engine_out("usi");
-
-    char buf[256];
-    snprintf(buf, sizeof(buf), "%16" PRIx64, crc64);
-    _record_header  = string("'w ") + to_string(wfname.get_id());
-    _record_header += string(" (crc64:") + string(buf);
-    _record_header += string(")"); }
+    engine_out("usi"); }
 
   void start_newgame() noexcept {
     _node.clear();
@@ -265,6 +264,11 @@ public:
     _record_main   = string("PI\n+\n");
     _nmove         = 0;
     _startpos      = string("position startpos moves");
+
+    char buf[256];
+    sprintf(buf, "%16" PRIx64, _crc64_wght);
+    _record_wght  = string("'w ") + to_string(_id_wght);
+    _record_wght += string(" (crc64:") + string(buf) + string(")");
     engine_out("usinewgame"); }
 
   void engine_go() noexcept {
@@ -272,6 +276,12 @@ public:
     engine_out("%s", _startpos.c_str());
     engine_out("go visit");
     _time_last = steady_clock::now(); }
+
+  void engine_wght_update(const FNameID &wfname, uint64_t crc64) noexcept {
+    _record_wght += string(" and later");
+    _id_wght    = wfname.get_id();
+    _crc64_wght = crc64;
+    engine_out("setoption name USI_WeightFile value %s", wfname.get_fname()); }
 
   string update(char *line, queue<string> &moves_eid0) noexcept {
     assert(line);
@@ -315,7 +325,7 @@ public:
     if (!_flag_ready) die(ERR_INT("Bad message from engine (%s).", get_fp()));
 
     if (strcmp(token, "bestmove") != 0) return string("");
-    if (!_flag_playing)
+    if (!_flag_playing && !_flag_thinking)
       die(ERR_INT("bad usi message from engine %s", get_fp()));
     _flag_thinking = false;
 
@@ -402,7 +412,7 @@ public:
     // terminal test
     if (_node.get_type().is_term()) {
       string rec;
-      rec += _record_header + string(", ") + _record_version + string("\n");
+      rec += _record_wght + string(", ") + _record_version + string("\n");
       rec += string("'") + _record_settings + string("\n");
       rec += _record_main;
       rec += "%" + string(_node.get_type().to_str()) + string("\n");
@@ -435,7 +445,7 @@ PlayManager & PlayManager::get() noexcept {
   static PlayManager instance;
   return instance; }
 
-PlayManager::PlayManager() noexcept : _ngen_records(0) {}
+PlayManager::PlayManager() noexcept : _ngen_records(0), _num_thinking(0) {}
 PlayManager::~PlayManager() noexcept {}
 void PlayManager::start(const char *cname, const char *dlog,
 			const vector<string> &devices_str, uint verbose_eng,
@@ -445,11 +455,12 @@ void PlayManager::start(const char *cname, const char *dlog,
   _verbose_eng = verbose_eng;
   _cname.reset_fname(cname);
   _logname.reset_fname(dlog);
+  _wid = wfname.get_id();
 
   int nnet_id = 0;
   for (const string &s : devices_str) _devices.emplace_back(s, nnet_id++);
-
   for (Device &d : _devices) d.nnreset(wfname);
+  for (Device &d : _devices) d.wait();
 
   int eid = 0;
   for (Device &d : _devices) {
@@ -487,7 +498,8 @@ void PlayManager::end() noexcept {
   lock_guard<mutex> lock(m_seq);
   seq_s.clear(); }
 
-deque<string> PlayManager::manage_play(bool has_conn) noexcept {
+deque<string> PlayManager::manage_play(bool has_conn, const FNameID &wfname,
+				       uint64_t crc64) noexcept {
   deque<string> recs;
 
   Child::wait(1000U);
@@ -501,20 +513,41 @@ deque<string> PlayManager::manage_play(bool has_conn) noexcept {
       char line[65536];
       if (e->getline_in(line, sizeof(line)) == 0) flag_eof = true;
       else {
+	bool flag_thinking = e->is_thinking();
 	string s = e->update(line, _moves_eid0);
 	if (!s.empty()) {
 	  _ngen_records += 1U;
 	  recs.push_back(move(s)); }
 
-	if (e->is_ready()) {
+	if (e->is_ready() && _wid == wfname.get_id()) {
 	  if (has_conn && ! e->is_playing()) e->start_newgame();
-	  if (e->is_playing() && ! e->is_thinking()) e->engine_go(); } } }
+	  if (e->is_playing() && ! e->is_thinking()) e->engine_go(); }
+
+	if (! flag_thinking && e->is_thinking()) _num_thinking += 1U;
+	if (flag_thinking && ! e->is_thinking()) _num_thinking -= 1U;
+	assert(_num_thinking <= _engines.size()); } }
 
     if (flag_eof) {
       char line[65536];
       while (0 < e->getline_err(line, sizeof(line)));
       while (0 < e->getline_in (line, sizeof(line)));
       die(ERR_INT("An engine (%s) terminates.", e->get_fp())); } }
+
+  if (_wid != wfname.get_id() && _num_thinking == 0) {
+    _wid = wfname.get_id();
+    cout << "\nUpdate weight" << endl;
+    for (Device &d : _devices) d.nnreset(wfname);
+    for (Device &d : _devices) d.wait();
+    for (auto &e : _engines) {
+      bool flag_thinking = e->is_thinking();
+      e->engine_wght_update(wfname, crc64);
+      if (e->is_ready() && _wid == wfname.get_id()) {
+	if (has_conn && ! e->is_playing()) e->start_newgame();
+	if (e->is_playing() && ! e->is_thinking()) e->engine_go(); }
+
+      if (! flag_thinking && e->is_thinking()) _num_thinking += 1U;
+      if (flag_thinking && ! e->is_thinking()) _num_thinking -= 1U;
+      assert(_num_thinking <= _engines.size()); } }
 
   return recs; }
 

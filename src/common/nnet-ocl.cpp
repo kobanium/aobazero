@@ -1266,7 +1266,6 @@ void ManageDecode::start(const OCL::Context &context,
   _fill_size_l[1] = _fill_size_l[2] = 1U;
   _fill_size_g[1] = NNAux::nch_input_fill;
   _fill_size_g[2] = maxsize_batch;
-  bool flag_first = true;
   string code;
   code += ("#define INDEX_BLOCK " + to_string(index_block)           + "U\n"
 	   "#define NB          " + to_string(maxsize_batch)         + "U\n"

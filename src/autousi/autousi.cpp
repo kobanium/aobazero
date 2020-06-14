@@ -178,41 +178,41 @@ static void output() noexcept {
   print_csa_num   = 0;
   time_last       = time_now;
   puts("");
-  puts("+------+-----+--------+---< Aobaz Status >-------------------------+");
-  puts("|  ID  | Dev | Average|               Moves                        |");
-  puts("+------+-----+--------+--------------------------------------------+");
+  puts("+---+---+--------+-------< Aobaz Status >--------------------------+");
+  puts("|ID |Dev| Average|                   Moves                         |");
+  puts("+---+---+--------+-------------------------------------------------+");
   for (uint u = 0; u < PlayManager::get().get_nengine(); ++u) {
-    const int BUF_SIZE = 64;
-    char spid[BUF_SIZE], sdev[BUF_SIZE], buf[BUF_SIZE];
+    char spid[16], sdev[16], buf[46];
     int eid = PlayManager::get().get_eid(u);
     int did = PlayManager::get().get_did(u);
-    snprintf(spid, BUF_SIZE, "%6u",  eid);
-    if (did == -2) snprintf(sdev, BUF_SIZE, " CPU ");
-    else           snprintf(sdev, BUF_SIZE, "%4d ", did);
+    sprintf(spid, "%3u",  eid);
+    if (did == -2) sprintf(sdev, "CPU");
+    else           sprintf(sdev, "%3d", did);
     fill_n(buf, sizeof(buf), '#');
     uint len = std::min(PlayManager::get().get_nmove(u) / 5,
 			static_cast<uint>(sizeof(buf)) - 1U);
     buf[len] = '\0';
     double time_ave = PlayManager::get().get_time_average(u);
     time_ave_tot += time_ave;
-    printf("|%s|%s|%6.0fms|%3d:%-40s|\n",
+    printf("|%s|%s|%6.0fms|%3d:%-45s|\n",
 	   spid, sdev, time_ave, PlayManager::get().get_nmove(u), buf); }
-  puts("+------+-----+--------+--------------------------------------------+");
-  printf("- Send Status: Sent %d, Lost %d, Waiting %d\n",
+  puts("+---+---+--------+-------------------------------------------------+");
+  printf("- Send:   Sent %d, Lost %d, Waiting %d\n",
 	 nsend, ndiscard, ntot - nsend - ndiscard);
 
   int64_t wght_id        = Client::get().get_wght()->get_id();
   bool    is_downloading = Client::get().is_downloading();
   const char *buf_time   = Client::get().get_buf_wght_time();
-  printf("- Recv Status: Weights' ID %" PRIi64 ", ", wght_id);
+  printf("- Recv:   Weights' ID %" PRIi64 ", ", wght_id);
 
-  if (is_downloading) puts("NOW DOWNLOADING NEW WEIGHTS\n");
+  if (is_downloading) puts("NOW DOWNLOADING NEW WEIGHTS");
   else                printf("Last Check %s\n", buf_time);
   auto rep = duration_cast<seconds>(time_now - time_start).count();
   double sec  = static_cast<double>(rep) + 1e-6;
   double hour = sec / 3600.0;
-  printf("- Engine Status: %.0fmsec/move, %.1fsend/hour, "
+  printf("- Engine: Idle %u, %.0fmsec/move, %.1fsend/hour, "
 	 "%.1f hours running\n\n",
+	 PlayManager::get().get_nengine() - PlayManager::get().get_nthinking(),
 	 time_ave_tot / static_cast<double>(PlayManager::get().get_nengine()),
 	 nsend / hour, hour); }
 
@@ -244,9 +244,10 @@ int main() {
   cout << "self-play started" << endl;
   while (! flag_signal) {
     output();
-
+    wght = Client::get().get_wght();
     deque<string> recs
-      = PlayManager::get().manage_play(Client::get().has_conn());
+      = PlayManager::get().manage_play(Client::get().has_conn(),
+				       wght->get_fname(), wght->get_crc64());
     for (const string &rec : recs) {
       Client::get().add_rec(rec.c_str(), rec.size());
       write_record(rec.c_str(), rec.size(),

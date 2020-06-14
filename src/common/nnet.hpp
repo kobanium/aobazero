@@ -120,7 +120,7 @@ public:
 };
 
 enum class SrvType : uint { Register, FeedForward, FlushON, FlushOFF,
-    NNReset, End };
+    NNReset, NOP, End };
 
 struct SharedService {
   uint id_ipc_next;

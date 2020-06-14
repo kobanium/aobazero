@@ -53,7 +53,7 @@ using uint  = unsigned int;
 constexpr uint snd_retry_interval  = 5U;    // in sec
 constexpr uint snd_max_retry       = 3U;    // in sec
 constexpr uint snd_sleep           = 200U;  // in msec
-constexpr uint wght_polling        = 300U;  // in sec
+constexpr uint wght_polling        = 30U;  // in sec
 constexpr uint wght_retry_interval = 7U;    // in sec
 
 constexpr uint maxlen_rec_xz       = 1024U * 1024U;
@@ -164,7 +164,6 @@ void Client::get_new_wght() {
       if (remove(it->get_fname()) < 0) die(ERR_CLL("remove"));
     
     ofstream ofs(finfo.get_fname());
-    cout << "create new " << info_name << endl;
     ofs << "WeightNo " << no_wght << "\n";
     ofs.close();
     if (!ofs) {
