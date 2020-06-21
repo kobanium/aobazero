@@ -63,6 +63,33 @@ struct SgemmParam {
 	    && 0 < npk); }
 };
 
+struct SgemmParam2 {
+  using uint = unsigned int;
+  double time;
+  bool do_half, do_wmma;
+  uint nlm, nln, npm, npn, npk, ntm, ntn;
+  SgemmParam2() noexcept {}
+  SgemmParam2(bool do_half_, uint nlm_, uint nln_, uint npm_, uint npn_,
+	      uint npk_) noexcept :
+  time(0.0), do_half(do_half_), do_wmma(false), nlm(nlm_), nln(nln_),
+    npm(npm_), npn(npn_), npk(npk_) {}
+  SgemmParam2(bool do_half_, bool do_wmma_, uint nlm_, uint nln_, uint npm_,
+	      uint npn_, uint npk_, uint ntm_, uint ntn_) noexcept :
+  time(0.0), do_half(do_half_), do_wmma(do_wmma_), nlm(nlm_), nln(nln_),
+    npm(npm_), npn(npn_), npk(npk_), ntm(ntm_), ntn(ntn_) {}
+  std::string gen_info() const noexcept;
+  bool operator<=(const SgemmParam2 &p) const noexcept {
+    bool b = (nlm <= p.nlm && nln <= p.nln && npm <= p.npm && npn <= p.npn
+	      && npk <= p.npk);
+    if (do_wmma) b = (b && ntm <= p.ntm && ntn <= p.ntn);
+    return b; }
+  bool ok() const noexcept {
+    bool b = (0.0 <= time && 0 < nlm && 0 < nln && 0 < npm && 0 < npn
+	      && 0 < npk);
+    if (do_wmma) b = (b && 0 < ntm && 0 < ntn);
+    return b; }
+};
+
 class ManageComputeMatM {
   using uint = unsigned int;
   OCL::Kernel _ker[NNAux::nslot];
@@ -88,7 +115,7 @@ class ManageSgemm {
   std::unique_ptr<class MngChgDim []> _array_mng_chg_dim_c;
   double _time;
   size_t size_g[3], size_l[3];
-  SgemmParam _param;
+  SgemmParam2 _param;
   uint _nker, _nm, _nn, _nk, _nm0, _nn0, _nk0;
   uint _lda, _ldb, _ldc, _offa, _offb, _offc;
 public:
@@ -113,7 +140,7 @@ public:
   template <typename M>
   void set_array_c_chg_dim(const OCL::Context &context, const M mem[])
     noexcept;
-  std::string gen_info() const noexcept;
+  std::string gen_info() const noexcept { return _param.gen_info(); }
 };
 
 class ManageComputeMatV {
