@@ -680,6 +680,54 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
 #endif
 )";
 
+const string code_sgemm_child = R"(
+void sgemm_child(__global const float *gA, __global const float *gB,
+                 __global float *gC, uint ulm, uint uln) {
+  uint ul  = ulm*SGEMM_NLN + uln;
+  uint ngk = NK / SGEMM_NPK;
+
+  __local float lA[SGEMM_NPK][SGEMM_NLM*SGEMM_NPM]
+                  __attribute__((aligned(SIZE_ALIGN)));
+  __local float lB[SGEMM_NPK][SGEMM_NLN*SGEMM_NPN]
+                  __attribute__((aligned(SIZE_ALIGN)));
+  float pC[SGEMM_NPM][SGEMM_NPN];
+  float pB[SGEMM_NPN];
+  float pA;
+  for (uint upm = 0; upm < SGEMM_NPM; ++upm)
+    for (uint upn = 0; upn < SGEMM_NPN; ++upn) pC[upm][upn] = 0.0f;
+
+  uint ulA1 = ul % (SGEMM_NLM*SGEMM_NPM);
+  uint ulA2 = ul / (SGEMM_NLM*SGEMM_NPM);
+  uint ulB1 = ul % (SGEMM_NLN*SGEMM_NPN);
+  uint ulB2 = ul / (SGEMM_NLN*SGEMM_NPN);
+  for (uint ugk = 0; ugk < ngk; ++ugk) {
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (uint u = 0; u < SGEMM_NPK; u += SGEMM_NLN / SGEMM_NPM)
+      lA[u + ulA2][ulA1] = gA[(u + ulA2)*NM + ulA1];
+    for (uint u = 0; u < SGEMM_NPK; u += SGEMM_NLM / SGEMM_NPN)
+      lB[u + ulB2][ulB1] = gB[(u + ulB2)*NN + ulB1];
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for (uint upk = 0; upk < SGEMM_NPK; ++upk) {
+      for (uint upn = 0; upn < SGEMM_NPN; ++upn)
+        pB[upn] = lB[upk][upn*SGEMM_NLN + uln];
+      for (uint upm = 0; upm < SGEMM_NPM; ++upm) {
+        pA = lA[upk][ulm*SGEMM_NPM + upm];
+        for (uint upn = 0; upn < SGEMM_NPN; ++upn)
+          pC[upm][upn] += pA * pB[upn]; } }
+    gA += SGEMM_NPK*NM;
+    gB += SGEMM_NPK*NN; }
+
+#define lC lB
+  for (uint upm = 0; upm < SGEMM_NPM; ++upm) {
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (uint upn = 0; upn < SGEMM_NPN; ++upn)
+      lC[ulm][upn*SGEMM_NLN + uln] = pC[upm][upn];
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for (uint u = 0; u < SGEMM_NLM; u += SGEMM_NLM / SGEMM_NPN)
+      gC[(u + ulB2)*SGEMM_NPM*NN + upm*NN + ulB1] = lC[u + ulB2][ulB1]; } }
+)";
+
 const string code_compute_matM = R"(
 __kernel __attribute__((reqd_work_group_size(SGEMM_NL, SGEMM_NL*SGEMM_NLFM,
                                              1)))
@@ -753,55 +801,10 @@ void sgemm(__global const float *gA, __global const float *gB,
   uint ugn = get_group_id(0);
   uint ulm = get_local_id(1);
   uint uln = get_local_id(0);
-  uint ul  = ulm*SGEMM_NLN + uln;
-  uint ngk = NK / SGEMM_NPK;
-  gA += ugm*SGEMM_NLM;
-  gB += ugn*SGEMM_NLN;
-  gC += ugm*SGEMM_NLM*NN + ugn*SGEMM_NLN;
-
-  __local float lA[SGEMM_NPK][SGEMM_NLM]
-                   __attribute__((aligned(SIZE_ALIGN)));
-  __local float lB[SGEMM_NPK][SGEMM_NLN]
-                   __attribute__((aligned(SIZE_ALIGN)));
-  float pC[1][1];
-  float pB[1];
-  float pA;
-  for (uint upm = 0; upm < 1U; ++upm)
-    for (uint upn = 0; upn < 1U; ++upn) pC[upm][upn] = 0.0f;
-
-  uint ulA1 = ul % SGEMM_NLM;
-  uint ulA2 = ul / SGEMM_NLM;
-  uint ulA3 = SGEMM_NLN;
-  uint ulB1 = ul % SGEMM_NLN;
-  uint ulB2 = ul / SGEMM_NLN;
-  uint ulB3 = SGEMM_NLM;
-
-  for (uint ugk = 0; ugk < ngk; ++ugk) {
-    barrier(CLK_LOCAL_MEM_FENCE);
-    for (uint u = 0; u < SGEMM_NPK; u += ulA3)
-      lA[u + ulA2][ulA1] = gA[(u + ulA2)*NM + ulA1];
-    for (uint u = 0; u < SGEMM_NPK; u += ulB3)
-      lB[u + ulB2][ulB1] = gB[(u + ulB2)*NN + ulB1];
-    barrier(CLK_LOCAL_MEM_FENCE);
-
-    for (uint upk = 0; upk < SGEMM_NPK; ++upk) {
-      for (uint upn = 0; upn < 1U; ++upn)
-        pB[upn] = lB[upk][upn*SGEMM_NLN + uln];
-      for (uint upm = 0; upm < 1U; ++upm) {
-        pA = lA[upk][upm*SGEMM_NLM + ulm];
-        for (uint upn = 0; upn < 1U; ++upn)
-          pC[upm][upn] += pA * pB[upn]; } }
-    gA += SGEMM_NPK*NM;
-    gB += SGEMM_NPK*NN; }
-
-#define lC lB
-  for (uint upm = 0; upm < 1U; ++upm) {
-    barrier(CLK_LOCAL_MEM_FENCE);
-    for (uint upn = 0; upn < 1U; ++upn)
-      lC[ulm][upn*SGEMM_NLN + uln] = pC[upm][upn];
-    barrier(CLK_LOCAL_MEM_FENCE);
-    for (uint u = 0; u < SGEMM_NLM; u += ulB3)
-      gC[upm*SGEMM_NLM*NN + (u + ulB2)*NN + ulB1] = lC[u + ulB2][ulB1]; } }
+  gA += ugm*SGEMM_NLM*SGEMM_NPM;
+  gB += ugn*SGEMM_NLN*SGEMM_NPN;
+  gC += ugm*SGEMM_NLM*SGEMM_NPM*NN + ugn*SGEMM_NLN*SGEMM_NPN;
+  sgemm_child(gA, gB, gC, ulm, uln); }
 )";
 
 const string code_change_dim = R"(
@@ -943,7 +946,7 @@ gen_code_sgemm(uint nm0, uint nn0, uint nk0, const SgemmParam2 &param)
   str += "#define SGEMM_NPM  " + to_string(param.npm)  + "U\n";
   str += "#define SGEMM_NPN  " + to_string(param.npn)  + "U\n";
   str += "#define SGEMM_NPK  " + to_string(param.npk)  + "U\n";
-  str += code_sgemm;
+  str += code_sgemm_child + code_sgemm;
   return make_tuple(str, nm, nn, nk, nn / param.npn, nm / param.npm,
 		    param.nln, param.nlm); }
 
@@ -1315,12 +1318,6 @@ static double measure_sgemm(const OCL::Context &context,
   string str;
   tie(str, nm, nn, nk, size_g[0], size_g[1], size_l[0], size_l[1])
     = gen_code_sgemm(nm0, nn0, nk0, param);
-  std::cerr << "nm: " << nm << "\n";
-  std::cerr << "nn: " << nn << "\n";
-  std::cerr << "nk: " << nk << "\n";
-  std::cerr << "g0: " << size_g[0] << "\n";
-  std::cerr << "g1: " << size_g[1] << "\n";
-  std::cerr << str << endl;
   size_g[2] = size_l[2] = 1U;
   OCL::Kernel ker   = context.gen_program(str).gen_kernel("sgemm");
   OCL::Memory mem_a = gen_mem_init(context, nm * nk, 0.01f);
@@ -1375,52 +1372,31 @@ void ManageSgemm::start(const OCL::Device &device, const OCL::Context &context,
   assert(device.ok() && context.ok() && 0 < nm0 && 0 < nn0 && 0 < nk0);
   assert(0 < lda && 0 < ldb && 0 < ldc);
   deque<SgemmParam2> params, params_candi;
-  /*
-  uint wgmin, wgmax, nlstart, nlfmmax;
-  uint mmax = ceil_power2(nm0);
-  uint nmax = ceil_power2(nn0);
-  uint kmax = ceil_power2(nk0);
-  wgmax   = min(static_cast<uint>(device.gen_max_work_group_size()), 4096U);
-  wgmin   = max(mmax*nmax, 1U);
-  wgmin   = min(wgmin, 16U);
-  nlstart = min(mmax, nmax);
-  nlstart = min(nlstart, 4U);
-  mmax    = max(mmax, 64U / nmax);
-  if      (nmax <= 1U) nlfmmax = 128U;
-  else if (nmax <= 2U) nlfmmax =  32U;
-  else if (nmax <= 4U) nlfmmax =   8U;
-  else                 nlfmmax =   2U;
-  for (uint nl = nlstart; nl <= 16U; nl *= 2U)
-    for (uint nlfm = 1U; nlfm <= nlfmmax; nlfm *= 2U) {
-      if (nl*nl*nlfm < wgmin || wgmax < nl*nl*nlfm) continue;
-      for (uint npm = 1U; npm <= 16U; npm *= 2U)
-	for (uint npn = 1U; npn <= 16U; npn *= 2U) {
-	  if (256U < npm*npn) continue;
-	  if (nl < npm) continue;
-	  if (nl*nlfm < npn) continue;
-	  for (uint npk = 1U; npk <= min(4U, nl); npk *= 2U) {
-	    if (mmax < nl * nlfm * npm) continue;
-	    if (nmax < nl * npn) continue;
-	    if (kmax < nl * nlfm * npk) continue;
-	    params.emplace_back(false, nl, nlfm, npm, npn, npk); } } }
-  */
   uint wgmax = min(static_cast<uint>(device.gen_max_work_group_size()), 4096U);
   uint mmax  = ceil_power2(nm0);
   uint nmax  = ceil_power2(nn0);
   uint kmax  = ceil_power2(nk0);
+  bool is_m_larger = nn0 < nm0;
   for (uint nlm = min(mmax, 4U); nlm <= 16U; nlm *= 2U)
     for (uint nln = min(nmax, 4U); nln <= 16U; nln *= 2U) {
       if (wgmax < nlm*nln) continue;
-      for (uint npk = max(nlm, nln); npk <= max(nlm, nln) * 4U; npk *= 2U) {
-	// group area A: nlm*npk
-	// group area B: nln*npk
-	// group area C: nlm*nln
-	if (mmax < nlm) continue;
-	if (nmax < nln) continue;
-	if (kmax < npk) continue;
-	if (nlm*npk < nlm*nln) continue;
-	if (nln*npk < nlm*nln) continue;
-	params.emplace_back(false, nlm, nln, 1U, 1U, npk); } }
+      if (is_m_larger && nlm < nln) continue;
+      if (! is_m_larger && nln < nlm) continue;
+      for (uint npm = 1U; npm <= 16U; npm *= 2U)
+	for (uint npn = 1U; npn <= 16U; npn *= 2U) {
+	  if (is_m_larger && npm < npn) continue;
+	  if (! is_m_larger && npn < npm) continue;
+	  uint npk0 = max(nlm, nln/npm);
+	  for (uint npk = npk0; npk <= npk0 * 4U; npk *= 2U) {
+	    if (npk < nlm) continue;
+	    if (mmax < nlm*npm) continue;
+	    if (nmax < nln*npn) continue;
+	    if (kmax < npk) continue;
+	    if (nln < npm) continue;
+	    if (nlm < npn) continue;
+	    if (npm*npk < nln) continue;
+	    if (npn*npk < nlm) continue;
+	    params.emplace_back(false, nlm, nln, npm, npn, npk); } } }
 
   double time = DBL_MAX;
   while (! params.empty()) {
@@ -1430,7 +1406,6 @@ void ManageSgemm::start(const OCL::Device &device, const OCL::Context &context,
     bool flag_error = false;
     try { elapsed = measure_sgemm(context, param, nm0, nn0, nk0, 1U); }
     catch (const ErrInt &e) {
-      cout << e.what() << endl;
       if (! strstr(e.what(), msg_opencl_error)) throw;
       elapsed = DBL_MAX; flag_error = true; }
     catch (...) { throw; }
