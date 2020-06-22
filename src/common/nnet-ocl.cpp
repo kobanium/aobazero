@@ -683,8 +683,6 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
 const string code_sgemm_child = R"(
 void sgemm_child(__global const float *gA, __global const float *gB,
                  __global float *gC, uint ulm, uint uln) {
-  uint ul  = ulm*SGEMM_NLN + uln;
-  uint ngk = NK / SGEMM_NPK;
 
   __local float lA[SGEMM_NPK][SGEMM_NLM*SGEMM_NPM]
                   __attribute__((aligned(SIZE_ALIGN)));
@@ -696,11 +694,12 @@ void sgemm_child(__global const float *gA, __global const float *gB,
   for (uint upm = 0; upm < SGEMM_NPM; ++upm)
     for (uint upn = 0; upn < SGEMM_NPN; ++upn) pC[upm][upn] = 0.0f;
 
+  uint ul = ulm*SGEMM_NLN + uln;
   uint ulA1 = ul % (SGEMM_NLM*SGEMM_NPM);
   uint ulA2 = ul / (SGEMM_NLM*SGEMM_NPM);
   uint ulB1 = ul % (SGEMM_NLN*SGEMM_NPN);
   uint ulB2 = ul / (SGEMM_NLN*SGEMM_NPN);
-  for (uint ugk = 0; ugk < ngk; ++ugk) {
+  for (uint ugk = 0; ugk < NK / SGEMM_NPK; ++ugk) {
     barrier(CLK_LOCAL_MEM_FENCE);
     for (uint u = 0; u < SGEMM_NPK; u += SGEMM_NLN / SGEMM_NPM)
       lA[u + ulA2][ulA1] = gA[(u + ulA2)*NM + ulA1];
@@ -1386,14 +1385,14 @@ void ManageSgemm::start(const OCL::Device &device, const OCL::Context &context,
 	for (uint npn = 1U; npn <= 16U; npn *= 2U) {
 	  if (is_m_larger && npm < npn) continue;
 	  if (! is_m_larger && npn < npm) continue;
-	  uint npk0 = max(nlm, nln/npm);
-	  for (uint npk = npk0; npk <= npk0 * 4U; npk *= 2U) {
+	  if (mmax < nlm*npm) continue;
+	  if (nmax < nln*npn) continue;
+	  if (nln < npm) continue;
+	  if (nlm < npn) continue;
+	  uint npk0 = nlm;
+	  for (uint npk = npk0; npk <= npk0 * 16U; npk *= 2U) {
 	    if (npk < nlm) continue;
-	    if (mmax < nlm*npm) continue;
-	    if (nmax < nln*npn) continue;
 	    if (kmax < npk) continue;
-	    if (nln < npm) continue;
-	    if (nlm < npn) continue;
 	    if (npm*npk < nln) continue;
 	    if (npn*npk < nlm) continue;
 	    params.emplace_back(false, nlm, nln, npm, npn, npk); } } }
