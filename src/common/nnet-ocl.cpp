@@ -434,8 +434,7 @@ void compute_matA_BNReLU(__global const void *matM,
   barrier(CLK_LOCAL_MEM_FENCE);
   for (uint u = 0; u < NTILE; ++u)
     fout[ch*NN_OUT + (ug*NBWS + ub1)*SIZE_PLANE + u*NTILE + utile]
-      = flout[ub1*SIZE_PLANE + u*NTILE + utile];
-}
+      = flout[ub1*SIZE_PLANE + u*NTILE + utile]; }
 )";
 
 const string code_compute_matV = R"(
