@@ -2005,10 +2005,12 @@ string NNetOCL::reset(uint maxsize_batch,
 
   bool use_wmma = false;
   OCL::Context context = device.gen_context();
-  lines << "  Half Precision:       " << (use_half ? "Yes\n" : "No\n");
+  //lines << "  Half Precision:       " << (use_half ? "Yes\n" : "No\n");
   if (use_half) {
     use_wmma = test_wmma(context);
+    if (!use_wmma) use_half = false;
     lines << "  Wmma Support:         " << (use_wmma ? "Yes\n" : "No\n"); }
+
 
   for (uint u = 0; u < NNAux::nslot; ++u) _queue_a[u] = context.gen_queue();
 
