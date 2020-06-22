@@ -55,6 +55,7 @@ struct SgemmParam {
     if (do_wmma) b = (b && ntm <= p.ntm && ntn <= p.ntn);
     return b; }
   bool ok() const noexcept {
+    if (!do_half && do_wmma) return true;
     bool b = (0.0 <= time && 0 < nlm && 0 < nln && 0 < npm && 0 < npn
 	      && 0 < npk);
     if (do_wmma) b = (b && 0 < ntm && 0 < ntn);
