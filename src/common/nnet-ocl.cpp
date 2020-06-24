@@ -693,18 +693,18 @@ void sgemm_child(__global const half *gA, __global const half *gB,
     for (uint upn = 0; upn < SGEMM_NPN; ++upn) pC[upm][upn] = 0.0f;
 
   uint ul = ulm*SGEMM_NLN + uln;
-  uint ulA1 = ul % ((SGEMM_NLM*SGEMM_NPM)/2U);
+  uint ulA1 = ul % (((SGEMM_NLM*SGEMM_NPM)/2U)*2U);
   uint ulA2 = ul / ((SGEMM_NLM*SGEMM_NPM)/2U);
-  uint ulB1 = ul % ((SGEMM_NLN*SGEMM_NPN)/2U);
+  uint ulB1 = ul % (((SGEMM_NLN*SGEMM_NPN)/2U)*2U);
   uint ulB2 = ul / ((SGEMM_NLN*SGEMM_NPN)/2U);
   for (uint ugk = 0; ugk < NK / SGEMM_NPK; ++ugk) {
     barrier(CLK_LOCAL_MEM_FENCE);
     for (uint u = 0; u < SGEMM_NPK; u += (2U*SGEMM_NLN) / SGEMM_NPM) {
-      lA[u + ulA2][2U*ulA1]      = vload_half((u + ulA2)*NM + 2U*ulA1, gA);
-      lA[u + ulA2][2U*ulA1 + 1U] = vload_half((u + ulA2)*NM + 2U*ulA1 + 1U, gA); }
+      lA[u + ulA2][ulA1]      = vload_half((u + ulA2)*NM + ulA1, gA);
+      lA[u + ulA2][ulA1 + 1U] = vload_half((u + ulA2)*NM + ulA1 + 1U, gA); }
     for (uint u = 0; u < SGEMM_NPK; u += (2U*SGEMM_NLM) / SGEMM_NPN) {
-      lB[u + ulB2][2U*ulB1]      = vload_half((u + ulB2)*NN + 2U*ulB1, gB);
-      lB[u + ulB2][2U*ulB1 + 1U] = vload_half((u + ulB2)*NN + 2U*ulB1 + 1U, gB); }
+      lB[u + ulB2][ulB1]      = vload_half((u + ulB2)*NN + ulB1, gB);
+      lB[u + ulB2][ulB1 + 1U] = vload_half((u + ulB2)*NN + ulB1 + 1U, gB); }
     barrier(CLK_LOCAL_MEM_FENCE);
 
     for (uint upk = 0; upk < SGEMM_NPK; ++upk) {
