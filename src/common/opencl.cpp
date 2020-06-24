@@ -491,7 +491,8 @@ Platform OCL::Device::gen_platform() const {
 string OCL::Device::gen_type() const {
   auto type = _impl->gen_info<cl_device_type>(CL_DEVICE_TYPE);
   auto func = [](string &str, const char *p) {
-    if (str.size()) str += " "; str += p; };
+    if (str.size()) str += " ";
+    str += p; };
   string str;
   if (type & CL_DEVICE_TYPE_CPU)         func(str, "CPU");
   if (type & CL_DEVICE_TYPE_GPU)         func(str, "GPU");

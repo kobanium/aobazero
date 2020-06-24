@@ -680,7 +680,7 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
 )";
 
 const string code_sgemm_child_half = R"(
-void sgemm_child(__global const uint *gA, __global const uint *gB,
+void sgemm_child(__global const half *gA, __global const half *gB,
                  __global float *gC, uint ulm, uint uln) {
   __local float lA[SGEMM_NPK][SGEMM_NLM*SGEMM_NPM]
                   __attribute__((aligned(SIZE_ALIGN)));
@@ -700,13 +700,11 @@ void sgemm_child(__global const uint *gA, __global const uint *gB,
   for (uint ugk = 0; ugk < NK / SGEMM_NPK; ++ugk) {
     barrier(CLK_LOCAL_MEM_FENCE);
     for (uint u = 0; u < SGEMM_NPK; u += (2U*SGEMM_NLN) / SGEMM_NPM) {
-      uint v = gA[(u + ulA2)*(NM/2U) + ulA1];
-      lA[u + ulA2][2U*ulA1]      = vload_half(0, (const half *)(&v));
-      lA[u + ulA2][2U*ulA1 + 1U] = vload_half(1, (const half *)(&v)); }
+      lA[u + ulA2][2U*ulA1]      = vload_half((u + ulA2)*NM + 2U*ulA1, gA);
+      lA[u + ulA2][2U*ulA1 + 1U] = vload_half((u + ulA2)*NM + 2U*ulA1 + 1U, gA); }
     for (uint u = 0; u < SGEMM_NPK; u += (2U*SGEMM_NLM) / SGEMM_NPN) {
-      uint v = gB[(u + ulB2)*(NN/2U) + ulB1];
-      lB[u + ulB2][2U*ulB1]      = vload_half(0, (const half *)(&v));
-      lB[u + ulB2][2U*ulB1 + 1U] = vload_half(1, (const half *)(&v)); }
+      lB[u + ulB2][2U*ulB1]      = vload_half((u + ulB2)*NN + 2U*ulB1, gB);
+      lB[u + ulB2][2U*ulB1 + 1U] = vload_half((u + ulB2)*NN + 2U*ulB1 + 1U, gB); }
     barrier(CLK_LOCAL_MEM_FENCE);
 
     for (uint upk = 0; upk < SGEMM_NPK; ++upk) {
@@ -716,8 +714,8 @@ void sgemm_child(__global const uint *gA, __global const uint *gB,
         pA = lA[upk][ulm*SGEMM_NPM + upm];
         for (uint upn = 0; upn < SGEMM_NPN; ++upn)
           pC[upm][upn] += pA * pB[upn]; } }
-    gA += (SGEMM_NPK*NM)/2U;
-    gB += (SGEMM_NPK*NN)/2U; }
+    gA += SGEMM_NPK*NM;
+    gB += SGEMM_NPK*NN; }
 
   for (uint upm = 0; upm < SGEMM_NPM; ++upm)
     for (uint upn = 0; upn < SGEMM_NPN; ++upn)
@@ -726,15 +724,15 @@ void sgemm_child(__global const uint *gA, __global const uint *gB,
 
 const string code_compute_matM_half = R"(
 __kernel __attribute__((reqd_work_group_size(SGEMM_NLN,SGEMM_NLM,1)))
-void compute_matM(__global const uint *gA, __global const uint *gB,
+void compute_matM(__global const half *gA, __global const half *gB,
                   __global float *gC) {
   uint ub  = get_global_id(2);
   uint ugm = get_group_id(1);
   uint ugn = get_group_id(0);
   uint ulm = get_local_id(1);
   uint uln = get_local_id(0);
-  gA += ub*(OFFA/2U) + ugm*((SGEMM_NLM*SGEMM_NPM)/2U);
-  gB += ub*(OFFB/2U) + ugn*((SGEMM_NLN*SGEMM_NPN)/2U);
+  gA += ub*OFFA + ugm*SGEMM_NLM*SGEMM_NPM;
+  gB += ub*OFFB + ugn*SGEMM_NLN*SGEMM_NPN;
   gC += ub*OFFC + ugm*SGEMM_NLM*SGEMM_NPM*NN + ugn*SGEMM_NLN*SGEMM_NPN;
   sgemm_child(gA, gB, gC, ulm, uln); }
 )";
@@ -2005,12 +2003,10 @@ string NNetOCL::reset(uint maxsize_batch,
 
   bool use_wmma = false;
   OCL::Context context = device.gen_context();
-  //lines << "  Half Precision:       " << (use_half ? "Yes\n" : "No\n");
+  lines << "  Half Precision:       " << (use_half ? "Yes\n" : "No\n");
   if (use_half) {
     use_wmma = test_wmma(context);
-    if (!use_wmma) use_half = false;
     lines << "  Wmma Support:         " << (use_wmma ? "Yes\n" : "No\n"); }
-
 
   for (uint u = 0; u < NNAux::nslot; ++u) _queue_a[u] = context.gen_queue();
 
