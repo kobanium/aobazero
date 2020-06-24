@@ -693,9 +693,9 @@ void sgemm_child(__global const half *gA, __global const half *gB,
     for (uint upn = 0; upn < SGEMM_NPN; ++upn) pC[upm][upn] = 0.0f;
 
   uint ul = ulm*SGEMM_NLN + uln;
-  uint ulA1 = ul % (((SGEMM_NLM*SGEMM_NPM)/2U)*2U);
+  uint ulA1 = (ul % ((SGEMM_NLM*SGEMM_NPM)/2U))*2U;
   uint ulA2 = ul / ((SGEMM_NLM*SGEMM_NPM)/2U);
-  uint ulB1 = ul % (((SGEMM_NLN*SGEMM_NPN)/2U)*2U);
+  uint ulB1 = (ul % ((SGEMM_NLN*SGEMM_NPN)/2U))*2U;
   uint ulB2 = ul / ((SGEMM_NLN*SGEMM_NPN)/2U);
   for (uint ugk = 0; ugk < NK / SGEMM_NPK; ++ugk) {
     barrier(CLK_LOCAL_MEM_FENCE);
