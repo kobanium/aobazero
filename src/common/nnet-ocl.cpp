@@ -880,10 +880,7 @@ gen_code_compute_matM(uint nm0, uint nn0, uint nk0, const SgemmParam &param)
     uint nm = NNAux::ceil_multi(nm0, param.nlm * param.npm * param.ntm);
     uint nn = NNAux::ceil_multi(nn0, param.nln * param.npn * param.ntn);
     uint nk = NNAux::ceil_multi(nk0, param.npk * ntk);
-    string str, str_tdm;
-    if (param.ntm ==  8) str_tdm = R"(".m8n32k16")";
-    if (param.ntm == 16) str_tdm = R"(".m16n16k16")";
-    if (param.ntm == 32) str_tdm = R"(".m32n8k16")";
+    string str;
     str += "#define WMMA_ACCUMU16 " + to_string(WMMA_ACCUMU16)  + "\n";
     str += "#define NM            " + to_string(nm)             + "U\n";
     str += "#define NN            " + to_string(nn)             + "U\n";
@@ -907,7 +904,7 @@ gen_code_compute_matM(uint nm0, uint nn0, uint nk0, const SgemmParam &param)
     str += "#define SGEMM_NLTN    (SGEMM_NLN * SGEMM_NTN)\n";
     str += "#define SGEMM_NLPTM   (SGEMM_NLM * SGEMM_NPM * SGEMM_NTM)\n";
     str += "#define SGEMM_NLPTN   (SGEMM_NLN * SGEMM_NPN * SGEMM_NTN)\n";
-    str += "#define SGEMM_TDM     " + str_tdm + "\n";
+    str += "#define SGEMM_TDM     \".m16n16k16\"\n";
     str += code_compute_matM_wmma;
     return make_tuple(str, nm, nn, nk,
 		      (nn / (param.npn*param.ntn)) * size_wrap_wmma,
@@ -1110,27 +1107,22 @@ static SgemmParam tune_compute_matM(bool use_half, bool use_wmma,
   uint wgmax = min(static_cast<uint>(device.gen_max_work_group_size()), 4096U);
   bool is_m_larger = nn0 < nm0;
   if (use_wmma) {
-    mmax = max(mmax, 8U);
-    nmax = max(nmax, 8U);
+    mmax = max(mmax, 16U);
+    nmax = max(nmax, 16U);
     kmax = max(kmax, 16U);
-    if      (nmax == 8U)  mmax = max(mmax, 32U);
-    else if (nmax == 16U) mmax = max(mmax, 16U);
-    uint ntm, ntn, ntk = 16U;
+    uint ntk = 16U, ntm = 16U, ntn = 16U;
     for (uint nlm = 1U; nlm <= 2U; nlm *= 2U)
       for (uint nln = 1U; nln <= 2U; nln *= 2U)
 	for (uint npm = 1U; npm <= 4U; npm *= 2U)
 	  for (uint npn = 1U; npn <= 4U; npn *= 2U)
-	    for (uint npk = 1U; npk <= 2U; npk *= 2U)
-	      for (auto t : { /*make_tuple(32U, 8U),*/
-		  make_tuple(16U, 16U) /*make_tuple(8U, 32U)*/ }) {
-		tie(ntm, ntn) = t;
-		if (mmax < nlm*npm*ntm) continue;
-		if (nmax < nln*npn*ntn) continue;
-		if (kmax < npk*ntk) continue;
-		if (npn*npk < nlm) continue;
-		if (npm*npk < nln) continue;
-		params.emplace_back(true, true,
-				    nlm, nln, npm, npn, npk, ntm, ntn); } }
+	    for (uint npk = min(nlm, nln); npk <= max(nlm, nln); npk *= 2U) {
+	      if (mmax < nlm*npm*ntm) continue;
+	      if (nmax < nln*npn*ntn) continue;
+	      if (kmax < npk*ntk) continue;
+	      if (npn*npk < nlm) continue;
+	      if (npm*npk < nln) continue;
+	      params.emplace_back(true, true,
+				  nlm, nln, npm, npn, npk, ntm, ntn); } }
   else if (use_half) {
     mmax = max(mmax, 2U);
     nmax = max(nmax, 2U);
@@ -1149,7 +1141,8 @@ static SgemmParam tune_compute_matM(bool use_half, bool use_wmma,
 	    if (2U*nln < npm) continue;
 	    if (2U*nlm < npn) continue;
 	    uint npk0 = max(2U, max(2U*nlm/npn, 2U*nln/npm));
-	    for (uint npk = npk0; npk <= npk0 * 4U; npk *= 2U) {
+	    uint npk1 = max(2U, max(nlm, nln));
+	    for (uint npk = npk0; npk <= npk1; npk *= 2U) {
 	      if (npk < nlm) continue;
 	      if (kmax < npk) continue;
 	      if (npm*npk < 2U*nln) continue;
@@ -1170,7 +1163,8 @@ static SgemmParam tune_compute_matM(bool use_half, bool use_wmma,
 	    if (nln < npm) continue;
 	    if (nlm < npn) continue;
 	    uint npk0 = max(nlm, nln/npm);
-	    for (uint npk = npk0; npk <= npk0 * 4U; npk *= 2U) {
+	    uint npk1 = max(4U, max(nlm, nln));
+	    for (uint npk = npk0; npk <= npk1; npk *= 2U) {
 	      if (npk < nlm) continue;
 	      if (kmax < npk) continue;
 	      if (npm*npk < nln) continue;
@@ -1418,13 +1412,14 @@ void ManageSgemm::start(const OCL::Device &device, const OCL::Context &context,
 	  if (nln < npm) continue;
 	  if (nlm < npn) continue;
 	  uint npk0 = max(nlm, nln/npm);
-	  for (uint npk = npk0; npk <= npk0 * 4U; npk *= 2U) {
+	  uint npk1 = max(4U, max(nlm, nln));
+	  for (uint npk = npk0; npk <= npk1; npk *= 2U) {
 	    if (npk < nlm) continue;
 	    if (kmax < npk) continue;
 	    if (npm*npk < nln) continue;
 	    if (npn*npk < nlm) continue;
 	    params.emplace_back(false, nlm, nln, npm, npn, npk); } } }
-
+  
   double time = DBL_MAX;
   while (! params.empty()) {
     SgemmParam param = params.front();
@@ -2003,7 +1998,8 @@ string NNetOCL::reset(uint maxsize_batch,
 
   bool use_wmma = false;
   OCL::Context context = device.gen_context();
-  lines << "  Half Precision:       " << (use_half ? "Yes\n" : "No\n");
+  lines << "  Half Precision:       "
+	<< (use_half ? "Partially Used\n" : "Unused\n");
   if (use_half) {
     use_wmma = test_wmma(context);
     lines << "  Wmma Support:         " << (use_wmma ? "Yes\n" : "No\n"); }
