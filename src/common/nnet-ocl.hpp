@@ -38,29 +38,28 @@ struct SgemmParam {
   using uint = unsigned int;
   double time;
   bool do_half, do_wmma;
-  uint nl, nlfm, nlm, nln, npm, npn, npk, ntm, ntn;
+  uint nlm, nln, npm, npn, npk, ntm, ntn;
   SgemmParam() noexcept {}
-  SgemmParam(bool do_half_, uint nl_, uint nlfm_, uint npm_, uint npn_,
+  SgemmParam(bool do_half_, uint nlm_, uint nln_, uint npm_, uint npn_,
 	     uint npk_) noexcept :
-  time(0.0), do_half(do_half_), do_wmma(false), nl(nl_), nlfm(nlfm_),
+  time(0.0), do_half(do_half_), do_wmma(false), nlm(nlm_), nln(nln_),
     npm(npm_), npn(npn_), npk(npk_) {}
   SgemmParam(bool do_half_, bool do_wmma_, uint nlm_, uint nln_, uint npm_,
-             uint npn_, uint npk_, uint ntm_, uint ntn_) noexcept :
+	     uint npn_, uint npk_, uint ntm_, uint ntn_) noexcept :
   time(0.0), do_half(do_half_), do_wmma(do_wmma_), nlm(nlm_), nln(nln_),
     npm(npm_), npn(npn_), npk(npk_), ntm(ntm_), ntn(ntn_) {}
   std::string gen_info() const noexcept;
   bool operator<=(const SgemmParam &p) const noexcept {
-    if (do_wmma) {
-      return (nlm <= p.nlm && nln <= p.nln && npm <= p.npm && npn <= p.npn
-	      && npk <= p.npk && ntm <= p.ntm && ntn <= p.ntn); }
-    return (nl <= p.nl && nlfm <= p.nlfm && npm <= p.npm && npn <= p.npn
-	    && npk <= p.npk); }
+    bool b = (nlm <= p.nlm && nln <= p.nln && npm <= p.npm && npn <= p.npn
+	      && npk <= p.npk);
+    if (do_wmma) b = (b && ntm <= p.ntm && ntn <= p.ntn);
+    return b; }
   bool ok() const noexcept {
-    if (do_wmma) {
-      return (0.0 <= time && 0 < nlm && 0 < nln && 0 < npm && 0 < npn
-	      && 0 < npk && 0 < ntm && 0 < ntn); }
-    return (0.0 <= time && 0 < nl && 0 < nlfm && 0 < npm && 0 < npn
-	    && 0 < npk); }
+    if (!do_half && do_wmma) return true;
+    bool b = (0.0 <= time && 0 < nlm && 0 < nln && 0 < npm && 0 < npn
+	      && 0 < npk);
+    if (do_wmma) b = (b && 0 < ntm && 0 < ntn);
+    return b; }
 };
 
 class ManageComputeMatM {
@@ -113,7 +112,7 @@ public:
   template <typename M>
   void set_array_c_chg_dim(const OCL::Context &context, const M mem[])
     noexcept;
-  std::string gen_info() const noexcept;
+  std::string gen_info() const noexcept { return _param.gen_info(); }
 };
 
 class ManageComputeMatV {

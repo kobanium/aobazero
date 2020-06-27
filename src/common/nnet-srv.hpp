@@ -19,6 +19,7 @@ public:
 
 class NNetService {
   using uint = unsigned int;
+  NNet::Impl _impl;
   OSI::Semaphore _sem_service_lock;
   OSI::Semaphore _sem_service;
   OSI::Semaphore _sem_ipc[NNAux::maxnum_nipc];
@@ -28,18 +29,17 @@ class NNetService {
   std::thread _th_worker_srv;
   std::thread _th_worker_push;
   std::thread _th_worker_wait;
-  std::condition_variable _cv_nnreset;
   std::condition_variable _cv_entries_push;
   std::condition_variable _cv_entries_wait;
-  std::mutex _m_nnreset;
+  std::mutex _m_if;
+  std::mutex _m_srv;
   std::mutex _m_entries;
   std::deque<std::unique_ptr<class Entry>> _entries_pool;
   std::deque<std::unique_ptr<class Entry>> _entries_push;
   std::deque<std::unique_ptr<class Entry>> _entries_wait;
-  bool _flag_cv_nnreset, _flag_quit;
+  bool _flag_cv_srv, _flag_quit;
   uint _nnet_id, _nipc, _size_batch, _device_id, _use_half, _thread_num;
   FName _fname;
-  NNet::Impl _impl;
   void worker_srv() noexcept;
   void worker_wait() noexcept;
   void worker_push() noexcept;
@@ -52,4 +52,5 @@ public:
 	      const FName &fname) noexcept;
   ~NNetService() noexcept;
   void nnreset(const FName &fname) noexcept;
+  void wait() noexcept;
 };

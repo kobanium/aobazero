@@ -14,7 +14,8 @@ class PlayManager {
   std::queue<std::string> _moves_eid0;
   std::vector<class Device> _devices;
   std::vector<std::unique_ptr<class USIEngine>> _engines;
-  uint _max_csa, _ngen_records, _verbose_eng;
+  int64_t _wid;
+  uint _max_csa, _ngen_records, _num_thinking, _verbose_eng;
   FName _cname, _logname;
   PlayManager() noexcept;
   ~PlayManager() noexcept;
@@ -24,15 +25,15 @@ class PlayManager {
 public:
   static PlayManager & get() noexcept;
   void start(const char *cname, const char *dlog,
-	     const std::vector<std::string> &devices, uint verbose_eng)
-    noexcept;
-  void engine_start(const FNameID &wfname, uint64_t crc64) noexcept;
-  void engine_terminate() noexcept;
-  std::deque<std::string> manage_play(bool has_conn) noexcept;
+	     const std::vector<std::string> &devices, uint verbose_eng,
+	     const FNameID &wfname, uint64_t crc64) noexcept;
   void end() noexcept;
+  std::deque<std::string> manage_play(bool has_conn, const FNameID &wfname,
+				      uint64_t crc64) noexcept;
   bool get_moves_eid0(std::string &move) noexcept;
   uint get_nengine() const noexcept { return _engines.size(); }
   uint get_ngen_records() const noexcept { return _ngen_records; };
+  uint get_nthinking() const noexcept { return _num_thinking; }
   uint get_eid(uint u) const noexcept;
   uint get_nmove(uint u) const noexcept;
   int get_did(uint u) const noexcept;

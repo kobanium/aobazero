@@ -171,6 +171,8 @@ void NNetService::worker_srv() noexcept {
       std::cerr << s << std::endl;
       continue; }
 
+    if (type == SrvType::NOP) { _m_srv.unlock(); continue; }
+
     if (type == SrvType::NNReset) {
       FName fn;
       lock_guard<mutex> lock_push(_m_entries);
@@ -187,11 +189,8 @@ void NNetService::worker_srv() noexcept {
 	_sem_service_lock.inc();
 	if (0 < njob) die(ERR_INT("Internal Error"));
 
-	{
-	  lock_guard<mutex> lock(_m_nnreset);
-	  _flag_cv_nnreset = true;
-	  fn = _fname; }
-	_cv_nnreset.notify_one();
+	fn = _fname;
+	_m_srv.unlock();
 	
 	static_cast<NNetCPU *>(_pnnet.get())->reset(_size_batch,
 						    NNAux::read(fn),
@@ -199,7 +198,8 @@ void NNetService::worker_srv() noexcept {
 #else
 	die(ERR_INT("No CPU BLAS support"));
 #endif
-      } else if (_impl == NNet::opencl) {
+      }
+      else if (_impl == NNet::opencl) {
 #if defined(USE_OPENCL_AOBA)
 	_pnnet.reset(new NNetOCL);
 	_sem_service_lock.dec_wait();
@@ -209,11 +209,9 @@ void NNetService::worker_srv() noexcept {
 	_sem_service_lock.inc();
 	if (0 < njob) die(ERR_INT("Internal Error"));
 	
-	{
-	  lock_guard<mutex> lock(_m_nnreset);
-	  _flag_cv_nnreset = true;
-	  fn = _fname; }
-	_cv_nnreset.notify_one();
+	fn = _fname;
+	_m_srv.unlock();
+
 	string s("Tuning feed-forward engine of device ");
 	s += to_string(static_cast<int>(_device_id)) + string(" for ");
 	s += string(fn.get_fname()) + string("\n");
@@ -255,12 +253,26 @@ void NNetService::worker_srv() noexcept {
 
     die(ERR_INT("INTERNAL ERROR")); } }
 
+void NNetService::wait() noexcept {
+  lock_guard<mutex> lock(_m_if);
+  assert(_mmap_service.ok());
+  auto p = static_cast<SharedService *>(_mmap_service());
+
+  _sem_service_lock.dec_wait();
+  assert(p->njob <= NNAux::maxnum_nipc);
+  p->jobs[p->njob].id   = NNAux::maxnum_nipc;
+  p->jobs[p->njob].type = SrvType::NOP;
+  p->njob += 1U;
+  _sem_service_lock.inc();
+  _sem_service.inc();
+  _m_srv.lock(); }
+
 void NNetService::nnreset(const FName &fname) noexcept {
+  lock_guard<mutex> lock(_m_if);
   assert(_mmap_service.ok() && fname.ok());
   auto p = static_cast<SharedService *>(_mmap_service());
   assert(p && _sem_service.ok() && _sem_service_lock.ok());
 
-  unique_lock<mutex> lock(_m_nnreset);
   _fname = fname;
   _sem_service_lock.dec_wait();
   assert(p->njob <= NNAux::maxnum_nipc);
@@ -269,16 +281,13 @@ void NNetService::nnreset(const FName &fname) noexcept {
   p->njob += 1U;
   _sem_service_lock.inc();
   _sem_service.inc();
-
-  _cv_nnreset.wait(lock, [&]{ return _flag_cv_nnreset; });
-  _flag_cv_nnreset = false;
-  lock.unlock(); }
+  _m_srv.lock(); }
 
 NNetService::NNetService(NNet::Impl impl, uint nnet_id, uint nipc,
 			 uint size_batch, uint device_id, uint use_half,
 			 uint thread_num) noexcept
-: _impl(impl), _flag_cv_nnreset(false), _flag_quit(false), _nnet_id(nnet_id),
-  _nipc(nipc), _size_batch(size_batch), _device_id(device_id),
+: _impl(impl), _flag_quit(false), _nnet_id(nnet_id), _nipc(nipc),
+  _size_batch(size_batch), _device_id(device_id),
   _use_half(use_half), _thread_num(thread_num) {
   if (NNAux::maxnum_nnet <= nnet_id) die(ERR_INT("too many nnets"));
   if (NNAux::maxnum_nipc < nipc)     die(ERR_INT("too many processes"));
@@ -301,6 +310,7 @@ NNetService::NNetService(NNet::Impl impl, uint nnet_id, uint nipc,
     sprintf(fn, "%s.%07u.%03u.%03u", Param::name_mmap_nnet, pid, nnet_id, u);
     _mmap_ipc[u].open(fn, true, sizeof(SharedIPC)); }
 
+  _m_srv.lock();
   _th_worker_srv  = thread(&NNetService::worker_srv,  this);
   _th_worker_push = thread(&NNetService::worker_push, this);
   _th_worker_wait = thread(&NNetService::worker_wait, this); }
@@ -312,6 +322,7 @@ NNetService(impl, nnet_id, nipc, size_batch, device_id, use_half, thread_num) {
   nnreset(fname); }
 
 NNetService::~NNetService() noexcept {
+  lock_guard<mutex> guard(_m_if);
   assert(_mmap_service.ok());
   auto p = static_cast<SharedService *>(_mmap_service());
   assert(p && _sem_service.ok() && _sem_service_lock.ok());
