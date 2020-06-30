@@ -1,6 +1,7 @@
 CXXFLAGS += -std=c++11 -Wextra -O2 -march=native -mtune=native
 CPPFLAGS += -MMD -MP -Isrc/common -DNDEBUG -DUSE_SSE4
-LDFLAGS  += -llzma -lpthread -lOpenCL
+#LDFLAGS  += -llzma -lpthread -lOpenCL
+LDFLAGS  += -llzma -lpthread -framework OpenCL
 
 TARGETS        := bin/aobaz bin/autousi bin/server bin/gencode bin/playshogi bin/crc64 bin/extract bin/ocldevs bin/net-test
 AUTOUSI_OBJS   := src/autousi/autousi.o src/autousi/client.o src/autousi/pipe.o src/common/iobase.o src/common/option.o src/common/jqueue.o src/common/xzi.o src/common/err.o src/common/shogibase.o src/common/osi.o

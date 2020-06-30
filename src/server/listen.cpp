@@ -157,11 +157,21 @@ public:
 	return; }
       die(ERR_CLL("stat() failed")); }
     
+#if defined(__APPLE__) || defined(__NetBSD__) 
+    if (_size == sb.st_size
+	&& _mtim.tv_sec == sb.st_mtimespec.tv_sec
+	&& _mtim.tv_nsec == sb.st_mtimespec.tv_nsec) return;
+#else
     if (_size == sb.st_size
 	&& _mtim.tv_sec == sb.st_mtim.tv_sec
 	&& _mtim.tv_nsec == sb.st_mtim.tv_nsec) return;
+#endif
     _size = sb.st_size;
+#if defined(__APPLE__) || defined(__NetBSD__) 
+    _mtim = sb.st_mtimespec;
+#else
     _mtim = sb.st_mtim;
+#endif
     
     _set.clear();
     ifstream ifs(_fname.get_fname());
@@ -195,7 +205,12 @@ public:
     struct stat sb;
     if (stat(_fname.get_fname(), &sb) < 0) die(ERR_CLL("stat() failed"));
     _size = sb.st_size;
-    _mtim = sb.st_mtim; }
+#if defined(__APPLE__) || defined(__NetBSD__) 
+    _mtim = sb.st_mtimespec;
+#else
+    _mtim = sb.st_mtim;
+#endif
+    }
 };
 
 ssize_t Listen::send_wrap(const Peer &peer, const void *buf, size_t len,
