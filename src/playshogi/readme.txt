@@ -17,8 +17,8 @@ playshogiは2つのusiプログラム同士を対戦させます。
 AobaZero同士を対戦させる場合。800局。互角定跡集を400局使って先後交互に。"-0"が先手です。
 ./bin/playshogi -rsbm 800 -0 "./bin/aobaz -p 100 -w ./weight/w1198.txt" -1 "./bin/aobaz -p 100 -w ./weight/w1198.txt" >> w1198_p100_vs_w1198_p100.csa
 
-AobaZero(1手800playout)とKristallweizen(1手200kノード、1スレッド、定跡なし)を対戦させる場合。プロセス間バッチ利用。weightの指定はplayshogi、aobaz、同じものを指定してください(内部で時々GPUの計算とCPUの計算の一致を確認するため)。
-./bin/playshogi -rsbm 600 -B 7 -P 18 -U 0 -c /bin/bash -W ./weight/w1198.txt -0 "./bin/aobaz -p 800 -e 0 -w ./weight/w1198.txt" -1 "~/Kristallweizen/yane483_nnue_avx2 usi , isready , setoption name BookMoves value 0 , setoption Threads value 1 , setoption NodesLimit value 200000" >> w1198_p800_vs_200k.csa
+AobaZero(1手800playout)とKristallweizen(1手200kノード、1スレッド、定跡なし)を対戦させる場合。プロセス間バッチ利用。HALF利用。weightの指定はplayshogi、aobaz、同じものを指定してください(内部で時々GPUの計算とCPUの計算の一致を確認するため)。
+./bin/playshogi -rsbm 600 -B 7 -P 18 -U 0 -H 1 -c /bin/bash -W ./weight/w1198.txt -0 "./bin/aobaz -p 800 -e 0 -w ./weight/w1198.txt" -1 "~/Kristallweizen/yane483_nnue_avx2 usi , isready , setoption name BookMoves value 0 , setoption Threads value 1 , setoption NodesLimit value 200000" >> w1198_p800_vs_200k.csa
 
 ※ 注意
 ubuntu 16だと "-c /bin/bash" を付けないとAobaZeroのプロセス間バッチは動作しません。
