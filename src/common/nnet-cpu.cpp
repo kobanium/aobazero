@@ -1,11 +1,15 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
+#include "err.hpp"
+#include "iobase.hpp"
+#include "nnet-cpu.hpp"
 #if ! defined(USE_OPENBLAS) && ! defined(USE_MKL)
-#  error "no blas support"
+using std::pair;
+using std::vector;
+using namespace ErrAux;
+void NNetCPU::reset(uint, const vector<pair<uint, row_t>> &, int) noexcept {
+  die(ERR_INT("No CPU BLAS support")); }
 #else
-#  include "err.hpp"
-#  include "iobase.hpp"
-#  include "nnet-cpu.hpp"
 #  include <algorithm>
 #  include <utility>
 #  include <vector>

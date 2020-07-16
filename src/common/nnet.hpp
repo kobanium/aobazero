@@ -9,6 +9,7 @@
 class FName;
 namespace NNAux {
   using uint   = unsigned int;
+  using ushort = unsigned short;
   using row_t  = std::unique_ptr<float []>;
   using wght_t = std::vector<std::pair<uint, row_t>>;
   constexpr uint maxnum_nipc = 256U;
@@ -105,7 +106,8 @@ public:
 };
 
 class NNet {
-  using uint = unsigned int;
+  using uint   = unsigned int;
+  using ushort = unsigned short;
 public:
   enum class Impl : uint { CPUBLAS, OpenCL, End };
   static constexpr Impl cpublas = Impl::CPUBLAS, opencl  = Impl::OpenCL;
@@ -115,14 +117,15 @@ public:
 		       float *probs, float *values) noexcept;
   virtual uint push_ff(const NNInBatchCompressed &nn_in_b_c, float *probs,
 		       float *values) noexcept;
-  virtual void wait_ff(uint) noexcept = 0;
+  virtual void wait_ff(uint) noexcept;
   virtual bool do_compress() const noexcept { return false; }
 };
 
-enum class SrvType : uint { Register, FeedForward, FlushON, FlushOFF,
-    NNReset, NOP, End };
+enum class SrvType : unsigned int { Register, FeedForward, FlushON, FlushOFF,
+				    NNReset, NOP, End };
 
 struct SharedService {
+  using uint = unsigned int;
   uint id_ipc_next;
   FName fn_weights;
   uint njob;
@@ -131,6 +134,7 @@ struct SharedService {
 };
 
 struct SharedIPC {
+  using uint = unsigned int;
   uint nnet_id, n_one;
   float compressed_features[NNAux::maxsize_compressed_features];
   float features[NNAux::size_plane * NNAux::nch_input]; // ~100KB

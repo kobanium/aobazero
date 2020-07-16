@@ -41,8 +41,8 @@ using std::thread;
 
 void OSI::binary2text(char *msg, uint &len, char &ch_last) noexcept {
   assert(msg);
-  size_t len1 = 0;
-  for (size_t len0 = 0; len0 < len; ++len0) {
+  uint len1 = 0;
+  for (uint len0 = 0; len0 < len; ++len0) {
     char ch = msg[len0];
     if ((ch_last == '\r' && ch == '\n') || (ch_last == '\n' && ch == '\r'));
     else if (ch == '\r') msg[len1++] = '\n';
@@ -52,7 +52,7 @@ void OSI::binary2text(char *msg, uint &len, char &ch_last) noexcept {
 
 class LastErr {
   enum class Type { API, Sckt };
-  void *_msg;
+  char *_msg;
 
 public:
   static constexpr Type api  = Type::API;
@@ -67,50 +67,82 @@ public:
 			nullptr, dw, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
 			(LPSTR) &_msg, 0, nullptr)) _msg = "unknown"; }
   ~LastErr() noexcept { if (_msg) LocalFree(_msg); }
-  const char *get() const noexcept { return static_cast<char *>(_msg); } };
+  const char *get() const noexcept { return _msg; } };
+
+class OSI::dirlock_impl {
+  HANDLE _h;  
+public:
+  explicit dirlock_impl(const char *dname) noexcept {
+    FName fn(dname);
+    fn.add_fname(".lock");
+    HANDLE h = CreateFileA(fn.get_fname(), GENERIC_READ | GENERIC_WRITE, 0,
+			   nullptr, CREATE_ALWAYS, 0, nullptr);
+    if (h == INVALID_HANDLE_VALUE)
+      die(ERR_INT("CreateFileA() failed: %s", LastErr().get())); }
+  ~dirlock_impl() noexcept {
+    if (! CloseHandle(_h))
+      die(ERR_INT("CloseHandle() failed: %s", LastErr().get())); } };
 
 class OSI::sem_impl {
   HANDLE _h;
 public:
+  static void cleanup() noexcept {}
   explicit sem_impl(const char *name, bool flag_create, uint value) noexcept {
     assert(name && name[0] == '/');
-    _h = CreateSemaphoreA(nullptr, value, std::numeric_limits<LONG>::max(),
-			  name);
+    _h = CreateSemaphoreA(nullptr, value, LONG_MAX, name);
     if (! _h) die(ERR_INT("CreateSemaphoreA() failed: %s", LastErr().get()));
-    if ((flag_create && GetLastError() == ERROR_ALREADY_EXISTS)
-	|| (! flag_create && GetLastError() != ERROR_ALREADY_EXISTS)) {
+    if (flag_create) {
+      if (GetLastError() == ERROR_ALREADY_EXISTS) {
+	CloseHandle(_h);
+	die(ERR_INT("The semaphore (name: %s) exists.", name)); } }
+    else if (GetLastError() != ERROR_ALREADY_EXISTS) {
       CloseHandle(_h);
-      die(ERR_INT("CreateSemaphoreA() failed: %s", LastErr().get())); } }
-
+      die(ERR_INT("The semaphore (name: %s) does not exist.", name)); } }
   ~sem_impl() noexcept {
     if (! CloseHandle(_h))
       die(ERR_INT("CloseHandle() failed: %s", LastErr().get())); }
-
-  void sem_inc() noexcept { ReleaseSemaphore(_h, 1, nullptr); }
-  int sem_dec_wait() noexcept {
-    WaitForSingleObject(_h, INFINITE);
-    return 0; }
+  void inc() noexcept {
+    if (! ReleaseSemaphore(_h, 1, nullptr))
+      die(ERR_INT("ReleaseSemaphore() failed: %s", LastErr().get())); }
+  void dec_wait() noexcept {
+    if (WaitForSingleObject(_h, INFINITE) == WAIT_FAILED)
+      die(ERR_INT("WaitForSingleObject() failed: %s", LastErr().get())); }
+  int dec_wait_timeout(uint timeout) noexcept {
+    DWORD dw = WaitForSingleObject(_h, 1000U * timeout);
+    if (dw == WAIT_OBJECT_0) return 0;
+    if (dw == WAIT_TIMEOUT) return -1;
+    die(ERR_INT("WaitForSingleObject() failed: %s", LastErr().get()));
+    return -1; }
   bool ok() const noexcept { return _h != nullptr; }
 };
 
 class OSI::mmap_impl {
   HANDLE _h;
-  void *_ptr;
+  LPVOID _ptr;
 public:
+  static void cleanup() noexcept {}
   explicit mmap_impl(const char *name, bool flag_create, size_t size)
     noexcept {
-    _h = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
-			    static_cast<DWORD>(size / 0x100000000),
-			    static_cast<DWORD>(size % 0x100000000), name);
-    if (_h == NULL)
-      die(ERR_INT("CreateFileMapping() failed: %s", LastErr().get()));
+    assert(name && name[0] == '/');
+    if (flag_create) {
+      _h = CreateFileMappingA(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE,
+			      static_cast<DWORD>(size / 0x100000000),
+			      static_cast<DWORD>(size % 0x100000000), name);
+      if (_h == nullptr)
+	die(ERR_INT("CreateFileMapping() failed: %s", LastErr().get()));
+      if (GetLastError() == ERROR_ALREADY_EXISTS)
+	die(ERR_INT("The file mapping object (name: %s) exists.", name)); }
+    else {
+      _h = OpenFileMapping(FILE_MAP_ALL_ACCESS, FALSE, name);
+      if (_h == nullptr) 
+	die(ERR_INT("OpenFileMapping() failed: %s", LastErr().get())); }
 
-    _ptr = MapViewOfFile(_h, FILE_MAP_ALL_ACCRESS, 0, 0, size);
+    _ptr = MapViewOfFile(_h, FILE_MAP_ALL_ACCESS, 0, 0, size);
     if (_ptr == nullptr)
       die(ERR_INT("MapViewOfFile() failed: %s", LastErr().get())); }
 
   ~mmap_impl() {
-    if (!UnmapViewOfFile(_ptr))
+    if (! UnmapViewOfFile(_ptr))
       die(ERR_INT("UnmapViewOfFile() failed: %s", LastErr().get()));
     if (! CloseHandle(_h))
       die(ERR_INT("CloseHandle() failed: %s", LastErr().get())); }
@@ -119,253 +151,101 @@ public:
   bool ok() const noexcept { return _ptr != nullptr; }
 };
 
-class PipeIn_impl {
-  thread _t;
-  HANDLE _hfile, _do_read, _has_line;
-  char _line[65536], _line_out[65536];
-  bool _do_getline;
-  atomic<bool> _is_eof;
-  
-  void reader() {
-    size_t len_line = 0;
-    uint len_buf = 0;
-    bool eof = false;
-    char ch_last = '\0';
-    while (true) {
-      char buf[BUFSIZ];
-
-      while (len_buf == 0) {
-
-	if (eof) {
-	  _is_eof = true;
-	  if (!SetEvent(_has_line))
-	    die(ERR_INT("SetEvent() failed: %s", LastErr().get()));
-	  return; }
-
-	DWORD dw;
-	if (!ReadFile(_hfile, buf, sizeof(buf), &dw, NULL)) {
-	  if (GetLastError() != ERROR_BROKEN_PIPE)
-	    die(ERR_INT("ReadFile() failed: %s", LastErr().get()));
-	  eof = true;
-	  if (len_line) { buf[0] = '\n'; dw  = 1U; } }
-	
-	len_buf = dw;
-	binary2text(buf, len_buf, ch_last); }
-      
-      uint pos = 0;
-      for (; pos < len_buf && buf[pos] != '\n'; ++pos) {
-	if (sizeof(_line) <= len_line + 1U) die(ERR_INT("buffer overrun"));
-	_line[len_line++] = buf[pos]; }
-      
-      if (pos == len_buf) { len_buf = 0; continue; }
-      
-      assert(len_line < sizeof(_line));
-      pos     += 1U;
-      len_buf -= pos;
-      memmove(buf, buf + pos, len_buf);
-      _line[len_line] = '\0';
-      len_line = 0;
-      
-      if (!ResetEvent(_do_read))
-	die(ERR_INT("ResetEvent() failed: %s", LastErr().get()));
-      if (!SetEvent(_has_line))
-	die(ERR_INT("SetEvent() failed: %s", LastErr().get()));
-      if (WaitForSingleObject(_do_read, INFINITE) == WAIT_FAILED)
-	die(ERR_INT("WaitForSingleObject() failed: %s", LastErr().get())); } }
-  
+class OSI::rh_impl {
+  HANDLE _h;
 public:
-  explicit PipeIn_impl(HANDLE h) noexcept
-    : _hfile(h), _do_read(nullptr), _has_line(nullptr), _do_getline(false),
-      _is_eof(false) {
+  explicit rh_impl(HANDLE h) noexcept : _h(h) {}
+  bool ok() const noexcept { return _h != INVALID_HANDLE_VALUE; }
+  uint read(char *buf, uint size) const noexcept {
+    assert(buf);
+    DWORD dw;
+    BOOL b = ReadFile(_h, buf, size, &dw, nullptr);
+    if ((b && dw == 0) || (!b && GetLastError() == ERROR_BROKEN_PIPE))
+      return 0;
     
-      _do_read  = CreateEvent(nullptr, TRUE, TRUE, nullptr);
-      if (!_do_read) die(ERR_INT("CreateEvent() failed: %s", LastErr().get()));
-      
-      _has_line = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-      if (!_has_line) die(ERR_INT("CreateEvent() failed: %s",
-				  LastErr().get()));
-      
-      _t = thread(&PipeIn_impl::reader, this);
-      _t.detach(); }
+    if (! b) die(ERR_INT("ReadFile() failed: %s", LastErr().get()));
+    return dw; }
+};
+
+class OSI::cp_impl {
+  DWORD _pid;
+  HANDLE _h_in_wr, _h_out_rd, _h_err_rd;
+public:
+  cp_impl(const char *, char * const argv[]) noexcept {
+    assert(argv[0]);
+    HANDLE h_in_rd  = INVALID_HANDLE_VALUE;
+    HANDLE h_out_wr = INVALID_HANDLE_VALUE;
+    HANDLE h_err_wr = INVALID_HANDLE_VALUE;
+    SECURITY_ATTRIBUTES sa_attr;
+    sa_attr.nLength              = sizeof(SECURITY_ATTRIBUTES);
+    sa_attr.bInheritHandle       = TRUE;
+    sa_attr.lpSecurityDescriptor = nullptr;
+    if (!CreatePipe(&h_in_rd,  &_h_in_wr,  &sa_attr, 0)
+	|| !CreatePipe(&_h_out_rd, &h_out_wr, &sa_attr, 0)
+	|| !CreatePipe(&_h_err_rd, &h_err_wr, &sa_attr, 0))
+      die(ERR_INT("CreatePipe() failed: %s", LastErr().get()));
+    if (!SetHandleInformation(_h_in_wr, HANDLE_FLAG_INHERIT, 0)
+	|| !SetHandleInformation(_h_out_rd, HANDLE_FLAG_INHERIT, 0)
+	|| !SetHandleInformation(_h_err_rd, HANDLE_FLAG_INHERIT, 0))
+      die(ERR_INT("SetHandleInformation() failed: %s", LastErr().get()));
+    
+    PROCESS_INFORMATION pi; 
+    ZeroMemory(&pi, sizeof(pi));
   
-  ~PipeIn_impl() noexcept {
-    if (!_is_eof) die(ERR_INT("INTERNAL ERROR"));
-    if (!CloseHandle(_hfile)
-	|| !CloseHandle(_do_read)
-	|| !CloseHandle(_has_line))
+    STARTUPINFO si;
+    ZeroMemory(&si, sizeof(si));
+    si.cb         = sizeof(si); 
+    si.hStdError  = h_err_wr;
+    si.hStdOutput = h_out_wr;
+    si.hStdInput  = h_in_rd;
+    si.dwFlags    = STARTF_USESTDHANDLES;
+
+    char line[65536];
+    size_t len = 0;
+    for (int i = 0; argv[i]; ++i) len += strlen(argv[i]) + 1U;
+    if (sizeof(line) < len) die(ERR_INT("command line too long"));
+    strcpy(line, argv[0]);
+    for (int i = 1; argv[i]; ++i) { strcat(line, " "); strcat(line, argv[i]); }
+
+    if (!CreateProcess(nullptr, line, nullptr, nullptr, TRUE,
+		       CREATE_NEW_PROCESS_GROUP, nullptr, nullptr, &si, &pi))
+      die(ERR_INT("CreateProcess() failed: %s", LastErr().get()));
+  
+    if (!CloseHandle(h_err_wr) || !CloseHandle(h_out_wr)
+	|| !CloseHandle(h_in_rd))
+      die(ERR_INT("CloseHandle() failed: %s", LastErr().get()));
+
+    _pid = GetProcessId(pi.hProcess);
+    if (!CloseHandle(pi.hProcess) || !CloseHandle(pi.hThread))
       die(ERR_INT("CloseHandle() failed: %s", LastErr().get())); }
   
-  char *getline_block() noexcept;
+  ~cp_impl() noexcept {
+    if ((_h_in_wr != INVALID_HANDLE_VALUE && !CloseHandle(_h_in_wr))
+	|| (_h_out_rd != INVALID_HANDLE_VALUE && !CloseHandle(_h_out_rd))
+	|| (_h_err_rd != INVALID_HANDLE_VALUE && !CloseHandle(_h_err_rd)))
+      die(ERR_INT("CloseHandle() failed: %s", LastErr().get())); }
 
-  void load() noexcept {
-    if (_is_eof) return;
-    DWORD dw = WaitForSingleObject(_has_line, INFINITE);
-    if (dw == WAIT_FAILED)
-      die(ERR_INT("WaitForSingleObject() failed: %s", LastErr().get()));
-    assert(dw == WAIT_OBJECT_0);
-    strcpy(_line_out, _line);
-    _do_getline = true;
-    if (!ResetEvent(_has_line))
-      die(ERR_INT("ResetEvent() failed: %s", LastErr().get()));
-    if (!SetEvent(_do_read))
-      die(ERR_INT("SetEvent() failed: %s", LastErr().get())); }
+  void close_write() noexcept {
+    if (_h_in_wr == INVALID_HANDLE_VALUE) return;
+    if (! CloseHandle(_h_in_wr))
+      die(ERR_INT("CloseHandle() failed: %s", LastErr().get()));
+    _h_in_wr = INVALID_HANDLE_VALUE; }
 
-  char *getline() noexcept {
-    if (!_do_getline) return nullptr;
-    _do_getline = false;
-    return _line_out; }
+  bool ok() const noexcept { return (0 <= _pid
+				     && _h_out_rd != INVALID_HANDLE_VALUE
+				     && _h_err_rd != INVALID_HANDLE_VALUE); }
+  uint get_pid() const noexcept { return static_cast<uint>(_pid); }
+  size_t write(const char *msg, size_t n) const noexcept {
+    assert(msg && _h_in_wr != INVALID_HANDLE_VALUE);
+    if (UINT32_MAX < n) die(ERR_INT("bad len argument"));
+    DWORD dw_written;
+    if (!WriteFile(_h_in_wr, msg, static_cast<DWORD>(n), &dw_written, nullptr))
+      die(ERR_INT("WriteFile() failed: %s", LastErr().get()));
+    return static_cast<size_t>(dw_written); }
 
-  bool is_eof() const noexcept { return _is_eof; }
-  bool ok() const noexcept {
-    return _hfile != nullptr && _do_read != nullptr && _has_line != nullptr; }
-  HANDLE get_event() const noexcept { return _has_line; } };
-
-class OSI::Pipe_impl {
-public:
-  HANDLE out;
-  DWORD pid;
-  PipeIn_impl in, err;
-  char *ready_in, *ready_err;
-  bool done_in, done_err;
-  explicit Pipe_impl(HANDLE out_, uint pid_, HANDLE in_, HANDLE err_) noexcept
-    : out(out_), pid(pid_), in(in_), err(err_), done_in(false),
-    done_err(false) {} };
-
-void OSI::Pipe::open(const char *, char * const argv[]) noexcept {
-  assert(argv && argv[0]);
-  HANDLE h_in_rd  = nullptr, h_in_wr  = nullptr;
-  HANDLE h_err_rd = nullptr, h_err_wr = nullptr;
-  HANDLE h_out_rd = nullptr, h_out_wr = nullptr;
-  SECURITY_ATTRIBUTES sa_attr;
-  sa_attr.nLength = sizeof(SECURITY_ATTRIBUTES);
-  sa_attr.bInheritHandle = TRUE;
-  sa_attr.lpSecurityDescriptor = nullptr;
-  if (!CreatePipe(&h_in_rd,  &h_in_wr,  &sa_attr, 0)
-      || !CreatePipe(&h_out_rd, &h_out_wr, &sa_attr, 0)
-      || !CreatePipe(&h_err_rd, &h_err_wr, &sa_attr, 0))
-    die(ERR_INT("CreatePipe() failed: %s", LastErr().get()));
-  if (!SetHandleInformation(h_in_wr, HANDLE_FLAG_INHERIT, 0)
-      || !SetHandleInformation(h_out_rd, HANDLE_FLAG_INHERIT, 0)
-      || !SetHandleInformation(h_err_rd, HANDLE_FLAG_INHERIT, 0))
-    die(ERR_INT("SetHandleInformation() failed: %s", LastErr().get()));
-
-  PROCESS_INFORMATION pi; 
-  ZeroMemory(&pi, sizeof(pi));
-  
-  STARTUPINFO si;
-  ZeroMemory(&si, sizeof(si));
-  si.cb         = sizeof(si); 
-  si.hStdError  = h_err_wr;
-  si.hStdOutput = h_out_wr;
-  si.hStdInput  = h_in_rd;
-  si.dwFlags    = STARTF_USESTDHANDLES;
-
-  char line[65536];
-  size_t len = 0;
-  for (int i = 0; argv[i]; ++i) len += strlen(argv[i]) + 1U;
-  if (sizeof(line) < len) die(ERR_INT("command line too long"));
-  strcpy(line, argv[0]);
-  for (int i = 1; argv[i]; ++i) { strcat(line, " "); strcat(line, argv[i]); }
-
-  if (!CreateProcess(nullptr, line, nullptr, nullptr, TRUE,
-		     CREATE_NEW_PROCESS_GROUP, nullptr, nullptr, &si, &pi))
-    die(ERR_INT("CreateProcess() failed: %s", LastErr().get()));
-  
-  if (!CloseHandle(h_err_wr) || !CloseHandle(h_out_wr)
-      || !CloseHandle(h_in_rd))
-    die(ERR_INT("CloseHandle() failed: %s", LastErr().get()));
-
-  DWORD pid =GetProcessId(pi.hProcess);
-  if (!CloseHandle(pi.hProcess) || !CloseHandle(pi.hThread))
-    die(ERR_INT("CloseHandle() failed: %s", LastErr().get()));
-
-  _impl.reset(new Pipe_impl(h_in_wr, pid, h_out_rd, h_err_rd)); }
-
-void OSI::Pipe::close_write() const noexcept {
-  if (!_impl->out) return;
-  if (!CloseHandle(_impl->out))
-    die(ERR_INT("CloseHandle() failed: %s", LastErr().get()));
-  _impl->out = nullptr; }
-
-void OSI::Pipe::close() noexcept {
-  if (_impl->out && !CloseHandle(_impl->out))
-    die(ERR_INT("CloseHandle() failed: %s", LastErr().get()));
-  while (_impl->in.getline_block());
-  while (_impl->err.getline_block());  
-  _impl.reset(nullptr); }
-
-bool OSI::Pipe::ok() const noexcept {
-  if (!_impl) return true;
-  return _impl->out != nullptr && _impl->in.ok() && _impl->err.ok(); }
-
-size_t OSI::Pipe::write(const char *msg, size_t n) const noexcept {
-  if (UINT32_MAX < n) die(ERR_INT("bad len argument"));
-  assert(msg);
-  DWORD dw_written;
-  if (!WriteFile(_impl->out, msg, static_cast<DWORD>(n), &dw_written, nullptr))
-    die(ERR_INT("WriteFile() failed: %s", LastErr().get()));
-  return static_cast<size_t>(dw_written); }
-
-class OSI::Selector_impl {
-  const Pipe *_pipes[MAXIMUM_WAIT_OBJECTS / 2U];
-  uint _npipe;
-public:
-  void reset() noexcept { _npipe = 0; }
-  void add(const Pipe &pipe) noexcept;
-  
-  void wait(uint sec, uint msec) noexcept {
-    assert(msec < 1000U);
-    HANDLE handles[MAXIMUM_WAIT_OBJECTS];
-    DWORD nh = 0;
-    bool has_msg = false;
-    
-    for (uint u = 0; u < _npipe; ++u) {
-      const Pipe &pipe = *( _pipes[u] );
-      if (pipe.is_closed()) continue;
-      
-      if (!pipe._impl->done_in) {
-	pipe._impl->ready_in = pipe._impl->in.getline();
-	if (pipe._impl->in.is_eof() || pipe._impl->ready_in) {
-	  has_msg = true; break; }
-	else handles[nh++] = pipe._impl->in.get_event(); }
-      
-      if (!pipe._impl->done_err) {
-	pipe._impl->ready_err = pipe._impl->err.getline();
-	if (pipe._impl->err.is_eof() || pipe._impl->ready_err) {
-	  has_msg = true; break; }
-	else handles[nh++] = pipe._impl->err.get_event(); } }
-
-    if (has_msg);
-    else if (nh == 0) Sleep(sec * 1000U + msec);
-    else {
-      DWORD dw = WaitForMultipleObjects(nh, handles, FALSE,
-					sec * 1000U + msec);
-      if (dw == WAIT_FAILED)
-	die(ERR_INT("WaitForMultipleObjects() failed: %s", LastErr().get()));
-      if (dw == WAIT_TIMEOUT) return; }
-    
-    for (uint u = 0; u < _npipe; ++u) {
-      const Pipe &pipe = *( _pipes[u] );
-      if (pipe.is_closed()) continue;
-      
-      if (!pipe._impl->done_in
-	  && !pipe._impl->in.is_eof()
-	  && !pipe._impl->ready_in
-	  && (WaitForSingleObject(pipe._impl->in.get_event(), 0)
-	      == WAIT_OBJECT_0)) {
-	pipe._impl->in.load();
-	pipe._impl->ready_in = pipe._impl->in.getline(); }
-      
-      if (!pipe._impl->done_err
-	  && !pipe._impl->err.is_eof()
-	  && !pipe._impl->ready_err
-	  && (WaitForSingleObject(pipe._impl->err.get_event(), 0)
-	      == WAIT_OBJECT_0)) {
-	pipe._impl->err.load();
-	pipe._impl->ready_err = pipe._impl->err.getline(); } } }
-  
-  bool try_getline_in(const Pipe &pipe, char **pmsg) const noexcept;
-  bool try_getline_err(const Pipe &pipe, char **pmsg) const noexcept; };
+  rh_impl gen_handle_in() const noexcept { return rh_impl(_h_out_rd); }
+  rh_impl gen_handle_err() const noexcept { return rh_impl(_h_err_rd); }
+};
 
 class OSI::Dir_impl {
   WIN32_FIND_DATA _ffd;
@@ -567,8 +447,13 @@ class OSI::sem_impl {
   sem_t *_psem;
   bool _flag_create;
 public:
-  explicit sem_impl(const char *name, bool flag_create, uint value) noexcept
-    : _fname(name), _flag_create(flag_create) {
+  static void cleanup() noexcept {
+    lock_guard<mutex> lock(m_sem_save);
+    flag_sem_save = true;
+    for (auto &f : sem_save) sem_unlink(f.second.get_fname());
+    sem_save.clear(); }
+  explicit sem_impl(const char *name, bool flag_create, uint value) noexcept :
+    _fname(name), _flag_create(flag_create) {
     assert(name && name[0] == '/');
     if (flag_create) {
       errno = 0;
@@ -588,12 +473,6 @@ public:
     errno = 0;
     if (sem_unlink(_fname.get_fname()) < 0 && errno != ENOENT)
       die(ERR_CLL("sem_unlink")); }
-
-  static void cleanup() noexcept {
-    lock_guard<mutex> lock(m_sem_save);
-    flag_sem_save = true;
-    for (auto &f : sem_save) sem_unlink(f.second.get_fname());
-    sem_save.clear(); }
   void inc() noexcept { if (sem_post(_psem) < 0) die(ERR_CLL("sem_post")); }
   void dec_wait() noexcept {
     if (sem_wait(_psem) < 0) die(ERR_CLL("sem_wait")); }
@@ -717,120 +596,6 @@ public:
   rh_impl gen_handle_in() const noexcept { return rh_impl(_pipe_c2p); }
   rh_impl gen_handle_err() const noexcept { return rh_impl(_perr_c2p); } };
 
-class PipeIn_impl {
-  size_t _len_buf, _len_line;
-  int _fd;
-  bool _is_eof, _got_eof;
-  char _buf[BUFSIZ], _line[65536];
-  
-public:
-  explicit PipeIn_impl(int fd) noexcept
-    : _len_buf(0), _len_line(0), _fd(fd), _is_eof(false), _got_eof(false) {}
-
-  ~PipeIn_impl() noexcept {
-    if (!_is_eof) die(ERR_INT("INTERNAL ERROR"));
-    if (::close(_fd) < 0) die(ERR_CLL("close")); }
-  
-  void load() noexcept {
-    if (_got_eof) _is_eof = true;
-    if (_is_eof) return;
-
-    ssize_t ret = ::read(_fd, _buf, sizeof(_buf));
-    if (ret < 0) die(ERR_CLL("read"));
-    if (ret == 0 && _len_line == 0) _is_eof = true;
-    else if (ret == 0) {
-      _got_eof = true;
-      _buf[0]  = '\n';
-      ret      = 1; }
-    _len_buf = static_cast<size_t>(ret); }
-  
-  char *getline_block() noexcept;
-
-  char *getline() noexcept {
-    if (_is_eof) return nullptr;
-    
-    size_t pos = 0;
-    for (; pos < _len_buf && _buf[pos] != '\n'; ++pos) {
-      if (sizeof(_line) <= _len_line + 1U) die(ERR_INT("buffer overrun"));
-      _line[_len_line++] = _buf[pos]; }
-
-    if (pos == _len_buf) { _len_buf = 0; return nullptr; }
-    
-    assert(pos < _len_buf);
-    pos      += 1U;
-    _len_buf -= pos;
-    memmove(_buf, _buf + pos, _len_buf);
-
-    assert(_len_line < sizeof(_line));
-    _line[_len_line] = '\0';
-    _len_line = 0;
-    return _line; }
-
-  bool is_eof() const noexcept { return _is_eof; }
-  bool ok() const noexcept { return 0 <= _fd; }
-  int get_fd() const noexcept { return _fd; } };
-
-class OSI::Pipe_impl {
-public:
-  int out;
-  pid_t pid;
-  PipeIn_impl in, err;
-  char *ready_in, *ready_err;
-  bool done_in, done_err;
-  explicit Pipe_impl(int out_, pid_t pid_, int in_, int err_) noexcept
-    : out(out_), pid(pid_), in(in_), err(err_),
-      done_in(false), done_err(false) {} };
-
-void OSI::Pipe::open(const char *path, char * const argv[]) noexcept {
-  assert(path && argv && argv[0]);
-  enum { index_read = 0, index_write = 1 };
-  int perr_c2p[2], pipe_c2p[2], pipe_p2c[2];
-  if (pipe(perr_c2p) < 0) die(ERR_CLL("pipe"));
-  if (pipe(pipe_c2p) < 0) die(ERR_CLL("pipe"));
-  if (pipe(pipe_p2c) < 0) die(ERR_CLL("pipe"));
-
-  pid_t pid = fork();
-  if (pid < 0) die(ERR_CLL("fork"));
-  if (pid == 0) {
-    ::close(pipe_p2c[index_write]);
-    ::close(pipe_c2p[index_read]);
-    ::close(perr_c2p[index_read]);
-    dup2(pipe_p2c[index_read], 0);
-    dup2(pipe_c2p[index_write], 1);
-    dup2(perr_c2p[index_write], 2);
-    ::close(pipe_p2c[index_read]);
-    ::close(pipe_c2p[index_write]);
-    ::close(perr_c2p[index_write]);
-    if (execv(path, argv) < 0) die(ERR_CLL("execv")); }
-
-  ::close(pipe_p2c[index_read]);
-  ::close(pipe_c2p[index_write]);
-  ::close(perr_c2p[index_write]);
-  _impl.reset(new Pipe_impl(pipe_p2c[index_write], pid, pipe_c2p[index_read],
-			    perr_c2p[index_read])); }
-
-void OSI::Pipe::close_write() const noexcept {
-  if (_impl->out < 0) return;
-  if (::close(_impl->out) < 0) die(ERR_CLL("close"));
-  _impl->out = -1; }
-
-void OSI::Pipe::close() noexcept {
-  if (0 <= _impl->out && ::close(_impl->out) < 0) die(ERR_CLL("close"));
-  while (_impl->in.getline_block());
-  while (_impl->err.getline_block());
-  if (waitpid(_impl->pid, nullptr, 0) < 0) die(ERR_CLL("waitpid"));
-  _impl.reset(nullptr); }
-
-bool OSI::Pipe::ok() const noexcept {
-  return !_impl || (0 <= _impl->out && _impl->in.ok()
-		    && _impl->err.ok() && 0 < _impl->pid); }
-
-size_t OSI::Pipe::write(const char *msg, size_t n) const noexcept {
-  assert(msg);
-  ssize_t ret = ::write(_impl->out, msg, n);
-  if (ret < 0) die(ERR_CLL("write"));
-  return static_cast<size_t>(ret); }
-
 class OSI::Dir_impl {
   DIR *_pd;
   dirent *_pent;
@@ -847,71 +612,6 @@ public:
     if (_pent) return _pent->d_name;
     if (errno) die(ERR_CLL("readdir"));
     return nullptr; } };
-
-class OSI::Selector_impl {
-  const Pipe *_pipes[MAXIMUM_WAIT_OBJECTS / 2U];
-  uint _npipe;
-public:
-  void reset() noexcept { _npipe = 0; }
-  void add(const Pipe &pipe) noexcept;
-
-  void wait(uint sec, uint msec) noexcept {
-    assert(msec < 1000U);
-    fd_set _rfds;
-    int _fd_max;
-    bool has_msg = false;
-    
-    FD_ZERO(&_rfds);
-    _fd_max = -1;
-    for (uint u = 0; u < _npipe; ++u) {
-      const Pipe &pipe = *( _pipes[u] );
-      if (pipe.is_closed()) continue;
-      
-      if (!pipe._impl->done_in) {
-	pipe._impl->ready_in = pipe._impl->in.getline();
-	if (pipe._impl->in.is_eof() || pipe._impl->ready_in) has_msg = true;
-	else {
-	  FD_SET(pipe._impl->in.get_fd(), &_rfds);
-	  _fd_max = max(_fd_max, pipe._impl->in.get_fd()); } }
-      
-      if (!pipe._impl->done_err) {
-	pipe._impl->ready_err = pipe._impl->err.getline();
-	if (pipe._impl->err.is_eof() || pipe._impl->ready_err) has_msg = true;
-	else {
-	  FD_SET(pipe._impl->err.get_fd(), &_rfds);
-	  _fd_max = max(_fd_max, pipe._impl->err.get_fd()); } } }
-
-    timeval tv;
-    if (has_msg) {
-      tv.tv_sec  = 0;
-      tv.tv_usec = 0; }
-    else {
-      tv.tv_sec  = sec;
-      tv.tv_usec = msec * 1000U; }
-    if (select(_fd_max + 1, &_rfds, nullptr, nullptr, &tv) < 0)
-      die(ERR_CLL("select"));
-    
-    for (uint u = 0; u < _npipe; ++u) {
-      const Pipe &pipe = *( _pipes[u] );
-      if (pipe.is_closed()) continue;
-      
-      if (!pipe._impl->done_in
-	  && !pipe._impl->in.is_eof()
-	  && !pipe._impl->ready_in
-	  && FD_ISSET(pipe._impl->in.get_fd(), &_rfds)) {
-	pipe._impl->in.load();
-	pipe._impl->ready_in = pipe._impl->in.getline(); }
-      
-      if (!pipe._impl->done_err
-	  && !pipe._impl->err.is_eof()
-	  && !pipe._impl->ready_err
-	  && FD_ISSET(pipe._impl->err.get_fd(), &_rfds)) {
-	pipe._impl->err.load();
-	pipe._impl->ready_err = pipe._impl->err.getline(); } }
-  }
-  
-  bool try_getline_in(const Pipe &pipe, char **pmsg) const noexcept;
-  bool try_getline_err(const Pipe &pipe, char **pmsg) const noexcept; };
 
 class OSI::Conn_impl {
   sockaddr_in _s_addr;
@@ -1035,73 +735,6 @@ void OSI::ReadHandle::clear() noexcept { _impl.reset(nullptr); }
 bool OSI::ReadHandle::ok() const noexcept { return (_impl && _impl->ok()); }
 uint OSI::ReadHandle::operator()(char *buf, uint size) const noexcept {
   assert(buf); return _impl->read(buf, size); }
-
-char *PipeIn_impl::getline_block() noexcept {
-  while (!is_eof()) {
-    char *ret = getline();
-    if (ret) return ret;
-    load(); }
-  return nullptr; }
-    
-OSI::Pipe::Pipe() noexcept : _impl(nullptr) {}
-OSI::Pipe::~Pipe() noexcept {}
-bool OSI::Pipe::is_closed() const noexcept { return !_impl; }
-uint OSI::Pipe::get_pid() const noexcept {
-  return static_cast<uint>(_impl->pid); }
-char *OSI::Pipe::getline_in() const noexcept {
-  return _impl->in.getline(); }
-char *OSI::Pipe::getline_err() const noexcept {
-  return _impl->err.getline(); }
-char *OSI::Pipe::getline_in_block() const noexcept {
-  return _impl->in.getline_block(); }
-char *OSI::Pipe::getline_err_block() const noexcept {
-  return _impl->err.getline_block(); }
-
-void OSI::Selector_impl::add(const Pipe &pipe) noexcept {
-  assert(pipe.ok());
-  if (MAXIMUM_WAIT_OBJECTS < _npipe * 2U)
-    die(ERR_INT("Npipe exceeds MAXIMUM_WAIT_OBJECTS."));
-  _pipes[_npipe++] = &pipe; }
-
-bool OSI::Selector_impl::try_getline_in(const Pipe &pipe,
-					  char **pmsg) const noexcept {
-  assert(pipe.ok() && pmsg);
-  if (pipe.is_closed()) return false;
-  if (pipe._impl->done_in) return false;
-  if (pipe._impl->ready_in) {
-    *pmsg = pipe._impl->ready_in;
-    return true; }
-  else if (pipe._impl->in.is_eof()) {
-    pipe._impl->done_in = true;
-    *pmsg = nullptr;
-    return true; }
-  return false; }
-
-bool OSI::Selector_impl::try_getline_err(const Pipe &pipe,
-					   char **pmsg) const noexcept {
-  assert(pipe.ok() && pmsg);
-  if (pipe.is_closed()) return false;
-  if (pipe._impl->done_err) return false;
-  if (pipe._impl->ready_err) {
-    *pmsg = pipe._impl->ready_err;
-    return true; }
-  if (pipe._impl->err.is_eof()) {
-    pipe._impl->done_err = true;
-    *pmsg = nullptr;
-    return true; }
-  return false; }
-
-OSI::Selector::Selector() noexcept : _impl(new Selector_impl) {}
-OSI::Selector::~Selector() noexcept {}
-void OSI::Selector::reset() const noexcept { _impl->reset(); }
-void OSI::Selector::add(const Pipe &pipe) const noexcept {
-  _impl->add(pipe); }
-void OSI::Selector::wait(uint sec, uint msec) const noexcept {
-  _impl->wait(sec, msec); }
-bool OSI::Selector::try_getline_in(const Pipe &pipe, char **pmsg)
-  const noexcept { return _impl->try_getline_in(pipe, pmsg); }
-bool OSI::Selector::try_getline_err(const Pipe &pipe, char **pmsg)
-  const noexcept { return _impl->try_getline_err(pipe, pmsg); }
 
 OSI::Conn_impl::Conn_impl(const char *saddr, uint port) {
   assert(saddr && port <= UINT16_MAX);

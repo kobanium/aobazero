@@ -1,16 +1,25 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
 #pragma once
-#if defined(USE_OPENCL_AOBA)
 #include "nnet.hpp"
 #include "opencl.hpp"
+#include <string>
+#include <utility>
+#include <vector>
+#if !defined(USE_OPENCL_AOBA)
+class NNetOCL : public NNet {
+  using uint  = unsigned int;
+  using row_t = std::unique_ptr<float []>;
+public:
+  std::string reset(uint, const std::vector<std::pair<uint, row_t>> &,
+		    int, bool = true, bool = true, bool = false) noexcept;
+};
+#else
 #include <chrono>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
-#include <string>
 #include <thread>
-#include <vector>
 #include <cstdint>
 
 class FName;

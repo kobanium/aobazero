@@ -482,7 +482,7 @@ string OCL::Device::gen_info() const {
      << "  Max Clock Freq (MHz): " << gen_max_clock_frequency() << "\n"
      << "  Global Mem Size:      " << gen_global_mem_size() << "\n"
      << "  Max Mem Alloc Size:   " << gen_max_mem_alloc_size() << "\n"
-     << "  Local Mem type:       " << gen_local_mem_type() << "\n"
+     << "  Local Mem Type:       " << gen_local_mem_type() << "\n"
      << "  Local Mem Size:       " << gen_local_mem_size() << "\n";
   return ss.str(); }
 Platform OCL::Device::gen_platform() const {
