@@ -58,6 +58,17 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+    <ClCompile Include="..\..\..\common\err.cpp" />
+    <ClCompile Include="..\..\..\common\iobase.cpp" />
+    <ClCompile Include="..\..\..\common\nnet-cpu.cpp" />
+    <ClCompile Include="..\..\..\common\nnet-ipc.cpp" />
+    <ClCompile Include="..\..\..\common\nnet-ocl.cpp" />
+    <ClCompile Include="..\..\..\common\nnet-srv.cpp" />
+    <ClCompile Include="..\..\..\common\nnet.cpp" />
+    <ClCompile Include="..\..\..\common\opencl.cpp" />
+    <ClCompile Include="..\..\..\common\osi.cpp" />
+    <ClCompile Include="..\..\..\common\shogibase.cpp" />
+    <ClCompile Include="..\..\..\common\xzi.cpp" />
     <ClCompile Include="..\..\bona\attack.cpp" />
     <ClCompile Include="..\..\bona\bitop.cpp" />
     <ClCompile Include="..\..\bona\book.cpp" />
@@ -237,8 +248,9 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);MINIMUM;TLP;CSA_LAN;USI;YSS_ZERO;NO_LOGGING;_WINSOCK_DEPRECATED_NO_WARNINGS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);MINIMUM;TLP;CSA_LAN;USI;YSS_ZERO;NO_LOGGING;_WINSOCK_DEPRECATED_NO_WARNINGS;USE_OPENBLAS</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <AdditionalIncludeDirectories>..\..\..\..\win\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
