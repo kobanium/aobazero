@@ -56,8 +56,8 @@ bool fUseLeelaZeroOpenCL = false;	// only for test.
 #endif
 
 #ifdef NN_PARALLEL
-#include "nnet-srv.hpp"
-#include "nnet-ipc.hpp"
+#include "../../common/nnet-srv.hpp"
+#include "../../common/nnet-ipc.hpp"
 
 using std::copy_n;
 

@@ -133,7 +133,7 @@ public:
       if (GetLastError() == ERROR_ALREADY_EXISTS)
 	die(ERR_INT("The file mapping object (name: %s) exists.", name)); }
     else {
-      _h = OpenFileMapping(FILE_MAP_ALL_ACCESS, FALSE, name);
+      _h = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, name);
       if (_h == nullptr) 
 	die(ERR_INT("OpenFileMapping() failed: %s", LastErr().get())); }
 
@@ -192,7 +192,7 @@ public:
     PROCESS_INFORMATION pi; 
     ZeroMemory(&pi, sizeof(pi));
   
-    STARTUPINFO si;
+    STARTUPINFOA si;
     ZeroMemory(&si, sizeof(si));
     si.cb         = sizeof(si); 
     si.hStdError  = h_err_wr;
@@ -207,7 +207,7 @@ public:
     strcpy(line, argv[0]);
     for (int i = 1; argv[i]; ++i) { strcat(line, " "); strcat(line, argv[i]); }
 
-    if (!CreateProcess(nullptr, line, nullptr, nullptr, TRUE,
+    if (!CreateProcessA(nullptr, line, nullptr, nullptr, TRUE,
 		       CREATE_NEW_PROCESS_GROUP, nullptr, nullptr, &si, &pi))
       die(ERR_INT("CreateProcess() failed: %s", LastErr().get()));
   
@@ -248,7 +248,7 @@ public:
 };
 
 class OSI::Dir_impl {
-  WIN32_FIND_DATA _ffd;
+  WIN32_FIND_DATAA _ffd;
   HANDLE _hfind;
   bool _is_first, _is_end;
 

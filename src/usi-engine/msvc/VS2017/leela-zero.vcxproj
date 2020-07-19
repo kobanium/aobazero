@@ -19,6 +19,8 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\common\nnet-ipc.hpp" />
+    <ClInclude Include="..\..\..\common\nnet-srv.hpp" />
     <ClInclude Include="..\..\bona\bitop.h" />
     <ClInclude Include="..\..\bona\dfpn.h" />
     <ClInclude Include="..\..\bona\lock.h" />
@@ -65,7 +67,7 @@
     <ClCompile Include="..\..\..\common\nnet-ocl.cpp" />
     <ClCompile Include="..\..\..\common\nnet-srv.cpp" />
     <ClCompile Include="..\..\..\common\nnet.cpp" />
-    <ClCompile Include="..\..\..\common\opencl.cpp" />
+    <ClCompile Include="..\..\..\common\opencli.cpp" />
     <ClCompile Include="..\..\..\common\osi.cpp" />
     <ClCompile Include="..\..\..\common\shogibase.cpp" />
     <ClCompile Include="..\..\..\common\xzi.cpp" />
@@ -132,7 +134,7 @@
     <ProjectGuid>{7B887BFE-8D2C-46CD-B139-5213434BF218}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>leelazero</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.16299.0</WindowsTargetPlatformVersion>
     <ProjectName>aoba-zero</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -248,9 +250,9 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);MINIMUM;TLP;CSA_LAN;USI;YSS_ZERO;NO_LOGGING;_WINSOCK_DEPRECATED_NO_WARNINGS;USE_OPENBLAS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);MINIMUM;TLP;CSA_LAN;USI;YSS_ZERO;NO_LOGGING;_WINSOCK_DEPRECATED_NO_WARNINGS;USE_WINAPI;USE_OPENBLAS</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <AdditionalIncludeDirectories>..\..\..\..\win\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\common;..\..\..\..\win\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

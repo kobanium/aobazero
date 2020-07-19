@@ -129,6 +129,12 @@
     <ClInclude Include="..\..\bona\yss_var.h">
       <Filter>Source Files\bona</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\common\nnet-srv.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\common\nnet-ipc.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\GTP.cpp">
@@ -323,9 +329,6 @@
     <ClCompile Include="..\..\..\common\nnet-srv.cpp">
       <Filter>Source Files\common</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\common\opencl.cpp">
-      <Filter>Source Files\common</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\common\osi.cpp">
       <Filter>Source Files\common</Filter>
     </ClCompile>
@@ -333,6 +336,9 @@
       <Filter>Source Files\common</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\common\xzi.cpp">
+      <Filter>Source Files\common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\common\opencli.cpp">
       <Filter>Source Files\common</Filter>
     </ClCompile>
   </ItemGroup>

@@ -193,10 +193,7 @@ public:
   uint get_n_one() const noexcept { return _n_one; }
   uint get_size_nnmove() const noexcept { return _size_nnmove; }
   uint get_no() const noexcept { return _no; }
-  bool ok() const noexcept {
-    if (_size_nnmove == _policy_answers.size()) return true;
-    cout << _size_nnmove << endl;
-    cout << _policy_answers.size() << endl; }
+  bool ok() const noexcept { return _size_nnmove == _policy_answers.size(); }
   void compare(const float *probs, float value) const noexcept {
     assert(probs);
     

@@ -2,7 +2,7 @@
 // This source code is in the public domain.
 #pragma once
 #include "nnet.hpp"
-#include "opencl.hpp"
+#include "opencli.hpp"
 #include <string>
 #include <utility>
 #include <vector>

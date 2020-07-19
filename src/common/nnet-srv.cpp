@@ -1,5 +1,8 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
+#ifdef _MSC_VER
+#  define _CRT_SECURE_NO_WARNINGS
+#endif
 #include "err.hpp"
 #include "nnet-cpu.hpp"
 #include "nnet-ocl.hpp"
