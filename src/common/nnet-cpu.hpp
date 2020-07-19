@@ -1,16 +1,21 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
 #pragma once
+#include "nnet.hpp"
+#include <memory>
+#include <utility>
+#include <vector>
 #if ! defined(USE_OPENBLAS) && ! defined(USE_MKL)
-#  error "no blas support"
-#else
-#  include "nnet.hpp"
-#  include <memory>
-#  include <vector>
-
 class NNetCPU : public NNet {
-  using uint   = unsigned int;
+  using uint  = unsigned int;
+  using row_t = std::unique_ptr<float []>;
+public:
+  void reset(uint, const std::vector<std::pair<uint, row_t>> &, int) noexcept;
+};
+#else
+class NNetCPU : public NNet {
   using ushort = unsigned short;
+  using uint   = unsigned int;
   using row_t  = std::unique_ptr<float []>;
   struct ResWght { row_t matU, mean, sd_inv; };
   row_t _fslot[3];

@@ -1,5 +1,8 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
+#ifdef _MSC_VER
+#  define _CRT_SECURE_NO_WARNINGS
+#endif
 #include "err.hpp"
 #include "nnet-cpu.hpp"
 #include "nnet-ocl.hpp"
@@ -180,7 +183,6 @@ void NNetService::worker_srv() noexcept {
       if (!_entries_wait.empty()) die(ERR_INT("Internal Error"));
 	
       if (_impl == NNet::cpublas) {
-#if defined(USE_OPENBLAS) || defined(USE_MKL)
 	_pnnet.reset(new NNetCPU);
 	_sem_service_lock.dec_wait();
 	pservice->id_ipc_next = 0;
@@ -194,13 +196,8 @@ void NNetService::worker_srv() noexcept {
 	
 	static_cast<NNetCPU *>(_pnnet.get())->reset(_size_batch,
 						    NNAux::read(fn),
-						    _thread_num);
-#else
-	die(ERR_INT("No CPU BLAS support"));
-#endif
-      }
+						    _thread_num); }
       else if (_impl == NNet::opencl) {
-#if defined(USE_OPENCL_AOBA)
 	_pnnet.reset(new NNetOCL);
 	_sem_service_lock.dec_wait();
 	pservice->id_ipc_next = 0;
@@ -220,12 +217,8 @@ void NNetService::worker_srv() noexcept {
 	NNetOCL *p = static_cast<NNetOCL *>(_pnnet.get());
 	std::cout << p->reset(_size_batch, NNAux::read(fn), _device_id,
 			      _use_half, false, true)
-		  << std::flush;
-#else
-	die(ERR_INT("No OpenCL support"));
-#endif
-      } else die(ERR_INT("INTERNAL ERROR"));
-
+		  << std::flush; }
+      else die(ERR_INT("INTERNAL ERROR"));
       continue; }
       
     if (type == SrvType::FeedForward) {

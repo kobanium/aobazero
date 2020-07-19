@@ -47,7 +47,7 @@ using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 using std::chrono::microseconds;
 static double elapsed_sum = 0.0;
-static uint nelapsed      = 0;
+static unsigned int nelapsed      = 0;
 const int fCalcNetTime = 0;
 
 

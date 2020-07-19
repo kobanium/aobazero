@@ -1,9 +1,21 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
-#if defined(USE_OPENCL_AOBA)
 #include "err.hpp"
 #include "iobase.hpp"
 #include "nnet-ocl.hpp"
+#include <string>
+#include <utility>
+#include <vector>
+using std::string;
+using std::vector;
+using std::pair;
+using namespace ErrAux;
+#if !defined(USE_OPENCL_AOBA)
+std::string NNetOCL::reset(uint, const std::vector<std::pair<uint, row_t>> &,
+			   int, bool, bool, bool) noexcept {
+  die(ERR_INT("No OpenCL support"));
+  return string(""); }
+#else
 #include <algorithm>
 #include <deque>
 #include <exception>
@@ -11,8 +23,6 @@
 #include <sstream>
 #include <thread>
 #include <tuple>
-#include <utility>
-#include <vector>
 #include <cassert>
 #include <chrono>
 #include <cfloat>
@@ -41,10 +51,8 @@ using std::max_element;
 using std::min;
 using std::move;
 using std::mutex;
-using std::pair;
 using std::set;
 using std::sort;
-using std::string;
 using std::stringstream;
 using std::swap;
 using std::terminate;
@@ -54,7 +62,6 @@ using std::to_string;
 using std::tuple;
 using std::unique_lock;
 using std::unique_ptr;
-using std::vector;
 using row_t  = unique_ptr<float []>;
 using uint   = unsigned int;
 using ushort = unsigned short;
@@ -681,11 +688,9 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
 
 const string code_sgemm_child_half = R"(
 void sgemm_child(__global const half *gA, __global const half *gB,
-                 __global float *gC, uint ulm, uint uln) {
-  __local float lA[SGEMM_NPK][SGEMM_NLM*SGEMM_NPM]
-                  __attribute__((aligned(SIZE_ALIGN)));
-  __local float lB[SGEMM_NPK][SGEMM_NLN*SGEMM_NPN]
-                  __attribute__((aligned(SIZE_ALIGN)));
+                 __global float *gC, uint ulm, uint uln,
+                 __local float lA[SGEMM_NPK][SGEMM_NLM*SGEMM_NPM],
+                 __local float lB[SGEMM_NPK][SGEMM_NLN*SGEMM_NPN]) {
   float pC[SGEMM_NPM][SGEMM_NPN];
   float pB[SGEMM_NPN];
   float pA;
@@ -734,16 +739,18 @@ void compute_matM(__global const half *gA, __global const half *gB,
   gA += ub*OFFA + ugm*SGEMM_NLM*SGEMM_NPM;
   gB += ub*OFFB + ugn*SGEMM_NLN*SGEMM_NPN;
   gC += ub*OFFC + ugm*SGEMM_NLM*SGEMM_NPM*NN + ugn*SGEMM_NLN*SGEMM_NPN;
-  sgemm_child(gA, gB, gC, ulm, uln); }
-)";
-
-const string code_sgemm_child = R"(
-void sgemm_child(__global const float *gA, __global const float *gB,
-                 __global float *gC, uint ulm, uint uln) {
   __local float lA[SGEMM_NPK][SGEMM_NLM*SGEMM_NPM]
                   __attribute__((aligned(SIZE_ALIGN)));
   __local float lB[SGEMM_NPK][SGEMM_NLN*SGEMM_NPN]
                   __attribute__((aligned(SIZE_ALIGN)));
+  sgemm_child(gA, gB, gC, ulm, uln, lA, lB); }
+)";
+
+const string code_sgemm_child = R"(
+void sgemm_child(__global const float *gA, __global const float *gB,
+                 __global float *gC, uint ulm, uint uln,
+                 __local float lA[SGEMM_NPK][SGEMM_NLM*SGEMM_NPM],
+                 __local float lB[SGEMM_NPK][SGEMM_NLN*SGEMM_NPN]) {
   float pC[SGEMM_NPM][SGEMM_NPN];
   float pB[SGEMM_NPN];
   float pA;
@@ -795,9 +802,12 @@ void compute_matM(__global const float *gA, __global const float *gB,
   gA += ub*OFFA + ugm*SGEMM_NLM*SGEMM_NPM;
   gB += ub*OFFB + ugn*SGEMM_NLN*SGEMM_NPN;
   gC += ub*OFFC + ugm*SGEMM_NLM*SGEMM_NPM*NN + ugn*SGEMM_NLN*SGEMM_NPN;
-  sgemm_child(gA, gB, gC, ulm, uln); }
+  __local float lA[SGEMM_NPK][SGEMM_NLM*SGEMM_NPM]
+                  __attribute__((aligned(SIZE_ALIGN)));
+  __local float lB[SGEMM_NPK][SGEMM_NLN*SGEMM_NPN]
+                  __attribute__((aligned(SIZE_ALIGN)));
+  sgemm_child(gA, gB, gC, ulm, uln, lA, lB); }
 )";
-
 const string code_sgemm = R"(
 __kernel __attribute__((reqd_work_group_size(SGEMM_NLN,SGEMM_NLM,1)))
 void sgemm(__global const float *gA, __global const float *gB,
@@ -809,7 +819,11 @@ void sgemm(__global const float *gA, __global const float *gB,
   gA += ugm*SGEMM_NLM*SGEMM_NPM;
   gB += ugn*SGEMM_NLN*SGEMM_NPN;
   gC += ugm*SGEMM_NLM*SGEMM_NPM*NN + ugn*SGEMM_NLN*SGEMM_NPN;
-  sgemm_child(gA, gB, gC, ulm, uln); }
+  __local float lA[SGEMM_NPK][SGEMM_NLM*SGEMM_NPM]
+                  __attribute__((aligned(SIZE_ALIGN)));
+  __local float lB[SGEMM_NPK][SGEMM_NLN*SGEMM_NPN]
+                  __attribute__((aligned(SIZE_ALIGN)));
+  sgemm_child(gA, gB, gC, ulm, uln, lA, lB); }
 )";
 
 const string code_change_dim = R"(
@@ -1092,7 +1106,7 @@ static double measure_compute_matM(const OCL::Context &context,
   queue.finish();
   steady_clock::time_point end = steady_clock::now();
   int64_t elapsed = duration_cast<microseconds>(end - start).count();
-  return (elapsed / static_cast<int64_t>(sample_size)); }
+  return static_cast<double>(elapsed / static_cast<int64_t>(sample_size)); }
 
 static SgemmParam tune_compute_matM(bool use_half, bool use_wmma,
 				    const OCL::Device &device,
@@ -1356,7 +1370,7 @@ static double measure_sgemm(const OCL::Context &context,
   queue.finish();
   steady_clock::time_point end = steady_clock::now();
   int64_t elapsed = duration_cast<microseconds>(end - start).count();
-  return (elapsed / static_cast<int64_t>(sample_size)); }
+  return static_cast<double>(elapsed / static_cast<int64_t>(sample_size)); }
 
 class MngChgDim {
   OCL::Memory _mem;

@@ -4,37 +4,38 @@ AobaZero 1.0 Licensing
 Hiroshi Yamashita, Kunihito Hoki, and Yuki Kobayashi, 2019
 
 This package contains multiple programs. We recognize that bin/aobaz belongs
-to GPLv3. This program is a derivative of Leela Zero [1]. This program also
-contains CLBlast [2], OpenCL [3], and half [4].
+to GPLv3. This program is a derivative of Leela Zero [1] which contains
+CLBlast [2], OpenCL [3], and half [4].
 
-The other programs and scripts are basically in the public domain. However,
-to build Windows x64 binary, this package contains prerequisite programs
-OpenCL [3], liblzma [5] built by using Visual Studio Community 2017 [6], and
-from Intel Math Kernel Library [7] in win/. 
+The other programs and scripts are basically in the public domain. Please use
+the licensing statement of Unlicense (https://unlicense.org) if you require
+legal permission for the programs in public domain [5]. However, to build
+Windows x64 binary, this package contains prerequisite binaries liblzma [6]
+built by using Visual Studio Community 2017 [7], OpenBLAS [8] built by
+MinGW-w64 [9], and from Intel Math Kernel Library [10] in win/.
 
 This package contains part of source code from Leela Zero in
 src/usi_engine/ [1], from CLBlast in src/usi_engine/kernels/clblast/ [2],
 from OpenCL in src/usi_engine/CL/ and win/include/CL/ [3], from half in
-src/usi_engine/half [4], from liblzma in win/include and win/lib64 [5] built
-by using Visual Studio Community 2017 [6], and from Intel Math Kernel Library
-in win/ [7]. We place detailed license information under the directory
-licenses/.
+src/usi_engine/half [4], and from liblzma in win/include [6]. We place
+detailed license information under the directory licenses/.
 
-Please use the licensing statement of Unlicense (https://unlicense.org)
-if you require legal permission for the programs in public domain [8].
 
-[1] Gian-Carlo Pascutto et al., Leela Zero, http://zero.sjeng.org/home/,
+[ 1] Gian-Carlo Pascutto et al., Leela Zero, http://zero.sjeng.org/home/,
 2019 (last access).
-[2] Cedric Nugteren et al., CLBlast, https://github.com/cnugteren/clblast/,
+[ 2] Cedric Nugteren et al., CLBlast, https://github.com/cnugteren/clblast/,
 2019 (last access).
-[3] The Khronos Group Inc., OpenCL, https://www.khronos.org/opencl/, 2019
+[ 3] The Khronos Group Inc., OpenCL, https://www.khronos.org/opencl/, 2019
 (last access).
-[4] Christian Rau, half - IEEE 754-based half-precision floating point
+[ 4] Christian Rau, half - IEEE 754-based half-precision floating point
 library, http://half.sourceforge.net/, 2019 (last access).
-[5] Lasse Collin, XZ Utils, https://tukaani.org/xz/, 2019 (last access).
-[6] Microsoft Corporation, Microsoft Visual Studio Community 2017
+[ 5] Unlicense.org, Unlicense Yourself: Set Your Code Free,
+https://unlicense.org/, 2019 (last access).
+[ 6] Lasse Collin, XZ Utils, https://tukaani.org/xz/, 2019 (last access).
+[ 7] Microsoft Corporation, Microsoft Visual Studio Community 2017
 distributable, https://visualstudio.microsoft.com/license-terms/mlt553321/,
 2019 (last access).
-[7] Intel Corporation, LICENSE FAQ, https://software.intel.com/en-us/mkl/license-faq
-[8] Unlicense.org, Unlicense Yourself: Set Your Code Free,
-https://unlicense.org/, 2019 (last access).
+[ 8] OpenBLAS v0.2.19, https://www.openblas.net/, 2020 (last access).
+[ 9] MinGW-w64, http://mingw-w64.org/doku.php, 2020 (last access).
+[10] Intel Corporation, LICENSE FAQ,
+https://software.intel.com/en-us/mkl/license-faq, 2019 (last access).

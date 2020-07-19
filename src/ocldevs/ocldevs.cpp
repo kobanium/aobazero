@@ -2,7 +2,7 @@
 // This source code is in the public domain.
 #if defined(USE_OPENCL_AOBA)
 #include "err.hpp"
-#include "opencl.hpp"
+#include "opencli.hpp"
 #include <exception>
 #include <iostream>
 #include <memory>

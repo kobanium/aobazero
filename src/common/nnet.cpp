@@ -407,6 +407,7 @@ uint NNet::push_ff(uint, const float *, const uint *, const ushort *, float *,
 uint NNet::push_ff(const NNInBatchCompressed &, float *, float *) noexcept {
   die(ERR_INT("INTERNAL ERROR")); return 0; }
 
+void NNet::wait_ff(uint) noexcept { die(ERR_INT("INTERNAL ERROR")); }
 /*
   channel 
   0  - 13 black position

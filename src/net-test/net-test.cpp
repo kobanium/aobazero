@@ -83,8 +83,8 @@ static string opt_str_wght;
 static string gen_usage(const char *cmd) noexcept {
   stringstream ss;
   ss << "Usage: \n"
-     << cmd << " [-i opencl] [-r num] [-u num] [-b size] [-hvz] weight\n"
-     << cmd << " -i cpublas [-r num] [-t num] [-b size] [-vz] weight" << R"(
+     << cmd << " [-i opencl] [-r num] [-u num] [-b size] [-hv] weight\n"
+     << cmd << " -i cpublas [-r num] [-t num] [-b size] [-v] weight" << R"(
   -i code  uses OpenCL if "code" is opencl, uses BLAS for CPU if "code" is
            cpublas.
   -u num   let "opencl" code use a device of ID "num". Default is -1.
@@ -193,10 +193,7 @@ public:
   uint get_n_one() const noexcept { return _n_one; }
   uint get_size_nnmove() const noexcept { return _size_nnmove; }
   uint get_no() const noexcept { return _no; }
-  bool ok() const noexcept {
-    if (_size_nnmove == _policy_answers.size()) return true;
-    cout << _size_nnmove << endl;
-    cout << _policy_answers.size() << endl; }
+  bool ok() const noexcept { return _size_nnmove == _policy_answers.size(); }
   void compare(const float *probs, float value) const noexcept {
     assert(probs);
     
@@ -269,6 +266,7 @@ class QueueTest {
       unique_lock<mutex> lock(_m);
       _cv.wait(lock, [&]{ return (_flag_quit || 0 < _deque_wait.size()); });
       if (_deque_wait.size() == 0 && _flag_quit) return;
+
       pts = move(_deque_wait.front());
       _deque_wait.pop_front();
       lock.unlock();
@@ -317,31 +315,21 @@ class QueueTest {
 public:
   explicit QueueTest(const FName &fname, int device_id, uint nb, bool use_half,
 		     int thread_num) noexcept
-    : _flag_quit(false),
-      _th_worker_wait_test(&QueueTest::worker_wait_test, this), _nb(nb),
-      _neval(0) {
+    : _flag_quit(false), _nb(nb), _neval(0) {
+    _th_worker_wait_test = thread(&QueueTest::worker_wait_test, this);
     if (opt_mode_opencl) {
-#if defined(USE_OPENCL_AOBA)
       _pnnet.reset(new NNetOCL);
       NNetOCL *p = static_cast<NNetOCL *>(_pnnet.get());
       _th_init = thread([=]{ p->reset(nb, NNAux::read(fname), device_id,
-				      use_half); });
-#else
-      die(ERR_INT("No OpenCL support"));
-#endif
-    } else if (opt_mode_cpu) {
-#if defined(USE_MKL) || defined(USE_OPENBLAS)
+				      use_half); }); }
+    else if (opt_mode_cpu) {
       _pnnet.reset(new NNetCPU);
       NNetCPU *p = static_cast<NNetCPU *>(_pnnet.get());
-      _th_init = thread([=]{ p->reset(nb, NNAux::read(fname), thread_num); });
-#else
-      die(ERR_INT("No CPU BLAS support"));
-#endif
-    } else die(ERR_INT("Internal Error"));
+      _th_init = thread([=]{ p->reset(nb, NNAux::read(fname),
+				      thread_num); }); }
+    else die(ERR_INT("Internal Error"));
 
-    _pts_push.reset(new TestSet(nb, do_compress()));
-    (void)device_id;
-    (void)use_half; }
+    _pts_push.reset(new TestSet(nb, do_compress())); }
 
   void wait_init() noexcept { _th_init.join(); }
   bool do_compress() const noexcept { return _pnnet->do_compress(); }
@@ -495,12 +483,9 @@ int main(int argc, char **argv) {
 
   QueueTest queue_test(FName(opt_str_wght.c_str()), opt_device_id,
 		       opt_batch_size, opt_use_half, opt_thread_num);
-
   cout << "Start reading entries from stdin ..." << endl;
-  vector<Entry> vec_entry = read_entries(&std::cin,
-					 queue_test.do_compress());
+  vector<Entry> vec_entry = read_entries(&std::cin, queue_test.do_compress());
   cout << "Finish reading " << vec_entry.size() << " entries" << endl;
-
   queue_test.wait_init();
 
   vector<const Entry *> vec_pe(opt_repeat_num * vec_entry.size());
