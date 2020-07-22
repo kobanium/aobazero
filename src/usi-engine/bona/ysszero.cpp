@@ -1528,7 +1528,7 @@ void set_default_param()
 	}
 #ifdef USE_OPENCL
 	if ( default_gpus.size() == 0 ) default_gpus.push_back(0);
-	size_t gpus = default_gpus.size();
+	int gpus = (int)default_gpus.size();
 	if ( cfg_num_threads == 0 && cfg_batch_size == 0 ) {
 		cfg_batch_size  = 7;
 		cfg_num_threads = 15 * gpus;

@@ -329,9 +329,6 @@
     <ClCompile Include="..\..\..\common\nnet-srv.cpp">
       <Filter>Source Files\common</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\common\osi.cpp">
-      <Filter>Source Files\common</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\common\shogibase.cpp">
       <Filter>Source Files\common</Filter>
     </ClCompile>
@@ -339,6 +336,9 @@
       <Filter>Source Files\common</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\common\opencli.cpp">
+      <Filter>Source Files\common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\common\osi.cpp">
       <Filter>Source Files\common</Filter>
     </ClCompile>
   </ItemGroup>

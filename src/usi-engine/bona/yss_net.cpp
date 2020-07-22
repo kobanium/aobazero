@@ -56,8 +56,8 @@ bool fUseLeelaZeroOpenCL = false;	// only for test.
 #endif
 
 #ifdef NN_PARALLEL
-#include "../../common/nnet-srv.hpp"
-#include "../../common/nnet-ipc.hpp"
+#include "nnet-srv.hpp"
+#include "nnet-ipc.hpp"
 
 using std::copy_n;
 
@@ -102,7 +102,7 @@ void prepare_dummy_data_unlock()
 
 void prepare_dummy_data(float *data, std::vector<unsigned short> &nnmoves)
 {
-	int size = nnmoves.size();
+	size_t size = nnmoves.size();
 	dummy_nnmoves.resize(size);
 	copy_n(data, NNAux::nch_input*NNAux::size_plane, dummy_data);
 	copy_n(nnmoves.data(), size, dummy_nnmoves.data() );
@@ -174,7 +174,7 @@ void AddDummy::wait_loop() {
 		}
 		if ( is_stop_dummy_thread() ) break;
 
-		submit_block_sub(p_nnet, m_gnum, dummy_nnmoves.size());
+		submit_block_sub(p_nnet, m_gnum, (int)dummy_nnmoves.size());
 		{
 			std::lock_guard<std::mutex> lock(m_mutex);
 			m_is_ready = false;
@@ -194,7 +194,7 @@ void unlock_AddDummy(AddDummy *p)
 void submit_num_check_loop(size_t gnum) {
 	PRT("start dummy_num_threads=%d,gnum=%d\n",dummy_num_threads,gnum);
 	std::vector<std::thread> th_p;
-	int base = dummy_num_threads * gnum;
+	size_t base = dummy_num_threads * gnum;
 	int i;
 	for (i=0; i<dummy_num_threads; i++) {
 		AddDummy *p = pAD[base+i];
@@ -284,7 +284,7 @@ void init_network()
 {
 #ifdef THREAD_BATCH
 	int num_P = 1;
-	int numGPU = default_gpus.size();
+	int numGPU = (int)default_gpus.size();
 	if ( numGPU == 0       ) DEBUG_PRT("Err. numGPU=0\n");
 	if ( numGPU > MAX_GPUS ) DEBUG_PRT("Err. MAX_GPUS\n");
 
@@ -293,8 +293,8 @@ void init_network()
 	if ( is_thread_batch() ) {
 		seq_s.emplace_back();
 
-		int num_thread = threads_per_GPU * numGPU;
-		if ( num_thread != (int)cfg_num_threads ) {
+		unsigned int num_thread = threads_per_GPU * numGPU;
+		if ( num_thread != cfg_num_threads ) {
 			PRT("cfg_num_threads must be GPUs x N. cfg_num_threads = %d -> %d\n",cfg_num_threads, num_thread);
 			cfg_num_threads = num_thread;
 		}
@@ -304,19 +304,19 @@ void init_network()
 		dummy_num_threads = thread_batch_size * 1 - 1;
 		num_P = threads_per_GPU + dummy_num_threads;	// スレッドはbatchの2倍、が最低でも必要。dummy用は(batch*2 - 1)が必要
 		if ( threads_per_GPU < thread_batch_size * 1 ) DEBUG_PRT("Err. not enought thread. threads_per_GPU = %d >= %d\n",threads_per_GPU,thread_batch_size * 2);
-		int num_B[numGPU];
-		int num_U[numGPU];
-		int num_H[numGPU];
-		FName fname_W[numGPU];
-		int num_T[numGPU];
-		NNet::Impl impl_I[numGPU];
+		int num_B[MAX_GPUS];
+		int num_U[MAX_GPUS];
+		int num_H[MAX_GPUS];
+		FName fname_W[MAX_GPUS];
+		int num_T[MAX_GPUS];
+		NNet::Impl impl_I[MAX_GPUS];
 		for (int i=0;i<numGPU;i++) {
 			num_B[i] = thread_batch_size;
 			num_U[i] = default_gpus[i];
 			num_H[i] = nUseHalf;
 			fname_W[i].reset_fname(default_weights.c_str());
 			num_T[i] = -1;
-			impl_I[i] = NNet::opencl;
+			impl_I[i] = NNet::opencl;	// NNet::cpublas
 			nnets.emplace_back(impl_I[i], i, num_P, num_B[i], num_U[i], num_H[i], num_T[i], fname_W[i]);
  		}
 		PRT("num_P=%d,threads_per_GPU=%d,cfg_num_threads=%d,numGPU=%d,all P=%d\n",num_P,threads_per_GPU,cfg_num_threads,numGPU,num_P*numGPU);
@@ -338,7 +338,7 @@ void init_network()
 			PRT("nnet.start(%d), nNNetID=%d\n",gpu_id,nNNetID_v[nIPC]);
 			if ( ! is_thread_batch() ) break;
   			if ( i < threads_per_GPU ) continue;
-		    pAD.push_back(new AddDummy(nIPC, gpus));
+		    pAD.push_back(new AddDummy(nIPC, (int)gpus));
 		}
 //		if ( nNNetID==0 ) for (int i=0;i<7008768+10000;i++) if ( (i%10000)==0) PRT("%6d;%016" PRIx64 "\n",i, get_process_mem(i) );
 		if ( is_thread_batch() ) {
@@ -526,7 +526,7 @@ void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *
 			int d = draw - w;
 //			if ( tt > d ) tt += 513 - draw;				// 突然増加
 //			if ( tt > d ) tt = (tt-d)*(513-d)/w + d;	// 線形に増加
-			if ( tt > d ) tt = 1.0 / (1.0 + exp(-5.0*((tt-d)*2.0/w - 1.0))) * (513 - d) + d;	// sigmoidで半分で急激に増加, a = 5
+			if ( tt > d ) tt = (int)(1.0 / (1.0 + exp(-5.0*((tt-d)*2.0/w - 1.0))) * (513 - d) + d);	// sigmoidで半分で急激に増加, a = 5
 //			PRT("tt=%d -> %d\n",t + sfen_current_move_number,tt);
 		}
 		for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
@@ -701,7 +701,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 				float r0 = bat[i].first, r1 = cpu[i].first;
 				float diff = fabs(r0 - r1);
 				float per = 0;
-				if ( r0 != 0 ) per = 100.0 * diff / r0;
+				if ( r0 != 0 ) per = (float)(100.0 * diff / r0);
 				r0_sum += r0;
 				r1_sum += r1;
 				if ( r0 != 0 && per > 1.0 ) {

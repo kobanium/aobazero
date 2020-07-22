@@ -819,16 +819,18 @@ usi_option( tree_t *restrict ptree, char **lasts )
   (void)ptree;
 
   // "setoption name USI_WeightFile value weight/w000000001144.txt"
-  token = strtok_r( NULL, str_delimiters, lasts );
-  if ( token==NULL || strcmp( token, "name" ) !=0 ) { PRT("option needs 'name'\n"); debug(); }
-  token = strtok_r( NULL, str_delimiters, lasts );
-  if ( token==NULL || strcmp( token, "USI_WeightFile" ) !=0 ) { PRT("unknown option\n"); debug(); }
-  token = strtok_r( NULL, str_delimiters, lasts );
-  if ( token==NULL || strcmp( token, "value" ) !=0 ) { PRT("unknown option\n"); debug(); }
-  token = strtok_r( NULL, str_delimiters, lasts );
-  if ( token==NULL ) { PRT("no path\n"); debug(); }
+  do {
+    token = strtok_r( NULL, str_delimiters, lasts );
+    if ( token==NULL || strcmp( token, "name" ) !=0 ) { PRT("option needs 'name'\n"); break; }
+    token = strtok_r( NULL, str_delimiters, lasts );
+    if ( token==NULL || strcmp( token, "USI_WeightFile" ) !=0 ) { PRT("unknown option\n"); break; }
+    token = strtok_r( NULL, str_delimiters, lasts );
+    if ( token==NULL || strcmp( token, "value" ) !=0 ) { PRT("unknown option\n"); break; }
+    token = strtok_r( NULL, str_delimiters, lasts );
+    if ( token==NULL ) { PRT("no path\n"); break; }
 
-  replace_network(token);
+    replace_network(token);
+  } while(0);
 
   return 1;
 }
