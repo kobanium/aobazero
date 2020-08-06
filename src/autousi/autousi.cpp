@@ -160,18 +160,13 @@ static void output() noexcept {
   steady_clock::time_point time_now = steady_clock::now();
   if (time_now < time_last + seconds(print_status)) return;
   
-  static uint prev_ntot     = 0;
   static uint prev_nsend    = 0;
-  static uint prev_ndiscard = 0;
   double time_ave_tot = 0.0;
   uint ntot     = PlayManager::get().get_ngen_records();
   uint nsend    = Client::get().get_nsend();
   uint ndiscard = Client::get().get_ndiscard();
-  if (prev_ntot == ntot && prev_nsend == nsend && prev_ndiscard == ndiscard)
-    return;
-  prev_ntot     = ntot;
+  if ( prev_nsend == nsend ) return;
   prev_nsend    = nsend;
-  prev_ndiscard = ndiscard;
 
   first           = true;
   print_csa_do_nl = false;

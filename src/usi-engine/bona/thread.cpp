@@ -682,7 +682,7 @@ init_state( const tree_t * restrict parent, tree_t * restrict child )
 #if defined(YSS_ZERO)
   // need to copy record_plus_ply_min_posi[0].
   int loop = child->nrep + ply - 0;
-  if ( loop <= 0 ) { printf( "thread copy err.\n" ); exit(0); }
+  if ( loop <= 0 ) { printf( "thread copy err.\n" ); debug(); }
   for ( i = 0; i < loop; i++ )
     {
       child->record_plus_ply_min_posi[i] = parent->record_plus_ply_min_posi[i];

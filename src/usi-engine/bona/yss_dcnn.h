@@ -62,7 +62,6 @@ extern std::vector<int> default_gpus;
 extern int usi_go_count;
 extern int usi_bestmove_count;
 
-void debug();
 void debug_set(const char *file, int line);
 void debug_print(const char *fmt, ... );
 #define DEBUG_PRT (debug_set(__FILE__,__LINE__), debug_print)	

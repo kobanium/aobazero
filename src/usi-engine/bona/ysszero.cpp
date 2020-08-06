@@ -70,8 +70,6 @@ uint64_t (*sequence_hash_drop)[81][7];
 int usi_go_count = 0;		// bestmoveを送った直後にstopが来るのを防ぐため
 int usi_bestmove_count = 0;
 
-void debug() { exit(0); }
-
 void PRT_sub(const char *fmt, va_list arg)
 {
 	va_list arg2;
@@ -138,12 +136,12 @@ const int CLOCKS_PER_SEC_MS = 1000;	// CLOCKS_PER_SEC を統一。linuxではよ
 int get_clock()
 {
 #if defined(_MSC_VER)
-	if ( CLOCKS_PER_SEC_MS != CLOCKS_PER_SEC ) { PRT("CLOCKS_PER_SEC=%d Err. not Windows OS?\n"); exit(0); }
+	if ( CLOCKS_PER_SEC_MS != CLOCKS_PER_SEC ) { PRT("CLOCKS_PER_SEC=%d Err. not Windows OS?\n"); debug(); }
 	return clock();
 #else
 	struct timeval  val;
 	struct timezone zone;
-	if ( gettimeofday( &val, &zone ) == -1 ) { PRT("time err\n"); exit(0); }
+	if ( gettimeofday( &val, &zone ) == -1 ) { PRT("time err\n"); debug(); }
 	return val.tv_sec*1000 + (val.tv_usec / 1000);
 #endif
 }
@@ -327,7 +325,7 @@ int YssZero_com_turn_start( tree_t * restrict ptree )
   
 		int tt = root_turn;
 		if ( ! is_move_valid( ptree, move, tt ) ) {
-			PRT("illegal move?=%08x\n",move); exit(0);
+			PRT("illegal move?=%08x\n",move); debug();
 		}
 		int from = (int)I2From(move);
 		int to   = (int)I2To(move);
@@ -894,7 +892,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		}
 		sum_games += pc->games;
 		if ( pc->games ) {
-			PRT("%3d(%3d)%7s,%5d,%6.3f,bias=%6.3f\n",i,select_count++,str_CSA_move(pc->move),pc->games,pc->value,pc->bias);
+			PRT("%3d(%3d)%7s,%5d,%6.3f,bias=%.10f\n",i,select_count++,str_CSA_move(pc->move),pc->games,pc->value,pc->bias);
 			if ( sort_n < SORT_MAX ) {
 				sort[sort_n][0] = pc->games;
 				sort[sort_n][1] = pc->move;
@@ -1511,7 +1509,7 @@ int getCmdLineParam(int argc, char *argv[])
 
 	if ( default_weights.empty() ) {
 		PRT("A network weights file is required to use the program.\n");
-		exit(EXIT_FAILURE);
+		debug();
 	}
 
 	return 1;

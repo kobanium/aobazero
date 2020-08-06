@@ -17,6 +17,7 @@
 #include <vector>
 #include <cmath>
 #include <chrono>
+#include <exception>
 
 
 #include <limits.h>
@@ -49,7 +50,7 @@ std::vector<int> default_gpus;
 void init_global_objects();	// Leela.cpp
 void initialize_network();
 
-bool fUseLeelaZeroOpenCL = false;	// only for test.
+bool fUseLeelaZeroOpenCL = false;	// only for test. disable USE_OPENCL_SELFCHECK
 
 #ifdef USE_OPENCL
 #define NN_PARALLEL
@@ -242,7 +243,30 @@ void submit_num_check_loop(size_t gnum) {
 		th.join();
 	}
 }
+
+void on_terminate_aobaz() {	// clean up shared memory
+  std::exception_ptr p = std::current_exception();
+  try { if (p) std::rethrow_exception(p); }
+  catch (const std::exception &e) { std::cout << e.what() << std::endl; }
+
+  try { OSI::Semaphore::cleanup(); }
+  catch (std::exception &e) { std::cerr << e.what() << std::endl; }
+  
+  try { OSI::MMap::cleanup(); }
+  catch (std::exception &e) { std::cerr << e.what() << std::endl; }
+
+  abort();
+}
+
+void on_signal_aobaz(int /*signum*/) {
+	on_terminate_aobaz();
+}
 #endif
+
+void set_signal_terminate() {
+	std::set_terminate(on_terminate_aobaz);
+	OSI::handle_signal(on_signal_aobaz);
+}
 
 bool is_process_batch()
 {
@@ -269,6 +293,15 @@ bool is_load_weight()
 	return true;
 }
 
+void debug() {
+#ifdef THREAD_BATCH
+	if ( is_thread_batch() ) {
+		on_terminate_aobaz();
+	}
+#endif
+	exit(0);
+}
+
 uint64_t get_process_mem(int i)
 {
 #ifdef NN_PARALLEL
@@ -291,6 +324,8 @@ void init_network()
 	threads_per_GPU = cfg_num_threads / numGPU;
 	if ( threads_per_GPU == 0 ) DEBUG_PRT("Err. threads_per_GPU=0\n");
 	if ( is_thread_batch() ) {
+		set_signal_terminate();
+
 		seq_s.emplace_back();
 
 		unsigned int num_thread = threads_per_GPU * numGPU;
@@ -768,7 +803,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 			if ( add > 0.98f ) add = 1.0f - add;	// only one escape king move position
 			err_sum += add*add;
 	    }
-	    if ( 0 && ply==1 && id < 100 ) PRT("%4d,%08x(%08x),%f\n",id,yss_m,bona_m, node.first);
+	    if ( 0 ) PRT("%4d,%08x(%08x),%.15f\n",id,yss_m,bona_m, node.first);
 	}
 	if ( 0 ) PRT("ptree->nrep=%3d,ply=%2d:err_sum=%.10f,raw_v=%11.8f\n",ptree->nrep,ply,err_sum,raw_v);
 
@@ -1128,7 +1163,7 @@ void add_dirichlet_noise(float epsilon, float alpha, HASH_SHOGI *phg)
 		CHILD *pc = &phg->child[i];
         float score = pc->bias;
         score = score * (1 - epsilon) + epsilon * eta_a;
-        PRT("%3d:%8s,noise=%10f, bias=%f -> %f\n",i,str_CSA_move(pc->move),eta_a,pc->bias,score);
+        PRT("%3d:%8s,noise=%.9f, bias=%.9f -> %.9f\n",i,str_CSA_move(pc->move),eta_a,pc->bias,score);
         pc->bias = score;
     }
 }
