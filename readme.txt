@@ -32,6 +32,7 @@ CentOS での手順を記します。
 
 - liblzma などをインストール
 
+> sudo yum install epel-release
 > sudo yum install xz-devel zlib-devel opencl-headers
 
 - GCC 7.3.1 をインストール
