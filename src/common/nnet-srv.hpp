@@ -29,15 +29,19 @@ class NNetService {
   std::thread _th_worker_srv;
   std::thread _th_worker_push;
   std::thread _th_worker_wait;
+  
+  std::mutex _m_entries;
   std::condition_variable _cv_entries_push;
   std::condition_variable _cv_entries_wait;
-  std::mutex _m_if;
+  
   std::mutex _m_srv;
-  std::mutex _m_entries;
+  std::condition_variable _cv_srv;
+  bool _flag_srv;
+  
   std::deque<std::unique_ptr<class Entry>> _entries_pool;
   std::deque<std::unique_ptr<class Entry>> _entries_push;
   std::deque<std::unique_ptr<class Entry>> _entries_wait;
-  bool _flag_cv_srv, _flag_quit;
+  bool _flag_quit;
   uint _nnet_id, _nipc, _size_batch, _device_id, _use_half, _thread_num;
   FName _fname;
   void worker_srv() noexcept;

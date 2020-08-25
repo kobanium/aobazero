@@ -30,6 +30,7 @@ using uint = unsigned int;
 #  include <ws2tcpip.h>
 #  include <winsock2.h>
 #  include <windows.h>
+#  include <tlhelp32.h>
 #  undef max
 #  undef min
 using std::atomic;
@@ -171,7 +172,7 @@ class OSI::cp_impl {
   DWORD _pid;
   HANDLE _h_in_wr, _h_out_rd, _h_err_rd;
 public:
-  cp_impl(const char *, char * const argv[]) noexcept {
+  cp_impl(const char *, char *const argv[]) noexcept {
     assert(argv[0]);
     HANDLE h_in_rd  = INVALID_HANDLE_VALUE;
     HANDLE h_out_wr = INVALID_HANDLE_VALUE;
@@ -206,7 +207,6 @@ public:
     if (sizeof(line) < len) die(ERR_INT("command line too long"));
     strcpy(line, argv[0]);
     for (int i = 1; argv[i]; ++i) { strcat(line, " "); strcat(line, argv[i]); }
-
     if (!CreateProcessA(nullptr, line, nullptr, nullptr, TRUE,
 		       CREATE_NEW_PROCESS_GROUP, nullptr, nullptr, &si, &pi))
       die(ERR_INT("CreateProcess() failed: %s", LastErr().get()));
@@ -380,6 +380,44 @@ public:
   void send(const char *buf, size_t len_send, uint tout, uint bufsiz) const;
   void recv(char *buf, size_t len_tot, uint tout, uint bufsiz) const; };
 
+uint OSI::get_pid() noexcept { return GetCurrentProcessId(); }
+
+uint OSI::get_ppid() noexcept {
+  HANDLE h = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (h == INVALID_HANDLE_VALUE)
+    die(ERR_INT("CreateToolhelp32Snapshot() failed: %s", LastErr().get()));
+
+  PROCESSENTRY32 pe = { 0 };
+  pe.dwSize = sizeof(PROCESSENTRY32);
+  uint pid = GetCurrentProcessId();
+  uint ppid = 0;
+  BOOL ret;
+  for (ret = Process32First(h, &pe); ret; ret = Process32Next(h, &pe)) {
+    if (pe.th32ProcessID != pid) continue;
+    ppid = pe.th32ParentProcessID;
+    break; }
+  if (! ret) die(ERR_INT("INTERNAL ERROR"));
+  
+  if (CloseHandle(h) == 0)
+    die(ERR_INT("CloseHandle() failed: %s", LastErr().get()));
+  return static_cast<unsigned int>(ppid); }
+
+bool OSI::has_parent() noexcept {
+  HANDLE h = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (h == INVALID_HANDLE_VALUE)
+    die(ERR_INT("CreateToolhelp32Snapshot() failed: %s", LastErr().get()));
+
+  PROCESSENTRY32 pe = { 0 };
+  pe.dwSize = sizeof(PROCESSENTRY32);
+  uint pid = GetCurrentProcessId();
+  BOOL ret;
+  for (ret = Process32First(h, &pe); ret; ret = Process32Next(h, &pe))
+    if (pe.th32ProcessID == pid) break;
+  
+  if (CloseHandle(h) == 0)
+    die(ERR_INT("CloseHandle() failed: %s", LastErr().get()));
+  return static_cast<bool>(ret); }
+
 static_assert(BUFSIZ <= UINT32_MAX, "BUFSIZ too large");
 #else
 #  include <cerrno>
@@ -461,7 +499,6 @@ public:
       _psem = sem_open(name, O_CREAT | O_EXCL, 0600, value);
       if (_psem == SEM_FAILED) die(ERR_CLL("sem_open"));
       lock_guard<mutex> lock(m_sem_save);
-      if (flag_sem_save) { mutex m; m.lock(); m.lock(); }
       assert(sem_save.find(_psem) == sem_save.end());
       sem_save[_psem] = _fname; }
     else {
@@ -508,7 +545,6 @@ public:
       _ptr = mmap(nullptr, size, PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
       if (_ptr == MAP_FAILED) die(ERR_CLL("mmap"));
       lock_guard<mutex> lock(m_mmap_save);
-      if (flag_mmap_save) { mutex m; m.lock(); m.lock(); }
       assert(mmap_save.find(_ptr) == mmap_save.end());
       mmap_save[_ptr] = _fname; }
     else {

@@ -31,7 +31,8 @@ public:
   std::deque<std::string> manage_play(bool has_conn, const FNameID &wfname,
 				      uint64_t crc64) noexcept;
   bool get_moves_eid0(std::string &move) noexcept;
-  uint get_nengine() const noexcept { return _engines.size(); }
+  uint get_nengine() const noexcept {
+    return static_cast<uint>(_engines.size()); }
   uint get_ngen_records() const noexcept { return _ngen_records; };
   uint get_nthinking() const noexcept { return _num_thinking; }
   uint get_eid(uint u) const noexcept;

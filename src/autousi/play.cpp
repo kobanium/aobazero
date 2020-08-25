@@ -465,7 +465,7 @@ void PlayManager::start(const char *cname, const char *dlog,
   int eid = 0;
   for (Device &d : _devices) {
     uint size     = d.get_size_parallel();
-    int nnet_id   = d.get_nnet_id();
+    nnet_id       = d.get_nnet_id();
     int device_id = d.get_device_id();
     char ch       = d.get_id_option_character();
     for (uint u = 0; u < size; ++u)

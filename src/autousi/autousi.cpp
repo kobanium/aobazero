@@ -1,5 +1,8 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
+#ifdef _MSC_VER
+#  define _CRT_SECURE_NO_WARNINGS
+#endif
 #include "err.hpp"
 #include "osi.hpp"
 #include "client.hpp"
@@ -61,8 +64,8 @@ static steady_clock::time_point time_start;
 static FName opt_dname_csa;
 static uint opt_max_csa;
 
-static const char *cstr_cname;
-static const char *cstr_dlog;
+static string str_cname;
+static string str_dlog;
 static uint verbose_eng;
 static vector<string> devices;
 
@@ -109,8 +112,8 @@ static void init() noexcept {
 			   {"Port",          "20000"}};
   try { Config::read("autousi.cfg", m); } catch (exception &e) { die(e); }
   const char *cstr_dwght = Config::get_cstr(m, "WeightSave", maxlen_path);
-  cstr_cname             = Config::get_cstr(m, "CmdPath",    maxlen_path);
-  cstr_dlog              = Config::get_cstr(m, "DirLog",     maxlen_path);
+  str_cname              = Config::get_cstr(m, "CmdPath",    maxlen_path);
+  str_dlog               = Config::get_cstr(m, "DirLog",     maxlen_path);
   const char *cstr_csa   = Config::get_cstr(m, "DirCSA",     maxlen_path);
   const char *cstr_addr  = Config::get_cstr(m, "Addr",       64);
   uint size_queue        = Config::get<uint>  (m, "SizeSendQueue", is_posi);
@@ -129,7 +132,7 @@ static void init() noexcept {
 
   opt_dname_csa.reset_fname(cstr_csa);
   dirlocks.emplace_back(cstr_dwght);
-  dirlocks.emplace_back(cstr_dlog);
+  dirlocks.emplace_back(str_dlog.c_str());
   dirlocks.emplace_back(cstr_csa);
   Client::get().start(cstr_dwght, cstr_addr, port, recvTO, recv_bufsiz, sendTO,
 		      send_bufsiz, max_retry, size_queue, keep_wght); }
@@ -230,29 +233,23 @@ int main() {
   set_terminate(on_terminate);
   init();
   std::shared_ptr<const WghtFile> wght = Client::get().get_wght();
-  PlayManager::get().start(cstr_cname, cstr_dlog, devices, verbose_eng,
-			   wght->get_fname(), wght->get_crc64());
-
-  OSI::handle_signal(on_signal);
-  time_start = steady_clock::now();
+  PlayManager::get().start(str_cname.c_str(), str_dlog.c_str(), devices,
+			   verbose_eng, wght->get_fname(), wght->get_crc64());
 
   cout << "self-play started" << endl;
+  OSI::handle_signal(on_signal);
+  time_start = steady_clock::now();
   while (! flag_signal) {
     output();
     wght = Client::get().get_wght();
     deque<string> recs
       = PlayManager::get().manage_play(Client::get().has_conn(),
 				       wght->get_fname(), wght->get_crc64());
+    
     for (const string &rec : recs) {
       Client::get().add_rec(rec.c_str(), rec.size());
       write_record(rec.c_str(), rec.size(),
-		   opt_dname_csa.get_fname(), opt_max_csa); }
-
-    // if (wght->get_id() == Client::get().get_wght()->get_id()) continue;
-    // wght = Client::get().get_wght();
-    // PlayManager::get().engine_terminate();
-    // PlayManager::get().engine_start(wght->get_fname(), wght->get_crc64());
-  }
+		   opt_dname_csa.get_fname(), opt_max_csa); } }
   
   cout << "\nsignal " << flag_signal << " caught" << endl;
   PlayManager::get().end();

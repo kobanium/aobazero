@@ -59,3 +59,6 @@ cl %CPPFLAGS% %CXXFLAGS% src\net-test\net-test.cpp src\common\opencli.cpp src\co
 
 cl %CPPFLAGS% %CXXFLAGS% src\ocldevs\ocldevs.cpp src\common\err.cpp src\common\opencli.cpp %LDFLAGS%
 @if %ERRORLEVEL% neq 0 (exit /b %ERRORLEVEL%)
+
+cl %CPPFLAGS% %CXXFLAGS% src\autousi\autousi.cpp src\autousi\play.cpp src\autousi\client.cpp src\common\child.cpp src\common\opencli.cpp src\common\nnet.cpp src\common\nnet-cpu.cpp src\common\nnet-ocl.cpp src\common\nnet-srv.cpp src\common\jqueue.cpp src\common\err.cpp src\common\iobase.cpp src\common\shogibase.cpp src\common\xzi.cpp src\common\osi.cpp src\common\option.cpp Ws2_32.lib %LDFLAGS% 
+@if %ERRORLEVEL% neq 0 (exit /b %ERRORLEVEL%)
