@@ -1,7 +1,6 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
 #include "err.hpp"
-#include "iobase.hpp"
 #include "nnet-ocl.hpp"
 #include <string>
 #include <utility>
@@ -12,14 +11,18 @@ using std::pair;
 using namespace ErrAux;
 #if !defined(USE_OPENCL_AOBA)
 std::string NNetOCL::reset(uint, const std::vector<std::pair<uint, row_t>> &,
-			   int, bool, bool, bool) noexcept {
+			   int, bool, bool, bool, const char *) noexcept {
   die(ERR_INT("No OpenCL support"));
   return string(""); }
 #else
+#include "iobase.hpp"
+#include "option.hpp"
 #include <algorithm>
 #include <deque>
 #include <exception>
+#include <fstream>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <thread>
 #include <tuple>
@@ -42,15 +45,19 @@ using std::copy_n;
 using std::cout;
 using std::deque;
 using std::endl;
+using std::exception;
 using std::fill_n;
 using std::forward;
+using std::ifstream;
 using std::lock_guard;
 using std::make_tuple;
+using std::map;
 using std::max;
 using std::max_element;
 using std::min;
 using std::move;
 using std::mutex;
+using std::ofstream;
 using std::set;
 using std::sort;
 using std::stringstream;
@@ -1108,12 +1115,35 @@ static double measure_compute_matM(const OCL::Context &context,
   int64_t elapsed = duration_cast<microseconds>(end - start).count();
   return static_cast<double>(elapsed / static_cast<int64_t>(sample_size)); }
 
+static void save_tune(const std::string &signature, const SgemmParam &param,
+		      FName &fname) noexcept {
+  ofstream ofs(fname.get_fname());
+  ofs << "# " << signature << std::endl;
+  ofs << param.gen_info("\n");
+  if (!ofs) die(ERR_INT("cannot write to %s", fname.get_fname())); }
+
 static SgemmParam tune_compute_matM(bool use_half, bool use_wmma,
-				    const OCL::Device &device,
+				    const std::string &signature,
+				    int device_id, const OCL::Device &device,
 				    const OCL::Context &context, uint nbatch,
-				    uint nm0, uint nn0, uint nk0) {
+				    uint nm0, uint nn0, uint nk0,
+				    const char *dname_tune) {
   assert((!use_wmma || use_half) && device.ok() && context.ok());
   assert(0 < nbatch && 0 < nm0 && 0 < nn0 && 0 < nk0);
+  FName fname;
+  if (dname_tune) {
+    fname.add_fname(dname_tune);
+    const char *p;
+    if      (use_wmma) p = "W";
+    else if (use_half) p = "H";
+    else               p = "";
+    fname.add_fmt_fname("tune-ocldev%d-sgemmb-b%um%un%uk%u%s.txt",
+			device_id, nbatch, nm0, nn0, nk0, p);
+    ifstream ifs(fname.get_fname());
+    string s;
+    if (ifs && getline(ifs, s) && signature == s.substr(2))
+      return SgemmParam(use_half, use_wmma, fname.get_fname()); }
+    
   deque<SgemmParam> params, params_candi;
   uint mmax = ceil_power2(nm0);
   uint nmax = ceil_power2(nn0);
@@ -1192,7 +1222,7 @@ static SgemmParam tune_compute_matM(bool use_half, bool use_wmma,
     params.pop_front();
     double elapsed = DBL_MAX;
     bool flag_error = false;
-    
+
     try {
       elapsed = measure_compute_matM(context, param, nbatch, nm0, nn0, nk0,
 				     1U); }
@@ -1216,7 +1246,7 @@ static SgemmParam tune_compute_matM(bool use_half, bool use_wmma,
     if (time_max <= it->time) it = params_candi.erase(it);
     else ++it; }
   
-  uint sample_size = max(2U, static_cast<uint>(100000.0 / time_best));
+  uint sample_size = max(2U, static_cast<uint>(50000.0 / time_best));
   sample_size = min(sample_size, tune_sample_size_base * 4U);
   if (1U < sample_size) {
     time_best = DBL_MAX;
@@ -1229,20 +1259,51 @@ static SgemmParam tune_compute_matM(bool use_half, bool use_wmma,
       time_best  = elapsed;
       param_best = param; } }
   if (time_best == DBL_MAX) die(ERR_INT("ManageComputeMatM() failed."));
-  
+
+  if (dname_tune) save_tune(signature, param_best, fname);
   return param_best; }
 
-string SgemmParam::gen_info() const noexcept {
-  string s;
-  s += string("NLM:") + to_string(nlm) + string(" ");
-  s += string("NLN:") + to_string(nln) + string(" ");
-  s += string("NPM:") + to_string(npm) + string(" ");
-  s += string("NPN:") + to_string(npn) + string(" ");
-  s += string("NPK:") + to_string(npk) + string(" ");
+static constexpr bool is_posi(uint u) { return 0 < u; }
+static constexpr bool is_16u(uint u)  { return u == 16U; }
+SgemmParam::SgemmParam(bool do_half_, bool do_wmma_, const char *fname)
+  noexcept : flag_read(true), do_half(do_half_), do_wmma(do_wmma_) {
+  map<string, string> m = {{"Type:",                  ""},
+			   {"Name:",                  ""},
+			   {"Driver_Vsersion:",       ""},
+			   {"Compute_Units:",         ""},
+			   {"Max_Clock_Freq_(MHz):",  ""},
+			   {"Global_Mem_Alloc_Size:", ""},
+			   {"Local_Mem_Type:",        ""},
+			   {"Local_Mem_Size:",        ""},
+			   {"NLM", "0"}, {"NLN", "0"},
+			   {"NPM", "0"}, {"NPN", "0"},
+			   {"NPK", "0"},
+			   {"NTM", "0"}, {"NTN", "0"},
+			   {"TUS", "0"}};
+  try { Config::read(fname, m); } catch (exception &e) { die(e); }
+  nlm = Config::get<uint>(m, "NLM", is_posi);
+  nln = Config::get<uint>(m, "NLN", is_posi);
+  npm = Config::get<uint>(m, "NPM", is_posi);
+  npn = Config::get<uint>(m, "NPN", is_posi);
+  npk = Config::get<uint>(m, "NPK", is_posi);
   if (do_wmma) {
-    s += string("NTM:") + to_string(ntm) + string(" ");
-    s += string("NTN:") + to_string(ntn) + string(" "); }
-  s += string("(") + to_string(static_cast<uint>(time)) + string("us)");
+    ntm = Config::get<uint>(m, "NTM", is_16u);
+    ntn = Config::get<uint>(m, "NTN", is_16u); }
+  uint tus = Config::get<uint>(m, "TUS", [](uint u){ return 0 < u; });
+  time = static_cast<double>(tus); }
+
+string SgemmParam::gen_info(const char *newline) const noexcept {
+  string snl = string(newline);
+  string s;
+  s += string("NLM:") + to_string(nlm) + snl;
+  s += string("NLN:") + to_string(nln) + snl;
+  s += string("NPM:") + to_string(npm) + snl;
+  s += string("NPN:") + to_string(npn) + snl;
+  s += string("NPK:") + to_string(npk) + snl;
+  if (do_wmma) {
+    s += string("NTM:") + to_string(ntm) + snl;
+    s += string("NTN:") + to_string(ntn) + snl; }
+  s += string("TUS:") + to_string(static_cast<uint>(time));
   return s; }
 
 static void get_device(uint udev, OCL::Device &device_udev) noexcept {
@@ -1257,9 +1318,10 @@ static void get_device(uint udev, OCL::Device &device_udev) noexcept {
   device_udev = OCL::Device();
   return; }
 
-static void get_best_device(OCL::Device &device_best) noexcept {
+static int get_best_device(OCL::Device &device_best) noexcept {
   double value_best = -1.0;
-  uint id = 0;
+  int id = 0;
+  int id_best = -1;
   vector<OCL::Platform> platforms = OCL::gen_platforms();
   for (auto &platform : platforms) {
     vector<OCL::Device> devices = platform.gen_devices_all();
@@ -1267,9 +1329,11 @@ static void get_best_device(OCL::Device &device_best) noexcept {
       double value = static_cast<double>(device.gen_max_compute_units());
       value *= static_cast<double>(device.gen_max_clock_frequency());
       if (device.ok() || value_best < value) {
+	id_best     = id;
 	value_best  = value;
 	device_best = move(device); }
-      id += 1U; } } }
+      id += 1U; } }
+  return id_best; }
 
 void ManageDecode::start(const OCL::Context &context,
 			 const OCL::MemPinned mem_in[NNAux::nslot],
@@ -1326,7 +1390,8 @@ void ManageComputeMatM::start(const OCL::Context &context, uint nbatch,
   _size_l[2] = 1U;
   OCL::Program pg = context.gen_program(str);
   for (uint u = 0; u < NNAux::nslot; ++u)
-    _ker[u] = pg.gen_kernel("compute_matM"); }
+    _ker[u] = pg.gen_kernel("compute_matM");
+}
 
 void ManageComputeMatM::set(const OCL::Memory &mem_a,
 			    const OCL::Memory mem_b[NNAux::nslot],
@@ -1400,81 +1465,95 @@ public:
   const OCL::Memory &get() const noexcept { return _mem; }
   bool is_done() const noexcept { return _done; } };
 
-void ManageSgemm::start(const OCL::Device &device, const OCL::Context &context,
+void ManageSgemm::start(string signature, int device_id,
+			const OCL::Device &device, const OCL::Context &context,
 			uint nker, bool, bool, uint nm0, uint nn0, uint nk0,
 			uint offa, uint lda, uint offb, uint ldb, uint offc,
-			uint ldc) {
+			uint ldc, const char *dname_tune) {
   assert(device.ok() && context.ok() && 0 < nm0 && 0 < nn0 && 0 < nk0);
   assert(0 < lda && 0 < ldb && 0 < ldc);
-  deque<SgemmParam> params, params_candi;
-  uint wgmax = min(static_cast<uint>(device.gen_max_work_group_size()), 4096U);
-  uint mmax  = ceil_power2(nm0);
-  uint nmax  = ceil_power2(nn0);
-  uint kmax  = ceil_power2(nk0);
-  bool is_m_larger = nn0 < nm0;
-  for (uint nlm = min(mmax, 4U); nlm <= 16U; nlm *= 2U)
-    for (uint nln = min(nmax, 4U); nln <= 16U; nln *= 2U) {
-      if (wgmax < nlm*nln) continue;
-      if (is_m_larger && nlm < nln) continue;
-      if (! is_m_larger && nln < nlm) continue;
-      for (uint npm = 1U; npm <= 16U; npm *= 2U)
-	for (uint npn = 1U; npn <= 16U; npn *= 2U) {
-	  if (is_m_larger && npm < npn) continue;
-	  if (! is_m_larger && npn < npm) continue;
-	  if (mmax < nlm*npm) continue;
-	  if (nmax < nln*npn) continue;
-	  if (nln < npm) continue;
-	  if (nlm < npn) continue;
-	  uint npk0 = max(nlm, nln/npm);
-	  uint npk1 = max(4U, max(nlm, nln));
-	  for (uint npk = npk0; npk <= npk1; npk *= 2U) {
-	    if (npk < nlm) continue;
-	    if (kmax < npk) continue;
-	    if (npm*npk < nln) continue;
-	    if (npn*npk < nlm) continue;
-	    params.emplace_back(false, nlm, nln, npm, npn, npk); } } }
-  
-  double time = DBL_MAX;
-  while (! params.empty()) {
-    SgemmParam param = params.front();
-    params.pop_front();
-    double elapsed = DBL_MAX;
-    bool flag_error = false;
-    try { elapsed = measure_sgemm(context, param, nm0, nn0, nk0, 1U); }
-    catch (const ErrInt &e) {
-      if (! strstr(e.what(), msg_opencl_error)) throw;
-      elapsed = DBL_MAX; flag_error = true; }
-    catch (...) { throw; }
+  FName fname;
+  if (dname_tune) {
+    fname.add_fname(dname_tune);
+    fname.add_fmt_fname("tune-ocldev%d-sgemm-m%un%uk%u.txt",
+			device_id, nm0, nn0, nk0);
+    ifstream ifs(fname.get_fname());
+    string s;
+    if (ifs && getline(ifs, s) && signature == s.substr(2))
+      _param = SgemmParam(false, false, fname.get_fname()); }
 
-    if (flag_error) {
-      for (auto it = params.begin(); it != params.end(); ) {
-	if (param <= *it) it = params.erase(it);
-	else ++it; } }
-    else {
-      param.time = elapsed;
-      params_candi.push_back(param);
-      if (elapsed < time) { time = elapsed; _param = param; } } }
-  if (time == DBL_MAX) die(ERR_INT("ManageSgemm() failed."));
-
-  double time_max = min(time * 2.0 + 20.0, time + 5000.0);
-  for (auto it = params_candi.begin(); it != params_candi.end(); ) {
-    if (time_max <= it->time) it = params_candi.erase(it);
-    else ++it; }
-  
-  uint sample_size = max(2U, static_cast<uint>(100000.0 / time));
-  sample_size = min(sample_size, tune_sample_size_base);
-  if (1U < sample_size) {
-    time = DBL_MAX;
-    while (! params_candi.empty()) {
-      SgemmParam param = params_candi.front();
-      params_candi.pop_front();
-      double elapsed = measure_sgemm(context, param, nm0, nn0, nk0,
-				     sample_size);
-      if (time <= elapsed) continue;
-      time  = elapsed;
-      _param = param; } }
-  if (time == DBL_MAX) die(ERR_INT("ManageSgemm() failed."));
-  _param.time = time;
+  if (! _param.flag_read) {
+    deque<SgemmParam> params, params_candi;
+    uint wgmax = min(static_cast<uint>(device.gen_max_work_group_size()),
+		     4096U);
+    uint mmax  = ceil_power2(nm0);
+    uint nmax  = ceil_power2(nn0);
+    uint kmax  = ceil_power2(nk0);
+    bool is_m_larger = nn0 < nm0;
+    for (uint nlm = min(mmax, 4U); nlm <= 16U; nlm *= 2U)
+      for (uint nln = min(nmax, 4U); nln <= 16U; nln *= 2U) {
+	if (wgmax < nlm*nln) continue;
+	if (is_m_larger && nlm < nln) continue;
+	if (! is_m_larger && nln < nlm) continue;
+	for (uint npm = 1U; npm <= 16U; npm *= 2U)
+	  for (uint npn = 1U; npn <= 16U; npn *= 2U) {
+	    if (is_m_larger && npm < npn) continue;
+	    if (! is_m_larger && npn < npm) continue;
+	    if (mmax < nlm*npm) continue;
+	    if (nmax < nln*npn) continue;
+	    if (nln < npm) continue;
+	    if (nlm < npn) continue;
+	    uint npk0 = max(nlm, nln/npm);
+	    uint npk1 = max(4U, max(nlm, nln));
+	    for (uint npk = npk0; npk <= npk1; npk *= 2U) {
+	      if (npk < nlm) continue;
+	      if (kmax < npk) continue;
+	      if (npm*npk < nln) continue;
+	      if (npn*npk < nlm) continue;
+	      params.emplace_back(false, nlm, nln, npm, npn, npk); } } }
+    
+    double time = DBL_MAX;
+    while (! params.empty()) {
+      SgemmParam param = params.front();
+      params.pop_front();
+      double elapsed = DBL_MAX;
+      bool flag_error = false;
+      try { elapsed = measure_sgemm(context, param, nm0, nn0, nk0, 1U); }
+      catch (const ErrInt &e) {
+	if (! strstr(e.what(), msg_opencl_error)) throw;
+	elapsed = DBL_MAX; flag_error = true; }
+      catch (...) { throw; }
+      
+      if (flag_error) {
+	for (auto it = params.begin(); it != params.end(); ) {
+	  if (param <= *it) it = params.erase(it);
+	  else ++it; } }
+      else {
+	param.time = elapsed;
+	params_candi.push_back(param);
+	if (elapsed < time) { time = elapsed; _param = param; } } }
+    if (time == DBL_MAX) die(ERR_INT("ManageSgemm() failed."));
+    
+    double time_max = min(time * 2.0 + 20.0, time + 5000.0);
+    for (auto it = params_candi.begin(); it != params_candi.end(); ) {
+      if (time_max <= it->time) it = params_candi.erase(it);
+      else ++it; }
+    
+    uint sample_size = max(2U, static_cast<uint>(50000.0 / time));
+    sample_size = min(sample_size, tune_sample_size_base);
+    if (1U < sample_size) {
+      time = DBL_MAX;
+      while (! params_candi.empty()) {
+	SgemmParam param = params_candi.front();
+	params_candi.pop_front();
+	double elapsed = measure_sgemm(context, param, nm0, nn0, nk0,
+				       sample_size);
+	if (time <= elapsed) continue;
+	time  = elapsed;
+	_param = param; } }
+    if (time == DBL_MAX) die(ERR_INT("ManageSgemm() failed."));
+    _param.time = time;
+    if (dname_tune) save_tune(signature, _param, fname); }
 
   _nker = nker;
   _nm0  = nm0;  _nn0  = nn0;  _nk0  = nk0;
@@ -1904,7 +1983,8 @@ NNetOCL::NNetOCL() noexcept : _pool1_slot_size(NNAux::nslot) {}
 
 string NNetOCL::reset(uint maxsize_batch,
 		      const vector<pair<uint, row_t>> &wght, int device_id,
-		      bool use_half, bool flag_out, bool do_sleep) noexcept {
+		      bool use_half, bool flag_out, bool do_sleep,
+		      const char *dname_tune) noexcept {
   //
   // setup thread objects
   //
@@ -2003,7 +2083,7 @@ string NNetOCL::reset(uint maxsize_batch,
     get_device(device_id, device);
     if (!device.ok()) die(ERR_INT("bad device ID %u", device_id)); }
   else {
-    get_best_device(device);
+    device_id = get_best_device(device);
     if (!device.ok()) die(ERR_INT("no device found")); }
 
   stringstream lines;
@@ -2023,9 +2103,17 @@ string NNetOCL::reset(uint maxsize_batch,
   //
   // compute sgemm dimensions
   //
+  std::string signature;
+  signature += device.gen_type() + string(" ");
+  signature += device.gen_name() + string(" ");
+  signature += device.gen_driver_version() + string(" ");
+  signature += to_string(device.gen_max_compute_units()) + string(" ");
+  signature += to_string(device.gen_max_clock_frequency());
+  
   SgemmParam param_matM
-    = tune_compute_matM(use_half, use_wmma, device, context, size_tile_in,
-			resnet_nout, len_n(maxsize_batch), resnet_nout);
+    = tune_compute_matM(use_half, use_wmma, signature, device_id, device,
+			context, size_tile_in, resnet_nout,
+			len_n(maxsize_batch), resnet_nout, dname_tune);
   lines << "  Matrix M:             ";
   lines << param_matM.gen_info() << "\n";
   _pmng_compute_matM.reset(new ManageComputeMatM [_nres_block + 1U]);
@@ -2036,24 +2124,26 @@ string NNetOCL::reset(uint maxsize_batch,
     _pmng_compute_matM[u].start(context, size_tile_in, resnet_nout,
 				len_n(maxsize_batch), resnet_nout,
 				param_matM);
-
+  
   lines << "  Head 1:               ";
-  _mng_head1.start(device, context, NNAux::nslot, true, false, head1_nout,
-		   maxsize_batch * NNAux::size_plane, resnet_nout, 0,
-		   head1_nout, 0, maxsize_batch * NNAux::size_plane, 0,
-		   maxsize_batch * NNAux::size_plane);
+  _mng_head1.start(signature, device_id, device, context, NNAux::nslot, true,
+		   false, head1_nout, maxsize_batch * NNAux::size_plane,
+		   resnet_nout, 0, head1_nout, 0,
+		   maxsize_batch * NNAux::size_plane, 0,
+		   maxsize_batch * NNAux::size_plane, dname_tune);
   lines << _mng_head1.gen_info() << "\n";
 
   lines << "  Value 2:              ";
-  _mng_value2.start(device, context, NNAux::nslot, true, false, value2_nout,
-		    maxsize_batch, value2_nin, 0, value2_nout, 0,
-		    maxsize_batch, 0, maxsize_batch);
+  _mng_value2.start(signature, device_id, device, context, NNAux::nslot, true,
+		    false, value2_nout, maxsize_batch, value2_nin, 0,
+		    value2_nout, 0, maxsize_batch, 0, maxsize_batch,
+		    dname_tune);
   lines << _mng_value2.gen_info() << "\n";
 
   lines << "  Value 3:              ";
-  _mng_value3.start(device, context, NNAux::nslot, true, false,
-		    maxsize_batch, 1U, value3_nin, 0, maxsize_batch, 0, 1U, 0,
-		    1U);
+  _mng_value3.start(signature, device_id, device, context, NNAux::nslot, true,
+		    false, maxsize_batch, 1U, value3_nin, 0, maxsize_batch, 0,
+		    1U, 0, 1U, dname_tune);
   lines << _mng_value3.gen_info() << "\n";
 
   uint size_decode     = maxsize_batch * NNAux::nch_input * NNAux::size_plane;

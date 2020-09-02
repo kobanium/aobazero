@@ -21,6 +21,8 @@
   <ItemGroup>
     <ClInclude Include="..\..\..\common\nnet-ipc.hpp" />
     <ClInclude Include="..\..\..\common\nnet-srv.hpp" />
+    <ClInclude Include="..\..\..\common\option.hpp" />
+    <ClInclude Include="..\..\..\common\osi.hpp" />
     <ClInclude Include="..\..\bona\bitop.h" />
     <ClInclude Include="..\..\bona\dfpn.h" />
     <ClInclude Include="..\..\bona\lock.h" />
@@ -68,6 +70,7 @@
     <ClCompile Include="..\..\..\common\nnet-srv.cpp" />
     <ClCompile Include="..\..\..\common\nnet.cpp" />
     <ClCompile Include="..\..\..\common\opencli.cpp" />
+    <ClCompile Include="..\..\..\common\option.cpp" />
     <ClCompile Include="..\..\..\common\osi.cpp" />
     <ClCompile Include="..\..\..\common\shogibase.cpp" />
     <ClCompile Include="..\..\..\common\xzi.cpp" />

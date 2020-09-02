@@ -221,7 +221,7 @@ public:
 
     if (clBuildProgram(_pg, 0, nullptr, (flag ? options_aggressive : options),
 		       nullptr, nullptr) == CL_SUCCESS) return;
-
+    
     size_t size;
     ret = clGetProgramBuildInfo(_pg, dev, CL_PROGRAM_BUILD_LOG, 0, nullptr,
 				&size);

@@ -79,6 +79,8 @@ static bool opt_mode_cpu    = false;
 static bool opt_mode_opencl = true;
 static bool opt_verbose     = false;
 static string opt_str_wght;
+static string opt_str_dname_tune;
+static const char *opt_cstr_dname_tune = nullptr;
 
 static string gen_usage(const char *cmd) noexcept {
   stringstream ss;
@@ -87,6 +89,8 @@ static string gen_usage(const char *cmd) noexcept {
      << cmd << " -i cpublas [-r num] [-t num] [-b size] [-v] weight" << R"(
   -i code  uses OpenCL if "code" is opencl, uses BLAS for CPU if "code" is
            cpublas.
+  -d dir   let "opencl" code save performance tuning results to directory path
+           "dir".
   -u num   let "opencl" code use a device of ID "num". Default is -1.
   -h       let "opencl" code make use of half precision floating points.
   -t num   let "cpublas" code make use of "num" threads. Default is -1.
@@ -106,7 +110,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
   char *endptr;
 
   while (! flag_err) {
-    int opt = Opt::get(argc, argv, "b:i:t:u:r:vh");
+    int opt = Opt::get(argc, argv, "b:i:t:u:r:d:vh");
     if (opt < 0) break;
 
     long l;
@@ -121,6 +125,11 @@ static int get_options(int argc, const char * const *argv) noexcept {
       else flag_err = true;
       break;
 
+    case 'd':
+      opt_str_dname_tune = string(Opt::arg);
+      opt_cstr_dname_tune = opt_str_dname_tune.c_str();
+      break;
+      
     case 'r': 
       l = strtol(Opt::arg, &endptr, 10);
       if (endptr == Opt::arg || *endptr != '\0' || l < 1 || l == LONG_MAX)
@@ -321,8 +330,10 @@ public:
       _pnnet.reset(new NNetOCL);
       NNetOCL *p = static_cast<NNetOCL *>(_pnnet.get());
       _th_init = thread([=]{ p->reset(nb, NNAux::read(fname), device_id,
-				      use_half); }); }
+				      use_half, true, false,
+				      opt_cstr_dname_tune); }); }
     else if (opt_mode_cpu) {
+      std::cout << "Hoge 3" << std::endl;
       _pnnet.reset(new NNetCPU);
       NNetCPU *p = static_cast<NNetCPU *>(_pnnet.get());
       _th_init = thread([=]{ p->reset(nb, NNAux::read(fname),
