@@ -64,6 +64,7 @@ static steady_clock::time_point time_start;
 static FName opt_dname_csa;
 static uint opt_max_csa;
 
+static string str_dtune;
 static string str_cname;
 static string str_dlog;
 static uint verbose_eng;
@@ -93,6 +94,7 @@ static void on_signal(int signum) { flag_signal = signum; }
 
 static void init() noexcept {
   map<string, string> m = {{"WeightSave",    "./weight_save"},
+			   {"DirTune",       "./data"},
 			   {"CmdPath",       "bin/aobaz"},
 			   {"DirLog",        "./log"},
 			   {"DirCSA",        "./csa"},
@@ -111,11 +113,12 @@ static void init() noexcept {
 			   {"Addr",          "127.0.0.1"},
 			   {"Port",          "20000"}};
   try { Config::read("autousi.cfg", m); } catch (exception &e) { die(e); }
-  const char *cstr_dwght = Config::get_cstr(m, "WeightSave", maxlen_path);
-  str_cname              = Config::get_cstr(m, "CmdPath",    maxlen_path);
-  str_dlog               = Config::get_cstr(m, "DirLog",     maxlen_path);
-  const char *cstr_csa   = Config::get_cstr(m, "DirCSA",     maxlen_path);
-  const char *cstr_addr  = Config::get_cstr(m, "Addr",       64);
+  const char *cstr_dwght = Config::get_cstr(m, "WeightSave",    maxlen_path);
+  str_cname              = Config::get_cstr(m, "CmdPath",       maxlen_path);
+  str_dlog               = Config::get_cstr(m, "DirLog",        maxlen_path);
+  str_dtune              = Config::get_cstr(m, "DirTune",       maxlen_path);
+  const char *cstr_csa   = Config::get_cstr(m, "DirCSA",        maxlen_path);
+  const char *cstr_addr  = Config::get_cstr(m, "Addr",          64);
   uint size_queue        = Config::get<uint>  (m, "SizeSendQueue", is_posi);
   uint recvTO            = Config::get<uint>  (m, "RecvTO",        is_posi);
   uint sendTO            = Config::get<uint>  (m, "SendTO",        is_posi);
@@ -133,6 +136,7 @@ static void init() noexcept {
   opt_dname_csa.reset_fname(cstr_csa);
   dirlocks.emplace_back(cstr_dwght);
   dirlocks.emplace_back(str_dlog.c_str());
+  dirlocks.emplace_back(str_dtune.c_str());
   dirlocks.emplace_back(cstr_csa);
   Client::get().start(cstr_dwght, cstr_addr, port, recvTO, recv_bufsiz, sendTO,
 		      send_bufsiz, max_retry, size_queue, keep_wght); }
@@ -233,8 +237,9 @@ int main() {
   set_terminate(on_terminate);
   init();
   std::shared_ptr<const WghtFile> wght = Client::get().get_wght();
-  PlayManager::get().start(str_cname.c_str(), str_dlog.c_str(), devices,
-			   verbose_eng, wght->get_fname(), wght->get_crc64());
+  PlayManager::get().start(str_cname.c_str(), str_dlog.c_str(),
+			   str_dtune.c_str(), devices, verbose_eng,
+			   wght->get_fname(), wght->get_crc64());
 
   cout << "self-play started" << endl;
   OSI::handle_signal(on_signal);

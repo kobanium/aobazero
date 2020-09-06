@@ -58,10 +58,11 @@ class Device {
   class DataNNService {
     NNetService _nnet;
   public:
-    DataNNService(NNet::Impl impl, uint nnet_id, uint size_parallel,
-		  uint size_batch, uint id, uint use_half, uint thread_num)
-    noexcept : _nnet(impl, nnet_id, size_parallel, size_batch, id, use_half,
-		     thread_num) {
+    DataNNService(NNet::Impl impl, uint nnet_id, const char *dtune,
+		  uint size_parallel, uint size_batch, uint id, uint use_half,
+		  uint thread_num)
+      noexcept : _nnet(impl, nnet_id, size_parallel, size_batch, id, use_half,
+		       thread_num, dtune) {
       lock_guard<mutex> lock(m_seq);
       if (seq_s.empty()) seq_s.emplace_back(); }
     void nnreset(const FName &fname) noexcept { _nnet.nnreset(fname); }
@@ -77,7 +78,7 @@ public:
   static constexpr Type aobaz     = Type::Aobaz;
   static constexpr Type nnservice = Type::NNService;
   static constexpr Type bad       = Type::Bad;
-  explicit Device(const string &s, int nnet_id) noexcept :
+  explicit Device(const string &s, int nnet_id, const char *dtune) noexcept :
     _nnet_id(-1), _size_parallel(1U), _flag_half(false), _type(bad) {
     if (s.empty()) die(ERR_INT("invalid device %s", s.c_str()));
     char *endptr;
@@ -104,7 +105,7 @@ public:
       _type          = nnservice;
       _size_parallel = size_parallel;
       _size_batch    = size_batch;
-      _data_nnservice.reset(new DataNNService(NNet::cpublas, _nnet_id,
+      _data_nnservice.reset(new DataNNService(NNet::cpublas, _nnet_id, dtune,
 					      _size_parallel, _size_batch,
 					      _device_id, _flag_half,
 					      thread_num)); }
@@ -135,7 +136,7 @@ public:
       _type          = nnservice;
       _size_parallel = size_parallel;
       _size_batch    = size_batch;
-      _data_nnservice.reset(new DataNNService(NNet::opencl, _nnet_id,
+      _data_nnservice.reset(new DataNNService(NNet::opencl, _nnet_id, dtune,
 					      _size_parallel, _size_batch,
 					      _device_id, _flag_half, 0)); }
     else {
@@ -447,10 +448,10 @@ PlayManager & PlayManager::get() noexcept {
 
 PlayManager::PlayManager() noexcept : _ngen_records(0), _num_thinking(0) {}
 PlayManager::~PlayManager() noexcept {}
-void PlayManager::start(const char *cname, const char *dlog,
+void PlayManager::start(const char *cname, const char *dlog, const char *dtune,
 			const vector<string> &devices_str, uint verbose_eng,
 			const FNameID &wfname, uint64_t crc64) noexcept {
-  assert(cname && dlog && wfname.ok() && _engines.empty());
+  assert(cname && dlog && dtune && wfname.ok() && _engines.empty());
   if (devices_str.empty()) die(ERR_INT("bad devices"));
   _verbose_eng = verbose_eng;
   _cname.reset_fname(cname);
@@ -458,7 +459,8 @@ void PlayManager::start(const char *cname, const char *dlog,
   _wid = wfname.get_id();
 
   int nnet_id = 0;
-  for (const string &s : devices_str) _devices.emplace_back(s, nnet_id++);
+  for (const string &s : devices_str) _devices.emplace_back(s, nnet_id++,
+							    dtune);
   for (Device &d : _devices) d.nnreset(wfname);
   for (Device &d : _devices) d.wait();
 

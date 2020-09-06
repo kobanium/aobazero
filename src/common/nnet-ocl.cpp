@@ -1131,7 +1131,7 @@ static SgemmParam tune_compute_matM(bool use_half, bool use_wmma,
   assert((!use_wmma || use_half) && device.ok() && context.ok());
   assert(0 < nbatch && 0 < nm0 && 0 < nn0 && 0 < nk0);
   FName fname;
-  if (dname_tune) {
+  if (dname_tune && *dname_tune != '\0') {
     fname.add_fname(dname_tune);
     const char *p;
     if      (use_wmma) p = "W";
@@ -1260,7 +1260,8 @@ static SgemmParam tune_compute_matM(bool use_half, bool use_wmma,
       param_best = param; } }
   if (time_best == DBL_MAX) die(ERR_INT("ManageComputeMatM() failed."));
 
-  if (dname_tune) save_tune(signature, param_best, fname);
+  if (dname_tune && *dname_tune != '\0')
+    save_tune(signature, param_best, fname);
   return param_best; }
 
 static constexpr bool is_posi(uint u) { return 0 < u; }
@@ -1473,7 +1474,7 @@ void ManageSgemm::start(string signature, int device_id,
   assert(device.ok() && context.ok() && 0 < nm0 && 0 < nn0 && 0 < nk0);
   assert(0 < lda && 0 < ldb && 0 < ldc);
   FName fname;
-  if (dname_tune) {
+  if (dname_tune && *dname_tune != '\0') {
     fname.add_fname(dname_tune);
     fname.add_fmt_fname("tune-ocldev%d-sgemm-m%un%uk%u.txt",
 			device_id, nm0, nn0, nk0);
@@ -1553,7 +1554,8 @@ void ManageSgemm::start(string signature, int device_id,
 	_param = param; } }
     if (time == DBL_MAX) die(ERR_INT("ManageSgemm() failed."));
     _param.time = time;
-    if (dname_tune) save_tune(signature, _param, fname); }
+    if (dname_tune && *dname_tune != '\0')
+      save_tune(signature, _param, fname); }
 
   _nker = nker;
   _nm0  = nm0;  _nn0  = nn0;  _nk0  = nk0;
