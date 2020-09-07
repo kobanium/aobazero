@@ -12,7 +12,7 @@ class NNetOCL : public NNet {
   using row_t = std::unique_ptr<float []>;
 public:
   std::string reset(uint, const std::vector<std::pair<uint, row_t>> &,
-		    int, bool = true, bool = true, bool = false,
+		    int, bool, bool, bool, bool,
 		    const char *dname_tune = nullptr) noexcept;
 };
 #else
@@ -267,9 +267,9 @@ public:
   explicit NNetOCL() noexcept;
   std::string reset(uint maxsize_batch,
 		    const std::vector<std::pair<uint, row_t>> &wght,
-		    int device_id, bool use_half = true, bool flag_out = true,
-		    bool do_sleep = false, const char *dname_tune = nullptr)
-    noexcept;
+		    int device_id, bool use_half, bool use_wmma,
+		    bool flag_out, bool do_sleep,
+		    const char *dname_tune = nullptr) noexcept;
   void ff(uint size_batch, const float *input, const uint *sizes_nnmove,
 	  const ushort *nnmoves, float *probs, float *values) noexcept;
   uint push_ff(uint size_batch, const float *input, const uint *sizes_nnmove,

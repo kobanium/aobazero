@@ -229,7 +229,8 @@ void NNetService::worker_srv() noexcept {
 	_cv_srv.notify_one();
 	NNetOCL *p = static_cast<NNetOCL *>(_pnnet.get());
 	std::cout << p->reset(_size_batch, NNAux::read(fn), _device_id,
-			      _use_half, false, true, _dtune.c_str())
+			      _use_half, _use_wmma, false, true,
+			      _dtune.c_str())
 		  << std::flush; }
       else die(ERR_INT("INTERNAL ERROR"));
       continue; }
@@ -293,10 +294,10 @@ void NNetService::nnreset(const FName &fname) noexcept {
 
 NNetService::NNetService(NNet::Impl impl, uint nnet_id, uint nipc,
 			 uint size_batch, uint device_id, uint use_half,
-			 uint thread_num, const char *dtune)
+			 uint use_wmma, uint thread_num, const char *dtune)
   noexcept : _impl(impl), _flag_srv(false), _flag_quit(false), _dtune(dtune),
 	     _nnet_id(nnet_id), _nipc(nipc), _size_batch(size_batch),
-	     _device_id(device_id), _use_half(use_half),
+	     _device_id(device_id), _use_half(use_half), _use_wmma(use_wmma),
 	     _thread_num(thread_num) {
   if (NNAux::maxnum_nnet <= nnet_id) die(ERR_INT("too many nnets"));
   if (NNAux::maxnum_nipc < nipc)     die(ERR_INT("too many processes"));
@@ -325,10 +326,11 @@ NNetService::NNetService(NNet::Impl impl, uint nnet_id, uint nipc,
 
 NNetService::NNetService(NNet::Impl impl, uint nnet_id, uint nipc,
 			 uint size_batch, uint device_id, uint use_half,
-			 uint thread_num, const FName &fname,
+			 uint use_wmma, uint thread_num, const FName &fname,
 			 const char *dtune)
   noexcept : NNetService(impl, nnet_id, nipc, size_batch, device_id,
-			 use_half, thread_num, dtune) { nnreset(fname); }
+			 use_half, use_wmma, thread_num, dtune) {
+  nnreset(fname); }
 
 NNetService::~NNetService() noexcept {
   lock_guard<mutex> guard(_m_srv);

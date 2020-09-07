@@ -33,13 +33,13 @@ set USE_CPUBLAS_AOBA=OpenBLAS
     @if %ERRORLEVEL% neq 0 (exit /b %ERRORLEVEL%)
 )
 @if "%USE_CPUBLAS_AOBA%"=="IntelMKL" (
-    set CPPFLAGS=%CPPFLAGS% /DUSE_MKL
-    set LDFLAGS=%LDFLAGS% mkl_intel_lp64.lib mkl_intel_thread.lib mkl_core.lib libiomp5md.lib 
+    set CPPFLAGS=%CPPFLAGS% /DUSE_MKL /openmp
+    set LDFLAGS=%LDFLAGS% mkl_intel_lp64.lib mkl_intel_thread.lib mkl_core.lib libiomp5md.lib
     copy win\lib64\libiomp5md.dll bin\
     @if %ERRORLEVEL% neq 0 (exit /b %ERRORLEVEL%)
 )
 @if "%USE_CPUBLAS_AOBA%"=="OpenBLAS" (
-    set CPPFLAGS=%CPPFLAGS% /DUSE_OPENBLAS
+    set CPPFLAGS=%CPPFLAGS% /DUSE_OPENBLAS /openmp
     set LDFLAGS=%LDFLAGS% libopenblas.dll.a
     copy win\lib64\libopenblas.dll bin\
     copy win\lib64\libgcc_s_seh-1.dll bin\

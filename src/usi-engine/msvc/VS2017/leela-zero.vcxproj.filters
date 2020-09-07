@@ -135,10 +135,22 @@
     <ClInclude Include="..\..\..\common\nnet-ipc.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\common\osi.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\common\opencli.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\..\common\option.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\common\osi.hpp">
+    <ClInclude Include="..\..\..\common\nnet-ocl.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\common\nnet-cpu.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\common\nnet.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -329,9 +341,6 @@
     <ClCompile Include="..\..\..\common\nnet-ipc.cpp">
       <Filter>Source Files\common</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\common\nnet-ocl.cpp">
-      <Filter>Source Files\common</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\common\nnet-srv.cpp">
       <Filter>Source Files\common</Filter>
     </ClCompile>
@@ -341,13 +350,13 @@
     <ClCompile Include="..\..\..\common\xzi.cpp">
       <Filter>Source Files\common</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\common\opencli.cpp">
-      <Filter>Source Files\common</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\..\common\osi.cpp">
       <Filter>Source Files\common</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\common\option.cpp">
+      <Filter>Source Files\common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\common\nnet-ocl.cpp">
       <Filter>Source Files\common</Filter>
     </ClCompile>
   </ItemGroup>

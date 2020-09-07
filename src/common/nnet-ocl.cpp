@@ -11,7 +11,8 @@ using std::pair;
 using namespace ErrAux;
 #if !defined(USE_OPENCL_AOBA)
 std::string NNetOCL::reset(uint, const std::vector<std::pair<uint, row_t>> &,
-			   int, bool, bool, bool, const char *) noexcept {
+			   int, bool, bool, bool, bool, const char *)
+  noexcept {
   die(ERR_INT("No OpenCL support"));
   return string(""); }
 #else
@@ -1985,8 +1986,8 @@ NNetOCL::NNetOCL() noexcept : _pool1_slot_size(NNAux::nslot) {}
 
 string NNetOCL::reset(uint maxsize_batch,
 		      const vector<pair<uint, row_t>> &wght, int device_id,
-		      bool use_half, bool flag_out, bool do_sleep,
-		      const char *dname_tune) noexcept {
+		      bool use_half, bool use_wmma, bool flag_out,
+		      bool do_sleep, const char *dname_tune) noexcept {
   //
   // setup thread objects
   //
@@ -2092,13 +2093,14 @@ string NNetOCL::reset(uint maxsize_batch,
   lines << "- Device ID: " << device_id << "\n";
   lines << device.gen_info();
 
-  bool use_wmma = false;
   OCL::Context context = device.gen_context();
-  lines << "  Half Precision:       "
-	<< (use_half ? "Partially Used\n" : "Unused\n");
-  if (use_half) {
+  if (use_wmma) {
+    use_half = true;
     use_wmma = test_wmma(context);
     lines << "  Wmma Support:         " << (use_wmma ? "Yes\n" : "No\n"); }
+
+  lines << "  Half Precision:       "
+	<< (use_half ? "Partially Used\n" : "Unused\n");
 
   for (uint u = 0; u < NNAux::nslot; ++u) _queue_a[u] = context.gen_queue();
 
