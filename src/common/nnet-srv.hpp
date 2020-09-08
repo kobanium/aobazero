@@ -54,10 +54,10 @@ class NNetService {
 public:
   NNetService(NNet::Impl impl, uint nnet_id, uint nipc, uint size_batch,
 	      uint device_id, uint use_half, uint use_wmma, uint thread_num,
-	      const char *dtune = nullptr) noexcept;
+	      const char *dtune) noexcept;
   NNetService(NNet::Impl impl, uint nnet_id, uint nipc, uint size_batch,
 	      uint device_id, uint use_half, uint use_wmma, uint thread_num,
-	      const FName &fname, const char *dtune = nullptr) noexcept;
+	      const FName &fname, const char *dtune) noexcept;
   ~NNetService() noexcept;
   void nnreset(const FName &fname) noexcept;
   void wait() noexcept;
