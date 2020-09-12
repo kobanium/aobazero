@@ -12,7 +12,8 @@ class NNetOCL : public NNet {
   using row_t = std::unique_ptr<float []>;
 public:
   std::string reset(uint, const std::vector<std::pair<uint, row_t>> &,
-		    int, bool = true, bool = true, bool = false) noexcept;
+		    int, bool, bool, bool, bool,
+		    const char *dname_tune = nullptr) noexcept;
 };
 #else
 #include <chrono>
@@ -46,18 +47,21 @@ public:
 struct SgemmParam {
   using uint = unsigned int;
   double time;
-  bool do_half, do_wmma;
+  bool flag_read, do_half, do_wmma;
   uint nlm, nln, npm, npn, npk, ntm, ntn;
-  SgemmParam() noexcept {}
+  SgemmParam() noexcept : flag_read(false) {}
   SgemmParam(bool do_half_, uint nlm_, uint nln_, uint npm_, uint npn_,
 	     uint npk_) noexcept :
-  time(0.0), do_half(do_half_), do_wmma(false), nlm(nlm_), nln(nln_),
-    npm(npm_), npn(npn_), npk(npk_) {}
+    time(0.0), flag_read(false), do_half(do_half_), do_wmma(false), nlm(nlm_),
+    nln(nln_), npm(npm_), npn(npn_), npk(npk_) {}
   SgemmParam(bool do_half_, bool do_wmma_, uint nlm_, uint nln_, uint npm_,
 	     uint npn_, uint npk_, uint ntm_, uint ntn_) noexcept :
-  time(0.0), do_half(do_half_), do_wmma(do_wmma_), nlm(nlm_), nln(nln_),
-    npm(npm_), npn(npn_), npk(npk_), ntm(ntm_), ntn(ntn_) {}
-  std::string gen_info() const noexcept;
+    time(0.0), flag_read(false), do_half(do_half_), do_wmma(do_wmma_),
+    nlm(nlm_), nln(nln_), npm(npm_), npn(npn_), npk(npk_), ntm(ntm_),
+    ntn(ntn_) {}
+  SgemmParam(bool do_half_, bool do_wmma_, const char *fname) noexcept;
+    
+  std::string gen_info(const char *newline = " ") const noexcept;
   bool operator<=(const SgemmParam &p) const noexcept {
     bool b = (nlm <= p.nlm && nln <= p.nln && npm <= p.npm && npn <= p.npn
 	      && npk <= p.npk);
@@ -100,9 +104,10 @@ class ManageSgemm {
   uint _nker, _nm, _nn, _nk, _nm0, _nn0, _nk0;
   uint _lda, _ldb, _ldc, _offa, _offb, _offc;
 public:
-  void start(const OCL::Device &device, const OCL::Context &context, uint nker,
-	     bool transa, bool transb, uint nm0, uint nn0, uint nk0, uint offa,
-	     uint lda, uint offb, uint ldb, uint offc, uint ldc);
+  void start(std::string signature, int device_id, const OCL::Device &device,
+	     const OCL::Context &context, uint nker, bool transa, bool transb,
+	     uint nm0, uint nn0, uint nk0, uint offa, uint lda, uint offb,
+	     uint ldb, uint offc, uint ldc, const char *dname_tune);
   uint get_nm() const noexcept { return _nm; }
   uint get_nn() const noexcept { return _nn; }
   uint get_nk() const noexcept { return _nk; }
@@ -262,8 +267,9 @@ public:
   explicit NNetOCL() noexcept;
   std::string reset(uint maxsize_batch,
 		    const std::vector<std::pair<uint, row_t>> &wght,
-		    int device_id, bool use_half = true, bool flag_out = true,
-		    bool do_sleep = false) noexcept;
+		    int device_id, bool use_half, bool use_wmma,
+		    bool flag_out, bool do_sleep,
+		    const char *dname_tune = nullptr) noexcept;
   void ff(uint size_batch, const float *input, const uint *sizes_nnmove,
 	  const ushort *nnmoves, float *probs, float *values) noexcept;
   uint push_ff(uint size_batch, const float *input, const uint *sizes_nnmove,

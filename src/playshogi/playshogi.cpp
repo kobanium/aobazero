@@ -147,14 +147,14 @@ int main(int argc, char **argv) {
 
   if (num_N == 2) {
     seq_s.emplace_back();
-    nnets.emplace_back(impl_I[0], 0U, num_P, num_B[0], num_U[0], num_H[0],
-		       num_T[0], fname_W[0]);
-    nnets.emplace_back(impl_I[1], 1U, num_P, num_B[1], num_U[1], num_H[1],
-		       num_T[1], fname_W[1]); }
+    nnets.emplace_back(impl_I[0], 0U, num_P, num_B[0], num_U[0], 0, num_H[0],
+		       num_T[0], fname_W[0], "");
+    nnets.emplace_back(impl_I[1], 1U, num_P, num_B[1], num_U[1], 0, num_H[1],
+		       num_T[1], fname_W[1], ""); }
   else if (num_N == 1) {
     seq_s.emplace_back();
-    nnets.emplace_back(impl_I[0], 0U, num_P * 2, num_B[0], num_U[0], num_H[0],
-		       num_T[0], fname_W[0]); }
+    nnets.emplace_back(impl_I[0], 0U, num_P * 2, num_B[0], num_U[0], 0,
+		       num_H[0], num_T[0], fname_W[0], ""); }
 
   static vector<unique_ptr<Game>> games;
   for (uint u = 0; u < static_cast<uint>(num_P); ++u)
@@ -740,7 +740,7 @@ Other options:
   -P NUM   Generate NUM gameplays simultaneously. The default is 1.
   -I STR   Specifies nnet implementation. STR can conatin two characters
            separated by ':'. Character 'B' means CPU BLAS implementation, and
-           'O' means OpenCL implimentation. The default is 0.
+           'O' means OpenCL implimentation. The default is 'O'.
   -B STR   Specifies batch sizes of nnet computation. STR can contain two
            sizes separated by ':'. The default size is 1.
   -W STR   Specifies weight paths for nnet computation. STR can contain two
@@ -749,7 +749,8 @@ Other options:
            two IDs separated by ':'. Each ID must be different from the other.
   -H STR   OpenCL uses half precision floating-point values. STR can contain
            two binary values separated by ':'. The value should be 1 (use
-           half) or 0 (do not use half). The default is 0.
+           half and NVIDIA wmma instructions if possible), or 0 (do not use
+           half). The default is 0.
   -T STR   Specifies the number of threads for CPU BLAS computation. STR can
            contain two numbers separated by ':'. The default is -1 (means an
            upper bound of the number).

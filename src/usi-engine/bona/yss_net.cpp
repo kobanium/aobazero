@@ -352,7 +352,7 @@ void init_network()
 			fname_W[i].reset_fname(default_weights.c_str());
 			num_T[i] = -1;
 			impl_I[i] = NNet::opencl;	// NNet::cpublas
-			nnets.emplace_back(impl_I[i], i, num_P, num_B[i], num_U[i], num_H[i], num_T[i], fname_W[i]);
+			nnets.emplace_back(impl_I[i], i, num_P, num_B[i], num_U[i], 0, num_H[i], num_T[i], fname_W[i], "");
  		}
 		PRT("num_P=%d,threads_per_GPU=%d,cfg_num_threads=%d,numGPU=%d,all P=%d\n",num_P,threads_per_GPU,cfg_num_threads,numGPU,num_P*numGPU);
 	}

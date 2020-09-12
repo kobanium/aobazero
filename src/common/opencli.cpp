@@ -1,6 +1,7 @@
 #if defined(USE_OPENCL_AOBA)
 #include "err.hpp"
 #include "opencli.hpp"
+#include <map>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -19,6 +20,7 @@
 #endif
 using uint = unsigned int;
 using std::lock_guard;
+using std::map;
 using std::move;
 using std::mutex;
 using std::string;
@@ -211,40 +213,18 @@ cl_ulong OCL::Kernel::gen_private_mem_size() const {
 class OCL::Program_impl {
   cl_program _pg;
 public:
-  explicit Program_impl(const char *code, bool flag, cl_context context,
-			cl_device_id dev) {
-    assert(code && dev && context);
-    cl_int ret;
-    _pg = clCreateProgramWithSource(context, 1, &code, nullptr, &ret);
+  explicit Program_impl(cl_program pg) : _pg(pg) {
+    assert(pg);
+    cl_int ret = clRetainProgram(_pg);
     if (ret != CL_SUCCESS)
-      throw ERR_INT("clCreateProgramWithSource() failed. Error Code: %d", ret);
-
-    if (clBuildProgram(_pg, 0, nullptr, (flag ? options_aggressive : options),
-		       nullptr, nullptr) == CL_SUCCESS) return;
-
-    size_t size;
-    ret = clGetProgramBuildInfo(_pg, dev, CL_PROGRAM_BUILD_LOG, 0, nullptr,
-				&size);
-    if (ret != CL_SUCCESS) {
-      clReleaseProgram(_pg);
-      throw ERR_INT("cl_GetProgramBuildInfo() failed. Error Code: %d", ret); }
-
-    unique_ptr<char []> log(new char [size]);
-    ret = clGetProgramBuildInfo(_pg, dev, CL_PROGRAM_BUILD_LOG, size,
-				log.get(), nullptr);
-    if (ret != CL_SUCCESS) {
-      clReleaseProgram(_pg);
-      throw ERR_INT("cl_GetProgramBuildInfo() failed. Error Code: %d", ret); }
-
-    clReleaseProgram(_pg);
-    throw ERR_INT("OpenCL Build Error\n%s", log.get()); }
+      throw ERR_INT("clRetainProgram() failed. Error Code: %d", ret); }
 
   Program_impl(Program_impl &&p_impl) { *this = move(p_impl); }
   Program_impl &operator=(Program_impl &&p_impl) {
     assert(p_impl.ok());
     if (this != &p_impl) { _pg = p_impl._pg; p_impl._pg = nullptr; }
     return *this; }
-  ~Program_impl() { if (_pg) clReleaseProgram(_pg); }
+  ~Program_impl() { clReleaseProgram(_pg); }
   bool ok() const { return _pg; }
   Kernel_impl gen_kernel(const char *name) const {
     assert(name); return Kernel_impl(_pg, name); } };
@@ -347,6 +327,7 @@ void OCL::Queue::push_ndrange_kernel(const Kernel &k, uint dim,
   _impl->push_ndrange_kernel(k.get(), dim, size_g, size_l); }
 
 class OCL::Context_impl {
+  map<string,cl_program> _mp;
   cl_device_id _id;
   cl_context _context;
 public:
@@ -356,7 +337,11 @@ public:
     _context = clCreateContext(nullptr, 1, &_id, nullptr, nullptr, &ret);
     if (ret != CL_SUCCESS)
       throw ERR_INT("clCreateContext() failed. Error Code: %d", ret); }
-  ~Context_impl() { if (_id) clReleaseContext(_context); }
+  ~Context_impl() {
+    for (const auto &pair : _mp) {
+      cl_program pg = pair.second;
+      clReleaseProgram(pg); }
+    if (_id) clReleaseContext(_context); }
   Context_impl(Context_impl &&c_impl) { *this = move(c_impl); }
   Context_impl &operator=(Context_impl &&c_impl) {
     assert(c_impl.ok());
@@ -366,8 +351,40 @@ public:
       c_impl._id = nullptr; }
     return *this; }
   Queue_impl gen_queue() const { return Queue_impl(_id, _context); }
-  Program_impl gen_program(const char *code, bool flag) const {
-    assert(code); return Program_impl(code, flag, _context, _id); }
+  Program_impl gen_program(const char *code, bool flag) {
+    assert(code);
+    string scode(code);
+    auto it = _mp.find(scode);
+    if (it != _mp.end()) return Program_impl(it->second);
+    
+    cl_int ret;
+    cl_program pg = clCreateProgramWithSource(_context, 1, &code, nullptr,
+					      &ret);
+    if (ret != CL_SUCCESS)
+      throw ERR_INT("clCreateProgramWithSource() failed. Error Code: %d", ret);
+
+    if (clBuildProgram(pg, 0, nullptr, (flag ? options_aggressive : options),
+		       nullptr, nullptr) == CL_SUCCESS) {
+      _mp[scode] = pg;
+      return Program_impl(pg); }
+    
+    size_t size;
+    ret = clGetProgramBuildInfo(pg, _id, CL_PROGRAM_BUILD_LOG, 0, nullptr,
+				&size);
+    if (ret != CL_SUCCESS) {
+      clReleaseProgram(pg);
+      throw ERR_INT("cl_GetProgramBuildInfo() failed. Error Code: %d", ret); }
+
+    unique_ptr<char []> log(new char [size]);
+    ret = clGetProgramBuildInfo(pg, _id, CL_PROGRAM_BUILD_LOG, size, log.get(),
+				nullptr);
+    if (ret != CL_SUCCESS) {
+      clReleaseProgram(pg);
+      throw ERR_INT("cl_GetProgramBuildInfo() failed. Error Code: %d", ret); }
+
+    clReleaseProgram(pg);
+    throw ERR_INT("OpenCL Build Error\n%s", log.get()); }
+
   MemPinned_impl gen_mem_pinned(const cl_mem_flags &mem_flags,
 				const cl_map_flags &map_flags, size_t size)
     const {

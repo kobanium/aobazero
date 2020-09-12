@@ -40,14 +40,14 @@ void Config::read(const char *fname, map<string, string> &m) {
   string s1, s2;
   bool bFirst;
   while (ifs.getline(line, sizeof(line))) {
-    token = OSI::strtok(line, " \t,=", &saveptr);
+    token = OSI::strtok(line, " \t,=:", &saveptr);
     if (token == NULL || token[0] == '#') continue;
     s1 = string(token);
 
     s2 = string("");
     bFirst = true;
     while (true) {
-      token = OSI::strtok(NULL, " \t,=", &saveptr);
+      token = OSI::strtok(NULL, " \t", &saveptr);
       if (token == NULL || token[0] == '#') break;
       if (bFirst) { bFirst = false; s2 += string(token); continue; }
       s2 += " ";

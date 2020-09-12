@@ -75,10 +75,13 @@ static int opt_thread_num   = -1;
 static int opt_device_id    = -1;
 static uint opt_batch_size  =  1;
 static bool opt_use_half    = false;
+static bool opt_use_wmma    = false;
 static bool opt_mode_cpu    = false;
 static bool opt_mode_opencl = true;
 static bool opt_verbose     = false;
 static string opt_str_wght;
+static string opt_str_dname_tune;
+static const char *opt_cstr_dname_tune = nullptr;
 
 static string gen_usage(const char *cmd) noexcept {
   stringstream ss;
@@ -87,8 +90,12 @@ static string gen_usage(const char *cmd) noexcept {
      << cmd << " -i cpublas [-r num] [-t num] [-b size] [-v] weight" << R"(
   -i code  uses OpenCL if "code" is opencl, uses BLAS for CPU if "code" is
            cpublas.
+  -d dir   let "opencl" code save performance tuning results to directory path
+           "dir".
   -u num   let "opencl" code use a device of ID "num". Default is -1.
   -h       let "opencl" code make use of half precision floating points.
+  -w       let "opencl" code make use of wmma instructions for half-precision
+           use.
   -t num   let "cpublas" code make use of "num" threads. Default is -1.
   -b size  specifies batch size. Default is 1.
   -r num   evaluates each state "num" times. Default is 1.
@@ -106,7 +113,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
   char *endptr;
 
   while (! flag_err) {
-    int opt = Opt::get(argc, argv, "b:i:t:u:r:vh");
+    int opt = Opt::get(argc, argv, "b:i:t:u:r:d:vhw");
     if (opt < 0) break;
 
     long l;
@@ -121,6 +128,11 @@ static int get_options(int argc, const char * const *argv) noexcept {
       else flag_err = true;
       break;
 
+    case 'd':
+      opt_str_dname_tune = string(Opt::arg);
+      opt_cstr_dname_tune = opt_str_dname_tune.c_str();
+      break;
+      
     case 'r': 
       l = strtol(Opt::arg, &endptr, 10);
       if (endptr == Opt::arg || *endptr != '\0' || l < 1 || l == LONG_MAX)
@@ -149,8 +161,9 @@ static int get_options(int argc, const char * const *argv) noexcept {
       opt_batch_size = static_cast<uint>(l);
       break;
 
-    case 'h': opt_use_half = true;  break;
-    case 'v': opt_verbose  = true;  break;
+    case 'h': opt_use_half = true; break;
+    case 'w': opt_use_wmma = true; break;
+    case 'v': opt_verbose  = true; break;
     default: flag_err = true; break; } }
 
   if (!flag_err && Opt::ind < argc) {
@@ -314,14 +327,15 @@ class QueueTest {
   
 public:
   explicit QueueTest(const FName &fname, int device_id, uint nb, bool use_half,
-		     int thread_num) noexcept
+		     bool use_wmma, int thread_num) noexcept
     : _flag_quit(false), _nb(nb), _neval(0) {
     _th_worker_wait_test = thread(&QueueTest::worker_wait_test, this);
     if (opt_mode_opencl) {
       _pnnet.reset(new NNetOCL);
       NNetOCL *p = static_cast<NNetOCL *>(_pnnet.get());
       _th_init = thread([=]{ p->reset(nb, NNAux::read(fname), device_id,
-				      use_half); }); }
+				      use_half, use_wmma, true, false,
+				      opt_cstr_dname_tune); }); }
     else if (opt_mode_cpu) {
       _pnnet.reset(new NNetCPU);
       NNetCPU *p = static_cast<NNetCPU *>(_pnnet.get());
@@ -482,7 +496,8 @@ int main(int argc, char **argv) {
   if (get_options(argc, argv) < 0) return 1;
 
   QueueTest queue_test(FName(opt_str_wght.c_str()), opt_device_id,
-		       opt_batch_size, opt_use_half, opt_thread_num);
+		       opt_batch_size, opt_use_half, opt_use_wmma,
+		       opt_thread_num);
   cout << "Start reading entries from stdin ..." << endl;
   vector<Entry> vec_entry = read_entries(&std::cin, queue_test.do_compress());
   cout << "Finish reading " << vec_entry.size() << " entries" << endl;

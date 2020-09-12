@@ -149,6 +149,7 @@ void NNetService::worker_srv() noexcept {
   SrvType type;
   while (true) {
     assert(_sem_service.ok() && _sem_service_lock.ok());
+    
     _sem_service.dec_wait();
     _sem_service_lock.dec_wait();
     assert(0 < pservice->njob);
@@ -174,7 +175,13 @@ void NNetService::worker_srv() noexcept {
       std::cerr << s << std::endl;
       continue; }
 
-    if (type == SrvType::NOP) { _m_srv.unlock(); continue; }
+    if (type == SrvType::NOP) {
+      {
+	std::lock_guard<mutex> lock(_m_srv);
+	_flag_srv = true;
+      }
+      _cv_srv.notify_one();
+      continue; }
 
     if (type == SrvType::NNReset) {
       FName fn;
@@ -192,8 +199,11 @@ void NNetService::worker_srv() noexcept {
 	if (0 < njob) die(ERR_INT("Internal Error"));
 
 	fn = _fname;
-	_m_srv.unlock();
-	
+	{
+	  std::lock_guard<mutex> lock(_m_srv);
+	  _flag_srv = true;
+	}
+	_cv_srv.notify_one();
 	static_cast<NNetCPU *>(_pnnet.get())->reset(_size_batch,
 						    NNAux::read(fn),
 						    _thread_num); }
@@ -207,16 +217,20 @@ void NNetService::worker_srv() noexcept {
 	if (0 < njob) die(ERR_INT("Internal Error"));
 	
 	fn = _fname;
-	_m_srv.unlock();
-
 	string s("Tuning feed-forward engine of device ");
 	s += to_string(static_cast<int>(_device_id)) + string(" for ");
 	s += string(fn.get_fname()) + string("\n");
 	std::cout << s << std::flush;
 
+	{
+	  std::lock_guard<mutex> lock(_m_srv);
+	  _flag_srv = true;
+	}
+	_cv_srv.notify_one();
 	NNetOCL *p = static_cast<NNetOCL *>(_pnnet.get());
 	std::cout << p->reset(_size_batch, NNAux::read(fn), _device_id,
-			      _use_half, false, true)
+			      _use_half, _use_wmma, false, true,
+			      _dtune.c_str())
 		  << std::flush; }
       else die(ERR_INT("INTERNAL ERROR"));
       continue; }
@@ -247,7 +261,7 @@ void NNetService::worker_srv() noexcept {
     die(ERR_INT("INTERNAL ERROR")); } }
 
 void NNetService::wait() noexcept {
-  lock_guard<mutex> lock(_m_if);
+  unique_lock<mutex> lock(_m_srv);
   assert(_mmap_service.ok());
   auto p = static_cast<SharedService *>(_mmap_service());
 
@@ -258,10 +272,11 @@ void NNetService::wait() noexcept {
   p->njob += 1U;
   _sem_service_lock.inc();
   _sem_service.inc();
-  _m_srv.lock(); }
+  _cv_srv.wait(lock, [&]{ return _flag_srv; });
+  _flag_srv = false; }
 
 void NNetService::nnreset(const FName &fname) noexcept {
-  lock_guard<mutex> lock(_m_if);
+  unique_lock<mutex> lock(_m_srv);
   assert(_mmap_service.ok() && fname.ok());
   auto p = static_cast<SharedService *>(_mmap_service());
   assert(p && _sem_service.ok() && _sem_service_lock.ok());
@@ -274,14 +289,16 @@ void NNetService::nnreset(const FName &fname) noexcept {
   p->njob += 1U;
   _sem_service_lock.inc();
   _sem_service.inc();
-  _m_srv.lock(); }
+  _cv_srv.wait(lock, [&]{ return _flag_srv; });
+  _flag_srv = false; }
 
 NNetService::NNetService(NNet::Impl impl, uint nnet_id, uint nipc,
 			 uint size_batch, uint device_id, uint use_half,
-			 uint thread_num) noexcept
-: _impl(impl), _flag_quit(false), _nnet_id(nnet_id), _nipc(nipc),
-  _size_batch(size_batch), _device_id(device_id),
-  _use_half(use_half), _thread_num(thread_num) {
+			 uint use_wmma, uint thread_num, const char *dtune)
+  noexcept : _impl(impl), _flag_srv(false), _flag_quit(false), _dtune(dtune),
+	     _nnet_id(nnet_id), _nipc(nipc), _size_batch(size_batch),
+	     _device_id(device_id), _use_half(use_half), _use_wmma(use_wmma),
+	     _thread_num(thread_num) {
   if (NNAux::maxnum_nnet <= nnet_id) die(ERR_INT("too many nnets"));
   if (NNAux::maxnum_nipc < nipc)     die(ERR_INT("too many processes"));
 
@@ -303,19 +320,20 @@ NNetService::NNetService(NNet::Impl impl, uint nnet_id, uint nipc,
     sprintf(fn, "%s.%07u.%03u.%03u", Param::name_mmap_nnet, pid, nnet_id, u);
     _mmap_ipc[u].open(fn, true, sizeof(SharedIPC)); }
 
-  _m_srv.lock();
   _th_worker_srv  = thread(&NNetService::worker_srv,  this);
   _th_worker_push = thread(&NNetService::worker_push, this);
   _th_worker_wait = thread(&NNetService::worker_wait, this); }
 
 NNetService::NNetService(NNet::Impl impl, uint nnet_id, uint nipc,
 			 uint size_batch, uint device_id, uint use_half,
-			 uint thread_num, const FName &fname) noexcept :
-NNetService(impl, nnet_id, nipc, size_batch, device_id, use_half, thread_num) {
+			 uint use_wmma, uint thread_num, const FName &fname,
+			 const char *dtune)
+  noexcept : NNetService(impl, nnet_id, nipc, size_batch, device_id,
+			 use_half, use_wmma, thread_num, dtune) {
   nnreset(fname); }
 
 NNetService::~NNetService() noexcept {
-  lock_guard<mutex> guard(_m_if);
+  lock_guard<mutex> guard(_m_srv);
   assert(_mmap_service.ok());
   auto p = static_cast<SharedService *>(_mmap_service());
   assert(p && _sem_service.ok() && _sem_service_lock.ok());

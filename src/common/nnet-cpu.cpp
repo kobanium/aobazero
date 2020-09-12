@@ -459,8 +459,8 @@ compute_conv1x1(uint nout, uint nin, uint size_batch, const float *weight,
 // in:  matV[size_tile_in][nin][size_batch][ntile]
 // out: matM[size_tile_in][nout][size_batch][ntile]
 static void compute_matM(uint nout, uint nin, uint size_batch,
-			 const float *matU, const float *matV,
-			 float *matM) noexcept {
+			 const float *matU, const float *matV, float *matM)
+  noexcept {
 #if defined(USE_MKL)
   constexpr CBLAS_TRANSPOSE trans[1] = { CblasNoTrans };
   constexpr int group_size[1]    = { static_cast<int>(size_tile_in) };
@@ -518,9 +518,10 @@ compute_matA_BNReLU_join_fork_matV(uint nch, uint size_batch,
 				   const float *matM, const float *mean,
 				   const float *sd_inv, float *fork,
 				   float *matV) noexcept {
-  uint nchxnb = nch * size_batch;
+  int nchxnb = static_cast<int>(nch * size_batch);
 #pragma omp parallel for
-  for (uint chb = 0; chb < nchxnb; ++chb) {
+  for (int loop = 0; loop < nchxnb; ++loop) {
+    uint chb = static_cast<uint>(loop);
     uint ch = chb / size_batch;
     float fout[NNAux::size_plane];
     compute_matA_child(nchxnb, chb, matM, fout);

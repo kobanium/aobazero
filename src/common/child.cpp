@@ -164,8 +164,8 @@ uint Reader::getline(char *line, uint size) noexcept {
 
 uint Child::wait(uint timeout) noexcept {
   unique_lock<mutex> lock(status.m);
-  bool ret = status.cv.wait_for(lock, milliseconds(timeout),
-				[]{ return status.num_ready; });
+  status.cv.wait_for(lock, milliseconds(timeout),
+		     []{ return status.num_ready; });
   copy_n(status.is_ready, Param::maxnum_child * 2, status.is_ready_unlock);
   return status.num_ready; }
 
