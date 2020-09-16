@@ -36,6 +36,7 @@ int NOT_USE_NN = 0;
 //min_posi_t record_plus_ply_min_posi[REP_HIST_LEN];
 
 int nVisitCount = 0;	//30;	// この手数まで最大でなく、回数分布で選ぶ
+int nVisitCountSafe = 0;
 int fAddNoise = 0;				// always add dirichlet noise on root node.
 int fUSIMoveCount;	// USIで上位ｎ手の訪問回数も返す
 int fPrtNetworkRawPath = 0;
@@ -942,7 +943,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 //	PRT("\n");
 
 	// selects moves proportionally to their visit count
-	if ( ptree->nrep < nVisitCount && sum_games > 0 && phg->child_num > 0 ) {
+	if ( (ptree->nrep < nVisitCount || ptree->nrep < nVisitCountSafe) && sum_games > 0 && phg->child_num > 0 ) {
 		CHILD *pc = NULL;
 #if 0
 		int r = rand_m521() % sum_games;
@@ -977,8 +978,17 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		int r = (int)(indicator * sum_games);
 #endif
 		if ( pc==NULL || i==phg->child_num ) DEBUG_PRT("Err. nVisitCount not found.\n");
-		best_move = pc->move;
-		PRT("rand select:%s,%3d,%6.3f,bias=%6.3f,r=%d/%d\n",str_CSA_move(pc->move),pc->games,pc->value,pc->bias,r,sum_games);
+
+		bool fSwap = true;
+		if ( nVisitCountSafe && max_i >= 0 ) {	// 勝率がそれほど下がらず、ある程度の回数試した手だけを選ぶ
+			CHILD *pbest = &phg->child[max_i];
+			fSwap = false;
+			if ( fabs(pbest->value - pc->value) < 0.04 && pc->games*5 > pbest->games ) fSwap = true;	// 0.04 で勝率2%。1%だとelmo相手に同型が800局で15局、2%で4局。
+		}
+		if ( fSwap ) {
+			best_move = pc->move;
+			PRT("rand select:%s,%3d,%6.3f,bias=%6.3f,r=%d/%d\n",str_CSA_move(pc->move),pc->games,pc->value,pc->bias,r,sum_games);
+		}
 	}
 
 	if ( 0 ) {
@@ -1429,6 +1439,11 @@ int getCmdLineParam(int argc, char *argv[])
 		if ( strstr(p,"-mtemp") ) {
 			PRT("cfg_random_temp=%f\n",nf);
 			cfg_random_temp = nf;
+			continue;
+		}
+		if ( strstr(p,"-msafe") ) {
+			nVisitCountSafe = n;
+			PRT("play safe randomly first %d moves\n",n);
 			continue;
 		}
 		if ( strstr(p,"-drawmove") ) {

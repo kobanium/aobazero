@@ -231,7 +231,7 @@ void submit_num_check_loop(size_t gnum) {
 			sum++;
 			if ( sum == wakeup_threads ) break;
 		}
-		if ( sum != wakeup_threads ) PRT("not enough wakeup?\n");
+		if ( sum != wakeup_threads ) { static int count; if ( count++ < 10 ) PRT("not enough wakeup?\n"); }
 	}
 
 	for (i=0; i<dummy_num_threads; i++) {
@@ -261,12 +261,12 @@ void on_terminate_aobaz() {	// clean up shared memory
 void on_signal_aobaz(int /*signum*/) {
 	on_terminate_aobaz();
 }
-#endif
 
 void set_signal_terminate() {
 	std::set_terminate(on_terminate_aobaz);
 	OSI::handle_signal(on_signal_aobaz);
 }
+#endif
 
 bool is_process_batch()
 {
