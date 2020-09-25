@@ -366,11 +366,9 @@ void init_network()
 		// GPSs = 2, b = 3, t = 18 (threads_per_GPU = 9, dummy_num_threads = 5) の場合、num_P = 14, (0..13, GPU=0), (14..27, GPU=1)
 		for (size_t gpus=0; gpus<default_gpus.size(); gpus++) for (int i=0; i<num_P; i++,nIPC++) {
 			p_nnet_v.push_back(new NNetIPC(is_thread_batch()));
-//			p_nnet  = new NNetIPC();
-			int gpu_id = default_gpus[gpus];
-			if ( p_nnet_v[nIPC]->start(gpu_id) == -1 ) DEBUG_PRT("Err. p_nnet_v[%d]->start(%d)\n",nIPC,gpu_id);
+			if ( p_nnet_v[nIPC]->start(gpus) == -1 ) DEBUG_PRT("Err. p_nnet_v[%d]->start(%d)\n",nIPC,gpus);
 			nNNetID_v.push_back(p_nnet_v[nIPC]->get_id());
-			PRT("nnet.start(%d), nNNetID=%d\n",gpu_id,nNNetID_v[nIPC]);
+			PRT("nnet.start(%d), nNNetID=%d\n",gpus,nNNetID_v[nIPC]);
 			if ( ! is_thread_batch() ) break;
   			if ( i < threads_per_GPU ) continue;
 		    pAD.push_back(new AddDummy(nIPC, (int)gpus));
@@ -384,7 +382,6 @@ void init_network()
 		}
 	}
 #endif
-//	Random::get_Rng().seedrandom(cfg_rng_seed);
 
 	if ( !default_weights.empty() ) cfg_weightsfile = default_weights;
 
@@ -455,7 +452,6 @@ void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *
 	int add_base = 0;
 	int x,y;
  	const int t = ptree->nrep + ply - 1;	// 手数。棋譜の手数+探索深さ。ply は1から始まるので1引く。
-//	int flip = (t&1);	// 後手の時は全部ひっくり返す
 	int flip = sideToMove;	// 後手の時は全部ひっくり返す
 	int loop;
 	const int T_STEP = 8;
@@ -478,7 +474,7 @@ void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *
 			int m = abs(k);
 			if ( m>=0x0e ) m--;	// m = 1...14
 			m--;
-			// 先手の歩、香、桂、銀、金、角、飛、王、と、杏、圭、全、馬、竜 ... 14種類、+先手の駒が全部1、で15種類
+			// 先手の歩、香、桂、銀、金、角、飛、王、と、杏、圭、全、馬、竜 ... 14種類
 			if ( k < 0 ) m += 14;
 			int yy = y, xx = x;
 			if ( flip ) {

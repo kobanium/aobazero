@@ -73,6 +73,7 @@
     <ClCompile Include="..\..\..\common\nnet-ocl.cpp" />
     <ClCompile Include="..\..\..\common\nnet-srv.cpp" />
     <ClCompile Include="..\..\..\common\nnet.cpp" />
+    <ClCompile Include="..\..\..\common\opencli.cpp" />
     <ClCompile Include="..\..\..\common\option.cpp" />
     <ClCompile Include="..\..\..\common\osi.cpp" />
     <ClCompile Include="..\..\..\common\shogibase.cpp" />
@@ -258,8 +259,8 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);MINIMUM;TLP;CSA_LAN;USI;YSS_ZERO;NO_LOGGING;_WINSOCK_DEPRECATED_NO_WARNINGS;USE_WINAPI;USE_OPENBLAS</PreprocessorDefinitions>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);MINIMUM;TLP;CSA_LAN;USI;YSS_ZERO;NO_LOGGING;_WINSOCK_DEPRECATED_NO_WARNINGS;USE_WINAPI;USE_OPENBLAS;USE_OPENCL_AOBA</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <AdditionalIncludeDirectories>
       </AdditionalIncludeDirectories>
     </ClCompile>
