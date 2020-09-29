@@ -55,6 +55,8 @@ extern int fPrtNetworkRawPath;
 extern int nNNetServiceNumber;
 extern int nDrawMove;
 extern int nUseHalf;
+extern int nUseWmma;
+extern std::string sDirTune;
 
 extern std::string default_weights;
 extern std::vector<int> default_gpus;

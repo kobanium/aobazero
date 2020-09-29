@@ -10,6 +10,7 @@
 #include <time.h>
 #include <math.h>
 #if !defined(_MSC_VER)
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <unistd.h>
 #endif
@@ -1451,12 +1452,12 @@ int getCmdLineParam(int argc, char *argv[])
 			nDrawMove = n;
 			continue;
 		}
-		if ( strstr(p,"-p") ) {
-			PRT("playouts=%d\n",n);
-			nLimitUctLoop = n;
-			set_Hash_Shogi_Table_Size(n);
-		}
 #ifdef USE_OPENCL
+		if ( strstr(p,"-dirtune") ) {
+			PRT("DirTune=%s\n",q);
+			sDirTune = q;
+			continue;
+		}
 		if ( strstr(p,"-u") ) {
 			default_gpus.push_back(n);
 			PRT("default_gpus.size()=%d\n", default_gpus.size());
@@ -1476,10 +1477,17 @@ int getCmdLineParam(int argc, char *argv[])
 			default_gpus.push_back(n);
 		}
 		if ( strstr(p,"-h") ) {
-			nUseHalf = 1;
-			PRT("nUseHalf=1\n");
+			if ( n != 1 && n != 2 ) DEBUG_PRT("Err. set nUseWmma and nUseHalf.\n");
+			if ( n==1 ) nUseWmma = 1;
+			if ( n==2 ) nUseHalf = 1;
+			PRT("nUseWmma=%d,nUseHalf=%d\n",nUseWmma,nUseHalf);
 		}
 #endif
+		if ( strstr(p,"-p") ) {
+			PRT("playouts=%d\n",n);
+			nLimitUctLoop = n;
+			set_Hash_Shogi_Table_Size(n);
+		}
 		if ( strstr(p,"-t") ) {
 			if ( n < 1            ) n = 1;
 			if ( n > TLP_NUM_WORK ) n = TLP_NUM_WORK;
@@ -1522,6 +1530,16 @@ int getCmdLineParam(int argc, char *argv[])
 	if ( keep_cmd_line.size() > 127 ) keep_cmd_line.resize(127);
 //	PRT("%s\n",keep_cmd_line.c_str());
 
+#ifdef USE_OPENCL
+	if ( is_process_batch() == false ) {
+		struct stat st_buf;
+		if ( stat(sDirTune.c_str(), &st_buf) != 0 ) {
+			PRT("DirTune does not exit. Tuning every time.\n");
+			sDirTune = "";
+		}
+	}
+#endif
+
 	if ( default_weights.empty() ) {
 		PRT("A network weights file is required to use the program.\n");
 		debug();
@@ -1532,7 +1550,7 @@ int getCmdLineParam(int argc, char *argv[])
 
 void set_default_param()
 {
-	// スレッド、バッチサイズが未定ならCPU版は最大数、OpenCLはb=7,t=15 を指定
+	// スレッド、バッチサイズが未定ならCPU版は最大数、OpenCLはb=7,t=21 を指定
 	// OpenCLでスレッドのみ指定ならバッチサイズはb=3,7,14
 	// OpenCLでバッチサイズのみ指定なら(b=3,t=7), (b=7,t=15),(b=14,t=29),(b=28,t=85)
 	if ( is_process_batch() ) {
@@ -1544,11 +1562,11 @@ void set_default_param()
 	int gpus = (int)default_gpus.size();
 	if ( cfg_num_threads == 0 && cfg_batch_size == 0 ) {
 		cfg_batch_size  = 7;
-		cfg_num_threads = 15 * gpus;
+		cfg_num_threads = 21 * gpus;
 	} else if ( cfg_num_threads == 0 ) {
-		cfg_num_threads = (cfg_batch_size * 2 + 1) * gpus;
+		cfg_num_threads = (cfg_batch_size * 3 + 0) * gpus;
 	} else if ( cfg_batch_size == 0 ) {
-		cfg_batch_size  = (cfg_num_threads/gpus - 1) / 2;
+		cfg_batch_size  = (cfg_num_threads/gpus - 0) / 3;
 		if ( cfg_batch_size < 1 ) cfg_batch_size = 1;
 	} else {
 		if ( cfg_batch_size > cfg_num_threads ) {

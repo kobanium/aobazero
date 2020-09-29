@@ -67,6 +67,8 @@ std::vector<int> nNNetID_v;
 int nNNetServiceNumber = -1;
 SeqPRN *p_seq_prn;	// プロセスが呼ばれる時点で SeqPRNServiceで確保されてるはず
 int nUseHalf = 0;
+int nUseWmma = 0;
+std::string sDirTune = "data";
 #endif
 
 #ifdef USE_OPENCL
@@ -342,6 +344,7 @@ void init_network()
 		int num_B[MAX_GPUS];
 		int num_U[MAX_GPUS];
 		int num_H[MAX_GPUS];
+		int num_W[MAX_GPUS];
 		FName fname_W[MAX_GPUS];
 		int num_T[MAX_GPUS];
 		NNet::Impl impl_I[MAX_GPUS];
@@ -349,10 +352,11 @@ void init_network()
 			num_B[i] = thread_batch_size;
 			num_U[i] = default_gpus[i];
 			num_H[i] = nUseHalf;
+			num_W[i] = nUseWmma;
 			fname_W[i].reset_fname(default_weights.c_str());
 			num_T[i] = -1;
 			impl_I[i] = NNet::opencl;	// NNet::cpublas
-			nnets.emplace_back(impl_I[i], i, num_P, num_B[i], num_U[i], 0, num_H[i], num_T[i], fname_W[i], "");
+			nnets.emplace_back(impl_I[i], i, num_P, num_B[i], num_U[i], num_H[i], num_W[i], num_T[i], fname_W[i], sDirTune.c_str());
  		}
 		PRT("num_P=%d,threads_per_GPU=%d,cfg_num_threads=%d,numGPU=%d,all P=%d\n",num_P,threads_per_GPU,cfg_num_threads,numGPU,num_P*numGPU);
 	}
@@ -368,7 +372,7 @@ void init_network()
 			p_nnet_v.push_back(new NNetIPC(is_thread_batch()));
 			if ( p_nnet_v[nIPC]->start(gpus) == -1 ) DEBUG_PRT("Err. p_nnet_v[%d]->start(%d)\n",nIPC,gpus);
 			nNNetID_v.push_back(p_nnet_v[nIPC]->get_id());
-			PRT("nnet.start(%d), nNNetID=%d\n",gpus,nNNetID_v[nIPC]);
+//			PRT("nnet.start(%d), nNNetID=%d\n",gpus,nNNetID_v[nIPC]);
 			if ( ! is_thread_batch() ) break;
   			if ( i < threads_per_GPU ) continue;
 		    pAD.push_back(new AddDummy(nIPC, (int)gpus));
