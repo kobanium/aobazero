@@ -60,9 +60,9 @@ class Device {
   public:
     DataNNService(NNet::Impl impl, uint nnet_id, const char *dtune,
 		  uint size_parallel, uint size_batch, uint id, uint use_half,
-		  uint use_wmma, uint thread_num)
+		  uint use_wmma, uint thread_num, uint sleep_opencl)
       noexcept : _nnet(impl, nnet_id, size_parallel, size_batch, id, use_half,
-		       use_wmma, thread_num, dtune) {
+		       use_wmma, thread_num, sleep_opencl, dtune) {
       lock_guard<mutex> lock(m_seq);
       if (seq_s.empty()) seq_s.emplace_back(); }
     void nnreset(const FName &fname) noexcept { _nnet.nnreset(fname); }
@@ -77,11 +77,9 @@ public:
   static constexpr Type aobaz     = Type::Aobaz;
   static constexpr Type nnservice = Type::NNService;
   static constexpr Type bad       = Type::Bad;
-  explicit Device(const string &s, int nnet_id, const char *dtune) noexcept :
+  explicit Device(const string &s, int nnet_id, uint sleep_opencl,
+		  const char *dtune) noexcept :
     _nnet_id(-1), _size_parallel(1U), _type(bad) {
-    bool flag_half = false;
-    bool flag_wmma = false;
-    
     if (s.empty()) die(ERR_INT("invalid device %s", s.c_str()));
     char *endptr;
     if (s[0] == 'B' || s[0] == 'b') {
@@ -109,8 +107,8 @@ public:
       _size_batch    = size_batch;
       _data_nnservice.reset(new DataNNService(NNet::cpublas, _nnet_id, dtune,
 					      _size_parallel, _size_batch,
-					      _device_id, flag_half, flag_wmma,
-					      thread_num)); }
+					      _device_id, 0, 0, thread_num,
+					      0)); }
     else if (s[0] == 'O' || s[0] == 'o') {
       const char *token = s.c_str() + 1;
       long int device_id = strtol(token, &endptr, 10);
@@ -131,15 +129,12 @@ public:
 	  || endptr == token || size_parallel < 1 || size_parallel == LONG_MAX)
 	die(ERR_INT("invalid device %s", s.c_str()));
       
-      if (*endptr == '\0') {
-	flag_half = false;
-	flag_wmma = false; }
-      else if ((*endptr == 'H' || *endptr == 'h') && endptr[1] == '\0') {
-	flag_half = true;
-	flag_wmma = false; }
-      else if ((*endptr == 'W' || *endptr == 'w') && endptr[1] == '\0') {
-	flag_half = false;
-	flag_wmma = true; }
+      uint flag_half = 0;
+      uint flag_wmma = 0;
+      if ((*endptr == 'H' || *endptr == 'h') && endptr[1] == '\0')
+	flag_half = 1;
+      else if ((*endptr == 'W' || *endptr == 'w') && endptr[1] == '\0')
+	flag_wmma = 1;
 
       _device_id     = device_id;
       _nnet_id       = nnet_id;
@@ -149,7 +144,7 @@ public:
       _data_nnservice.reset(new DataNNService(NNet::opencl, _nnet_id, dtune,
 					      _size_parallel, _size_batch,
 					      _device_id, flag_half, flag_wmma,
-					      0)); }
+					      0, sleep_opencl)); }
     else {
       const char *token = s.c_str();
       _nnet_id = strtol(token, &endptr, 10);
@@ -461,7 +456,8 @@ PlayManager::PlayManager() noexcept : _ngen_records(0), _num_thinking(0) {}
 PlayManager::~PlayManager() noexcept {}
 void PlayManager::start(const char *cname, const char *dlog, const char *dtune,
 			const vector<string> &devices_str, uint verbose_eng,
-			const FNameID &wfname, uint64_t crc64) noexcept {
+			uint sleep_opencl, const FNameID &wfname,
+			uint64_t crc64) noexcept {
   assert(cname && dlog && dtune && wfname.ok() && _engines.empty());
   if (devices_str.empty()) die(ERR_INT("bad devices"));
   _verbose_eng = verbose_eng;
@@ -471,6 +467,7 @@ void PlayManager::start(const char *cname, const char *dlog, const char *dtune,
 
   int nnet_id = 0;
   for (const string &s : devices_str) _devices.emplace_back(s, nnet_id++,
+							    sleep_opencl,
 							    dtune);
   for (Device &d : _devices) d.nnreset(wfname);
   for (Device &d : _devices) d.wait();

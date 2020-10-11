@@ -46,6 +46,7 @@ class NNetService {
   std::string _dtune;
   uint _nnet_id, _nipc, _size_batch, _device_id, _use_half, _use_wmma;
   uint _thread_num;
+  bool _do_sleep;
   FName _fname;
   void worker_srv() noexcept;
   void worker_wait() noexcept;
@@ -54,10 +55,10 @@ class NNetService {
 public:
   NNetService(NNet::Impl impl, uint nnet_id, uint nipc, uint size_batch,
 	      uint device_id, uint use_half, uint use_wmma, uint thread_num,
-	      const char *dtune) noexcept;
+	      bool do_sleep, const char *dtune) noexcept;
   NNetService(NNet::Impl impl, uint nnet_id, uint nipc, uint size_batch,
 	      uint device_id, uint use_half, uint use_wmma, uint thread_num,
-	      const FName &fname, const char *dtune) noexcept;
+	      bool do_sleep, const FName &fname, const char *dtune) noexcept;
   ~NNetService() noexcept;
   void nnreset(const FName &fname) noexcept;
   void wait() noexcept;

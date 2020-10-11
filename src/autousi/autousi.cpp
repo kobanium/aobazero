@@ -68,6 +68,7 @@ static string str_dtune;
 static string str_cname;
 static string str_dlog;
 static uint verbose_eng;
+static uint sleep_opencl;
 static vector<string> devices;
 
 static deque<OSI::DirLock> dirlocks;
@@ -99,6 +100,7 @@ static void init() noexcept {
 			   {"DirLog",        "./log"},
 			   {"DirCSA",        "./csa"},
 			   {"Device",        "S-1:3:7"},
+			   {"SleepOpenCL",   "0"},
 			   {"SizeSendQueue", "64"},
 			   {"RecvTO",        "3"},
 			   {"SendTO",        "3"},
@@ -125,6 +127,7 @@ static void init() noexcept {
   uint recv_bufsiz       = Config::get<uint>  (m, "RecvBufSiz",    is_posi);
   uint send_bufsiz       = Config::get<uint>  (m, "SendBufSiz",    is_posi);
   uint max_retry         = Config::get<uint>  (m, "MaxRetry",      is_posi);
+  sleep_opencl           = Config::get<uint>  (m, "SleepOpenCL");
   opt_max_csa            = Config::get<uint>  (m, "MaxCSA");
   uint keep_wght         = Config::get<uint>  (m, "KeepWeight");
   verbose_eng            = Config::get<uint>  (m, "VerboseEngine");
@@ -239,7 +242,7 @@ int main() {
   std::shared_ptr<const WghtFile> wght = Client::get().get_wght();
   PlayManager::get().start(str_cname.c_str(), str_dlog.c_str(),
 			   str_dtune.c_str(), devices, verbose_eng,
-			   wght->get_fname(), wght->get_crc64());
+			   sleep_opencl, wght->get_fname(), wght->get_crc64());
 
   cout << "self-play started" << endl;
   OSI::handle_signal(on_signal);

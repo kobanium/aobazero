@@ -148,13 +148,13 @@ int main(int argc, char **argv) {
   if (num_N == 2) {
     seq_s.emplace_back();
     nnets.emplace_back(impl_I[0], 0U, num_P, num_B[0], num_U[0], 0, num_H[0],
-		       num_T[0], fname_W[0], "");
+		       num_T[0], false, fname_W[0], "");
     nnets.emplace_back(impl_I[1], 1U, num_P, num_B[1], num_U[1], 0, num_H[1],
-		       num_T[1], fname_W[1], ""); }
+		       num_T[1], false, fname_W[1], ""); }
   else if (num_N == 1) {
     seq_s.emplace_back();
     nnets.emplace_back(impl_I[0], 0U, num_P * 2, num_B[0], num_U[0], 0,
-		       num_H[0], num_T[0], fname_W[0], ""); }
+		       num_H[0], num_T[0], false, fname_W[0], ""); }
 
   static vector<unique_ptr<Game>> games;
   for (uint u = 0; u < static_cast<uint>(num_P); ++u)

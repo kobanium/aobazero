@@ -26,7 +26,8 @@ public:
   static PlayManager & get() noexcept;
   void start(const char *cname, const char *dlog, const char *dtune,
 	     const std::vector<std::string> &devices, uint verbose_eng,
-	     const FNameID &wfname, uint64_t crc64) noexcept;
+	     uint sleep_opencl, const FNameID &wfname, uint64_t crc64)
+    noexcept;
   void end() noexcept;
   std::deque<std::string> manage_play(bool has_conn, const FNameID &wfname,
 				      uint64_t crc64) noexcept;
