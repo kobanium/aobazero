@@ -1532,6 +1532,26 @@ int getCmdLineParam(int argc, char *argv[])
 
 #ifdef USE_OPENCL
 	if ( is_process_batch() == false ) {
+		if ( sDirTune.empty() ) {
+			std::string d_dir = "data";
+			sDirTune = d_dir;
+#if defined(_MSC_VER)
+			char path[MAX_PATH];
+			if (::GetModuleFileNameA(NULL, path, MAX_PATH) != 0) {
+				char *p = strstr(path, "bin\\aobaz.exe");
+//				char *p = strstr(path, "Release\\aobaz.exe");
+				if (p) {
+					*p = 0;
+					sDirTune = std::string(path) + d_dir;
+				}
+//				char drive[MAX_PATH], dir[MAX_PATH], fname[MAX_PATH], ext[MAX_PATH];
+//				::_splitpath_s(path, drive, dir, fname, ext);
+//				PRT("%s\n%s\n%s\n%s\n%s\n", path, drive, dir, fname, ext);
+				PRT("%s\n", sDirTune.c_str());
+			}
+#endif
+		}
+
 		struct stat st_buf;
 		if ( stat(sDirTune.c_str(), &st_buf) != 0 ) {
 			PRT("DirTune does not exit. Tuning every time.\n");

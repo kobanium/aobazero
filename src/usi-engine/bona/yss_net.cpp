@@ -68,7 +68,7 @@ int nNNetServiceNumber = -1;
 SeqPRN *p_seq_prn;	// プロセスが呼ばれる時点で SeqPRNServiceで確保されてるはず
 int nUseHalf = 0;
 int nUseWmma = 0;
-std::string sDirTune = "data";
+std::string sDirTune = "";
 #endif
 
 #ifdef USE_OPENCL
