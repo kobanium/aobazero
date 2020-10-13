@@ -370,9 +370,11 @@ void init_network()
 		// GPSs = 2, b = 3, t = 18 (threads_per_GPU = 9, dummy_num_threads = 5) の場合、num_P = 14, (0..13, GPU=0), (14..27, GPU=1)
 		for (size_t gpus=0; gpus<default_gpus.size(); gpus++) for (int i=0; i<num_P; i++,nIPC++) {
 			p_nnet_v.push_back(new NNetIPC(is_thread_batch()));
-			if ( p_nnet_v[nIPC]->start(gpus) == -1 ) DEBUG_PRT("Err. p_nnet_v[%d]->start(%d)\n",nIPC,gpus);
+			int nnet_id = default_gpus[gpus];
+			if ( is_thread_batch() ) nnet_id = gpus;
+			if ( p_nnet_v[nIPC]->start(nnet_id) == -1 ) DEBUG_PRT("Err. p_nnet_v[%d]->start(%d)\n",nIPC,nnet_id);
 			nNNetID_v.push_back(p_nnet_v[nIPC]->get_id());
-//			PRT("nnet.start(%d), nNNetID=%d\n",gpus,nNNetID_v[nIPC]);
+//			PRT("nnet.start(%d), nNNetID=%d\n",nnet_id,nNNetID_v[nIPC]);
 			if ( ! is_thread_batch() ) break;
   			if ( i < threads_per_GPU ) continue;
 		    pAD.push_back(new AddDummy(nIPC, (int)gpus));
