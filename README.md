@@ -27,17 +27,17 @@ Silverら（2017a, 2018）は囲碁やチェスでの実験結果も報告して
 
 CPUだけのマシンは
 ```
-aobazero-1.3-w64-cpu-only.zip
+aobazero-1.5-w64-cpu-only.zip
 ```
 GPUがついたマシンは
 ```
-aobazero-1.3-w64-opencl.zip
+aobazero-1.5-w64-opencl.zip
 ```
 をダウンロード、展開して、中のclick_me.batを実行してください。
 
 Linuxの方は
 ```
-aobazero-1.3.tar.gz
+aobazero-1.5.tar.gz
 ```
 を展開してmakeしてから
 ```
@@ -50,17 +50,23 @@ CPU版をダウンロードして、click_me.batを実行します。しばら�
 weight_save/の下にw000000000468.txt という230MBほどのファイルが作られます。
 (468、の数値は異なります)
 
-aobazero-1.3-w64-cpu-only.zipに同梱されているaobaz.batを編集します。最後の1行が以下のようになっています。
+aobazero-1.5-w64-cpu-only.zipに同梱されているaobaz.batを編集します。最後の1行が以下のようになっています。
 ```
-bin/aobaz -q -i -p 30 -w weight_save\w000000000467.txt
+bin/aobaz -q -i -p 100 -w weight-save\w000000000467.txt
 ```
-この467の部分を実際にダウンロードしてきたファイル名に合わせて書き直し、保存します。  
+この467の部分を実際にダウンロードしてきたファイル名に合わせて書き直し、保存します。
 将棋所にaobaz.batをエンジンとして登録します。  
-"-p 30"の30を増やすと強くなりますが、思考時間が長くなります。  
-CPU版は30で5秒ほどかかります。GPU版は800で3秒ほどかかります(GPUの性能に依存します)。  
-  
-将棋所はusiエンジンを動作させる将棋用のGUIです。こちらで入手できます。  
+"-p 100"の100を増やすと強くなりますが、思考時間が長くなります。
+CPU版は100で5秒ほどかかります。GPU版は4000で3秒ほどかかります(GPUの性能に依存します)。
+
+将棋所はusiエンジンを動作させる将棋用のGUIです。こちらで入手できます。
 将棋所のページ<http://shogidokoro.starfree.jp/>
+
+# ShogiGUIで遊んでみたい
+AobaZeroはShogiGUIでも動作しますがengineに送られてくる局面が初期局面からの手順(position startpos moves ...)ではなく、
+現在局面のみ(position sfen ...)なので、過去7局面をNNの入力に必要とするAobaZeroの本来の実力は出せません。
+
+ShogiGUIのページ<http://shogigui.siganus.com/>
 
 # AobaZeroの紹介ページ
 今までに作成した棋譜や重み、棋譜のサンプルなどを公開しています。  

@@ -26,17 +26,17 @@ and Chess [LCZero](https://lczero.org). Both projects have achieved super human 
 
 For machine without GPU
 ```
-aobazero-1.3-w64-cpu-only.zip
+aobazero-1.5-w64-cpu-only.zip
 ```
 For machine with GPU
 ```
-aobazero-1.3-w64-opencl.zip
+aobazero-1.5-w64-opencl.zip
 ```
 Download it, unzip, and run click_me.bat.
 
 For Linux,
 ```
-aobazero-1.3.tar.gz
+aobazero-1.5.tar.gz
 ```
 Unzip it, make, then run
 ```
@@ -51,19 +51,25 @@ After a while, it downloads the latest network weight file, and "self-play start
 weight_save/w0000000000468.txt will be created. Its size is about 230MB.
 (the numbers "468" will be different.)
 
-Edit aobaz.bat that is in aobazero-1.3-w64-cpu-only.zip.
+Edit aobaz.bat that is in aobazero-1.5-w64-cpu-only.zip.
 The last line is like this,
 ```
-bin/aobaz -q -i -p 30 -w weight_save\w000000000467.txt
+bin/aobaz -q -i -p 100 -w weight-save\w000000000467.txt
 ```
 Rewrite this "467" according to the file name actually downloaded, and save.
 Register aobaz.bat as a engine in ShogiDokoro.
-Increase by 30 of "-p 30", to get stronger. But it gets slower.
-The CPU version takes about 5 seconds at 30. 
-The GPU version takes about 3 seconds at 800.(It depends on GPU.) 
+Increase by 100 of "-p 100", to get stronger. But it gets slower.
+The CPU version takes about 5 seconds at 100. 
+The GPU version takes about 3 seconds at 4000.(It depends on GPU.) 
 
 ShogiDokoro is a GUI for USI engine. You can download here.
 ShogiDokoro<http://shogidokoro.starfree.jp/>
+
+# I'd like to play with ShogiGUI
+AobaZero also can be played with ShogiGUI. But it does not send sequences from initial position(position startpos moves ...),
+ but position (position sfen ...). AobaZero'NN needs past 7 moves, so it is weaker than on ShogiDokoro.
+
+ShogiGUI<http://shogigui.siganus.com/>
 
 # AobaZero introduction page
 There are game records, network weights, and some self-play game samples.
