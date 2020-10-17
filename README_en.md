@@ -62,14 +62,16 @@ Increase by 100 of "-p 100", to get stronger. But it gets slower.
 The CPU version takes about 5 seconds at 100. 
 The GPU version takes about 3 seconds at 4000.(It depends on GPU.) 
 
-ShogiDokoro is a GUI for USI engine. You can download here.
-ShogiDokoro<http://shogidokoro.starfree.jp/>
+ShogiDokoro is a GUI for USI engine.
+ShogiDokoro 
+<http://shogidokoro.starfree.jp/>
 
 # I'd like to play with ShogiGUI
 AobaZero also can be played with ShogiGUI. But it does not send sequences from initial position(position startpos moves ...),
  but position (position sfen ...). AobaZero'NN needs past 7 moves, so it is weaker than on ShogiDokoro.
 
-ShogiGUI<http://shogigui.siganus.com/>
+ShogiGUI 
+<http://shogigui.siganus.com/>
 
 # AobaZero introduction page
 There are game records, network weights, and some self-play game samples.

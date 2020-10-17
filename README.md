@@ -47,26 +47,28 @@ aobazero-1.5.tar.gz
 
 # 将棋所で遊んでみたい
 CPU版をダウンロードして、click_me.batを実行します。しばらくすると最新のネットワークの重みファイルをダウンロードして「self-play start」が表示されて棋譜の生成を開始します。すかさずCtrl + Cで停止させます。(signal 1 caught)が表示されて、しばらく待つと止まります。  
-weight_save/の下にw000000000468.txt という230MBほどのファイルが作られます。
+weight_save/の下にw000000002184.txt という230MBほどのファイルが作られます。
 (468、の数値は異なります)
 
 aobazero-1.5-w64-cpu-only.zipに同梱されているaobaz.batを編集します。最後の1行が以下のようになっています。
 ```
-bin/aobaz -q -i -p 100 -w weight-save\w000000000467.txt
+bin\aobaz -q -i -p 100 -w weight-save\w000000002184.txt
 ```
-この467の部分を実際にダウンロードしてきたファイル名に合わせて書き直し、保存します。
+この2184の部分を実際にダウンロードしてきたファイル名に合わせて書き直し、保存します。
 将棋所にaobaz.batをエンジンとして登録します。  
 "-p 100"の100を増やすと強くなりますが、思考時間が長くなります。
 CPU版は100で5秒ほどかかります。GPU版は4000で3秒ほどかかります(GPUの性能に依存します)。
 
 将棋所はusiエンジンを動作させる将棋用のGUIです。こちらで入手できます。
-将棋所のページ<http://shogidokoro.starfree.jp/>
+将棋所のページ
+<http://shogidokoro.starfree.jp/>
 
 # ShogiGUIで遊んでみたい
 AobaZeroはShogiGUIでも動作しますがengineに送られてくる局面が初期局面からの手順(position startpos moves ...)ではなく、
 現在局面のみ(position sfen ...)なので、過去7局面をNNの入力に必要とするAobaZeroの本来の実力は出せません。
 
-ShogiGUIのページ<http://shogigui.siganus.com/>
+ShogiGUIのページ
+<http://shogigui.siganus.com/>
 
 # AobaZeroの紹介ページ
 今までに作成した棋譜や重み、棋譜のサンプルなどを公開しています。  

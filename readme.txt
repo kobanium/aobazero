@@ -21,9 +21,10 @@ Ubuntu での手順を記します。ビルド前に、利用したいハード�
 
 > make -j[number of threads]
 
-もしCPUのみで計算を行うプログラムをビルドしたいならば、src/usi_engine/Makefile
-の53行目を # でコメントし、54行目の # を消して、-DUSE_CPU_ONLY を有効にしてビ
-ルドして下さい。
+CPUのみで計算を行うプログラムをビルドしたいならば、
+src/usi_engine/Makefile の51行目を
+CPU_ONLY = 1
+にしてビルドして下さい。
 
 
 1.2 CentOS
@@ -93,9 +94,10 @@ C Shell 系ならば
 
 > make -j[number of threads]
 
-もし CPU のみで計算を行う bin/aobaz をビルドしたいならば、
-src/usi_engine/Makefile の 52 行目を # でコメントし、54 行目の # を消して、
--DUSE_CPU_ONLY を有効にしてビルドして下さい。
+CPUのみで計算を行うプログラムをビルドしたいならば、
+src/usi_engine/Makefile の51行目を
+CPU_ONLY = 1
+にしてビルドして下さい。
 
 
 1.3 Windows 
@@ -118,8 +120,8 @@ Release、プラットフォームを x64 に設定しビルドします。「Wi
 します。
 
 もしCPUのみで計算を行うプログラムをビルドしたいならば、プロジェクトプロパティ
-の「C/C++、プリプロセッサ」カテゴリのプリプロセッサの定義で「;USE_CPU_ONLY」を
-最後に追加します。
+の「C/C++、プリプロセッサ」カテゴリのプリプロセッサの定義で
+「;USE_OPENCL_AOBA」を削除して「;USE_CPU_ONLY」を最後に追加します。
 
 
 2. 計算資源を AobaZero のプロジェクトに提供する方法
