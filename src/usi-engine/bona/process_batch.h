@@ -6,5 +6,6 @@
 bool is_process_batch();
 bool is_load_weight();
 uint64_t get_process_mem(int i);
+int get_nnet_id();
 
 #endif	//]] INCLUDE__GUARD

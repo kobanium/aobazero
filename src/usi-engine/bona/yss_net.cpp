@@ -294,6 +294,13 @@ bool is_load_weight()
 #endif
 	return true;
 }
+int get_nnet_id()
+{
+#ifdef NN_PARALLEL
+	if ( is_process_batch() ) return nNNetID_v[0];
+#endif
+	return 0;
+}
 
 void debug() {
 #ifdef THREAD_BATCH

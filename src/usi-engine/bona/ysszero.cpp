@@ -993,9 +993,27 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 	}
 
 	if ( 0 ) {
-		FILE *fp = fopen("sort.txt","a");
+		int id = get_nnet_id();
+		int pid = getpid_YSS();
+		static int count;
+		char str[TMP_BUF_LEN];
+		if ( ptree->nrep==0 ) count++;
+		sprintf(str,"res%03d_%05d_%05d.txt",id,pid,count);
+		FILE *fp = fopen(str,"a");
 		if ( fp==NULL ) debug();
-		fprintf(fp,"%4d,%4d\n",ptree->nrep,sort_n);
+
+		float best_v = -1;
+		if ( max_i >= 0 ) {
+			CHILD *pbest = &phg->child[max_i];
+			best_v = pbest->value;
+		}
+		if ( ptree->nrep==0 ) fprintf(fp,"/\nPI\n+\n");
+		if ( best_move==0 ) {
+			fprintf(fp,"%%TORYO,'%7.4f\n",best_v);
+		} else {
+			char sg[2] = { '+','-' };
+			fprintf(fp,"%c%s,'%7.4f,%s\n",sg[ptree->nrep & 1],str_CSA_move(best_move),best_v,buf_move_count);
+		}
 		fclose(fp);
 	}
 
