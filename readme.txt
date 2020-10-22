@@ -77,14 +77,14 @@ Intel 社が提供する情報に従ってインストールして下さい。
 コンンパイラとリンカのパスを設定します。
 
 Bourne Shell 系ならば
-> export CPLUS_INCLUDE_PATH=/path to inst-dts4/include:$CPLUS_INCLUDE_PATH
-> export LIBRARY_PATH=/path to inst-dits4/lib:$LIBRARY_PATH
-> export LD_RUN_PATH=/path to inst-dits4/lib:$LD_RUN_PATH
+> export CPLUS_INCLUDE_PATH=/path to inst-dts7/include:$CPLUS_INCLUDE_PATH
+> export LIBRARY_PATH=/path to inst-dts7/lib:$LIBRARY_PATH
+> export LD_RUN_PATH=/path to inst-dts7/lib:$LD_RUN_PATH
 
 C Shell 系ならば
-> setenv CPLUS_INCLUDE_PATH /path to inst-dts4/include:$CPLUS_INCLUDE_PATH
-> setenv LIBRARY_PATH /path to inst-dits4/lib:$LIBRARY_PATH
-> setenv LD_RUN_PATH /path to inst-dits4/lib:$LD_RUN_PATH
+> setenv CPLUS_INCLUDE_PATH /path to inst-dts7/include:$CPLUS_INCLUDE_PATH
+> setenv LIBRARY_PATH /path to inst-dts7/lib:$LIBRARY_PATH
+> setenv LD_RUN_PATH /path to inst-dts7/lib:$LD_RUN_PATH
 
 これらに加えて、OpenCL やIntel MKL などのパスの環境変数も必要ならば設定して
 下さい。OpenCL, OpenBLAS 及び Intel MKL のパスは Makefile.config でも指定可
