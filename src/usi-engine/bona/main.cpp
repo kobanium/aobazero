@@ -7,6 +7,9 @@
 #  include <fcntl.h>
 #endif
 #include "shogi.h"
+#if defined(YSS_ZERO)
+#include "../GTP.h"
+#endif
 
 static int main_child( tree_t * restrict ptree );
 
@@ -44,14 +47,15 @@ main()
 #endif
 
 #if defined(YSS_ZERO)
+  GTP::setup_default_parameters();
   usi_mode = usi_on;
   if ( getCmdLineParam(argc, argv) < 0 ) {
     out_error( "%s", str_error );
     return EXIT_SUCCESS;
   }
-  init_seqence_hash();
+  set_default_param();
   init_yss_zero();
-//{ void test_dist_loop(); test_dist_loop(); exit(1); }
+//{ void test_dist_loop(); test_dist_loop(); debug(); }
 #endif
 
   if ( ini( ptree ) < 0 )

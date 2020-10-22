@@ -9,6 +9,7 @@
 #include <limits>
 #include <map>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <cassert>
@@ -22,6 +23,7 @@ using std::max;
 using std::map;
 using std::mutex;
 using std::string;
+using std::stringstream;
 using std::cout;
 using std::cerr;
 using std::endl;
@@ -38,14 +40,14 @@ void Config::read(const char *fname, map<string, string> &m) {
   string s1, s2;
   bool bFirst;
   while (ifs.getline(line, sizeof(line))) {
-    token = OSI::strtok(line, " :\t,=", &saveptr);
+    token = OSI::strtok(line, " \t,=:", &saveptr);
     if (token == NULL || token[0] == '#') continue;
     s1 = string(token);
 
     s2 = string("");
     bFirst = true;
     while (true) {
-      token = OSI::strtok(NULL, " :\t,=", &saveptr);
+      token = OSI::strtok(NULL, " \t", &saveptr);
       if (token == NULL || token[0] == '#') break;
       if (bFirst) { bFirst = false; s2 += string(token); continue; }
       s2 += " ";
@@ -77,6 +79,15 @@ const char *Config::get_cstr(const map<string, string> &m, const char *p,
   
   if (maxlen < s.size() + 1) throw ERR_INT("value of option %s too long", p);
   return s.c_str(); }
+
+vector<string>
+Config::get_vecstr(const map<string, string> &m, const char *p) {
+  assert(p);
+  vector<string> vec;
+  stringstream ss( m.at(string(p)) );
+  string s;
+  while (ss >> s) vec.push_back(s);
+  return vec; }
 
 template<typename T>
 vector<T> Config::getv(const map<string, string> &m, const char *p,

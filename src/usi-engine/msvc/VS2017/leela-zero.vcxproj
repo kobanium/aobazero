@@ -19,6 +19,14 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\common\nnet-cpu.hpp" />
+    <ClInclude Include="..\..\..\common\nnet-ipc.hpp" />
+    <ClInclude Include="..\..\..\common\nnet-ocl.hpp" />
+    <ClInclude Include="..\..\..\common\nnet-srv.hpp" />
+    <ClInclude Include="..\..\..\common\nnet.hpp" />
+    <ClInclude Include="..\..\..\common\opencli.hpp" />
+    <ClInclude Include="..\..\..\common\option.hpp" />
+    <ClInclude Include="..\..\..\common\osi.hpp" />
     <ClInclude Include="..\..\bona\bitop.h" />
     <ClInclude Include="..\..\bona\dfpn.h" />
     <ClInclude Include="..\..\bona\lock.h" />
@@ -58,6 +66,18 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+    <ClCompile Include="..\..\..\common\err.cpp" />
+    <ClCompile Include="..\..\..\common\iobase.cpp" />
+    <ClCompile Include="..\..\..\common\nnet-cpu.cpp" />
+    <ClCompile Include="..\..\..\common\nnet-ipc.cpp" />
+    <ClCompile Include="..\..\..\common\nnet-ocl.cpp" />
+    <ClCompile Include="..\..\..\common\nnet-srv.cpp" />
+    <ClCompile Include="..\..\..\common\nnet.cpp" />
+    <ClCompile Include="..\..\..\common\opencli.cpp" />
+    <ClCompile Include="..\..\..\common\option.cpp" />
+    <ClCompile Include="..\..\..\common\osi.cpp" />
+    <ClCompile Include="..\..\..\common\shogibase.cpp" />
+    <ClCompile Include="..\..\..\common\xzi.cpp" />
     <ClCompile Include="..\..\bona\attack.cpp" />
     <ClCompile Include="..\..\bona\bitop.cpp" />
     <ClCompile Include="..\..\bona\book.cpp" />
@@ -174,7 +194,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>..\..\Eigen;$(IncludePath)</IncludePath>
+    <IncludePath>..\..\..\common;..\..\..\..\win\include;..\..\Eigen;$(IncludePath)</IncludePath>
+    <LibraryPath>..\..\..\..\win\lib64;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -183,7 +204,8 @@
     <LinkIncremental>false</LinkIncremental>
     <TargetName>aobaz</TargetName>
     <IntDir>$(Platform)\$(Configuration)\leelaz\</IntDir>
-    <IncludePath>..\..\Eigen;$(IncludePath)</IncludePath>
+    <IncludePath>..\..\..\common;..\..\..\..\win\include;..\..\Eigen;$(IncludePath)</IncludePath>
+    <LibraryPath>..\..\..\..\win\lib64;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -204,7 +226,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions);MINIMUM;TLP;CSA_LAN;USI;YSS_ZERO;NO_LOGGING;_WINSOCK_DEPRECATED_NO_WARNINGS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions);MINIMUM;TLP;CSA_LAN;USI;YSS_ZERO;NO_LOGGING;_WINSOCK_DEPRECATED_NO_WARNINGS;USE_WINAPI;USE_OPENBLAS</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -237,15 +259,18 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);MINIMUM;TLP;CSA_LAN;USI;YSS_ZERO;NO_LOGGING;_WINSOCK_DEPRECATED_NO_WARNINGS</PreprocessorDefinitions>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);MINIMUM;TLP;CSA_LAN;USI;YSS_ZERO;NO_LOGGING;_WINSOCK_DEPRECATED_NO_WARNINGS;USE_WINAPI;USE_OPENBLAS;USE_OPENCL_AOBA</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <AdditionalIncludeDirectories>
+      </AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;wsock32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>liblzma.lib;Ws2_32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;wsock32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions>/NODEFAULTLIB:libcmt.lib /ignore:4099 %(AdditionalOptions)</AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

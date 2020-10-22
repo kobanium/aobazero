@@ -12,8 +12,8 @@ OBJS = yss.o yss_misc.o \
 # define
 CC = g++
 
-CFLAGS=-c -Wall -std=c++0x -g3 -Ofast -msse2 -I. -I/usr/local/cuda/include -I/home/yss/caffe/include/ -I/home/yss/caffe/src/ -DYSSFISH -DNDEBUG $(EXCFLAGS)
-#CFLAGS=-c -Wall -std=c++0x -g3 -Ofast -msse2 -I. -I/usr/local/cuda/include -I/home/yss/caffe/include/ -I/home/yss/caffe/src/ -DYSSFISH -DNDEBUG $(EXCFLAGS) -DCPU_ONLY
+CFLAGS=-c -Wall -std=c++14 -g3 -Ofast -msse2 -I. -I/usr/local/cuda/include -I/home/yss/caffe/include/ -I/home/yss/caffe/src/ -DYSSFISH -DNDEBUG $(EXCFLAGS)
+#CFLAGS=-c -Wall -std=c++14 -g3 -Ofast -msse2 -I. -I/usr/local/cuda/include -I/home/yss/caffe/include/ -I/home/yss/caffe/src/ -DYSSFISH -DNDEBUG $(EXCFLAGS) -DCPU_ONLY -D_DEBUG
 LDFLAGS= -L/usr/local/lib -L/usr/local/cuda/lib64 -L/usr/local/cuda/lib -L/home/yss/caffe/build/lib/  -lcaffe -lglog -lgflags -lprotobuf -lleveldb -lboost_system -lm -lboost_thread -lpthread -lstdc++ -llzma
 
 

@@ -5,6 +5,7 @@
 #define INCLUDE_YSS_DCNN_H_GUARD
 
 #include "lock.h"
+#include <atomic>
 
 const int B_SIZE = 9;
 const int DCNN_CHANNELS = 362;
@@ -21,21 +22,26 @@ typedef struct child {
 	float bias;			// policy
 } CHILD;
 
+#define CHILD_VEC
+
 typedef struct hash_shogi {
-	lock_yss_t entry_lock;		// lock for SMP
+	lock_yss_t entry_lock;		// lock
+//	std::atomic<bool> lock;//{false};	// can't resize(N). atomic is non-moveable.
+
 	uint64 hashcode64;			// sequence hash
 	uint64 hash64pos;			// position hash, we check both hash key.
 	int deleted;	//
 	int games_sum;	// sum of children selected
-	int sort_done;	//
-//	int used;		// 
 	int col;		// color 1 or 2
 	int age;		//
 	float net_value;		// winrate from value network
-//	int   has_net_value;
 
 	int child_num;
+#ifdef CHILD_VEC
+	std::vector <CHILD> child;
+#else
 	CHILD child[SHOGI_MOVES_MAX];
+#endif
 } HASH_SHOGI;
 
 enum {
@@ -46,16 +52,18 @@ extern int fAddNoise;
 extern int fVisitCount;
 extern int fUSIMoveCount;
 extern int fPrtNetworkRawPath;
+extern int nNNetServiceNumber;
+extern int nDrawMove;
+extern int nUseHalf;
+extern int nUseWmma;
+extern std::string sDirTune;
 
 extern std::string default_weights;
-#ifdef USE_OPENCL
 extern std::vector<int> default_gpus;
-#endif
 
 extern int usi_go_count;
 extern int usi_bestmove_count;
 
-void debug();
 void debug_set(const char *file, int line);
 void debug_print(const char *fmt, ... );
 #define DEBUG_PRT (debug_set(__FILE__,__LINE__), debug_print)	
@@ -66,16 +74,22 @@ void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *p
 double uct_tree(tree_t * restrict ptree, int sideToMove, int ply);
 int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf_move_count);
 void print_all_min_posi(tree_t * restrict ptree, int ply);
-int check_enter_input();
+//int check_enter_input();
+int check_stop_input();
 int is_ignore_stop();
 void send_latest_bestmove();
 void set_latest_bestmove(char *str);
 int is_send_usi_info(int nodes);
 void send_usi_info(tree_t * restrict ptree, int sideToMove, int ply, int nodes, int nps);
 void usi_newgame();
+int is_declare_win(tree_t * restrict ptree, int sideToMove);
+int is_declare_win_root(tree_t * restrict ptree, int sideToMove);
+int get_thread_id(tree_t * restrict ptree);
 
 // yss_net.cpp
 void init_network();
+void replace_network(const char *token);
+void stop_thread_submit();
 void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *p_data);
 void prt_dcnn_data(float (*data)[B_SIZE][B_SIZE],int c,int turn_n);
 void prt_dcnn_data_table(float (*data)[B_SIZE][B_SIZE]);

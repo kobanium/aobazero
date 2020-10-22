@@ -12,37 +12,73 @@ namespace OSI {
   void handle_signal(void (*handler)(int)) noexcept;
   void prevent_multirun(const FName &fname) noexcept;
   char *strtok(char *str, const char *delim, char **saveptr) noexcept;
-  
-  class Pipe {
-    std::unique_ptr<class Pipe_impl> _impl;
-    friend class Selector_impl;
+  void binary2text(char *msg, uint &len, char &ch_last) noexcept;
+  bool has_parent() noexcept;
+  uint get_pid() noexcept;
+  uint get_ppid() noexcept;
+
+  class DirLock {
+    std::unique_ptr<class dirlock_impl> _impl;
   public:
-    explicit Pipe() noexcept;
-    ~Pipe() noexcept;
-    void open(const char *, char * const []) noexcept;
+    explicit DirLock(const char *dwght) noexcept;
+    ~DirLock() noexcept;
+  };
+
+  class Semaphore {
+    std::unique_ptr<class sem_impl> _impl;
+  public:
+    static void cleanup() noexcept;
+    explicit Semaphore() noexcept;
+    ~Semaphore() noexcept;
+    void open(const char *name, bool flag_create, uint value) noexcept;
     void close() noexcept;
+    void inc() noexcept;
+    void dec_wait() noexcept;
+    int dec_wait_timeout(uint timeout) noexcept;
+    bool ok() const noexcept;
+  };
+
+  class MMap {
+    std::unique_ptr<class mmap_impl> _impl;
+  public:
+    static void cleanup() noexcept;
+    explicit MMap() noexcept;
+    ~MMap() noexcept;
+    void open(const char *name, bool flag_create, size_t size) noexcept;
+    void close() noexcept;
+    void *operator()() const noexcept;
+    bool ok() const noexcept;
+  };
+
+  class ReadHandle {
+    std::unique_ptr<class rh_impl> _impl;
+  public:
+    explicit ReadHandle() noexcept;
+    explicit ReadHandle(const class rh_impl &_impl) noexcept;
+    ReadHandle(ReadHandle &&rh) noexcept;
+    ReadHandle &operator=(ReadHandle &&rh) noexcept;
+    ~ReadHandle() noexcept;
+    void clear() noexcept;
+    bool ok() const noexcept;
+    unsigned int operator()(char *buf, uint size) const noexcept;
+  };
+
+  class ChildProcess {
+    std::unique_ptr<class cp_impl> _impl;
+  public:
+    explicit ChildProcess() noexcept;
+    ~ChildProcess() noexcept;
+    void open(const char *path, char * const argv[]) noexcept;
+    void close() noexcept;
+    ReadHandle gen_handle_in() const noexcept;
+    ReadHandle gen_handle_err() const noexcept;
     uint get_pid() const noexcept;
     void close_write() const noexcept;
     bool is_closed() const noexcept;
     bool ok() const noexcept;
     size_t write(const char *msg, size_t n) const noexcept;
-    char *getline_in_block() const noexcept;
-    char *getline_err_block() const noexcept;
-    char *getline_in() const noexcept;
-    char *getline_err() const noexcept; };
-
-  class Selector {
-    std::unique_ptr<class Selector_impl> _impl;
-  public:
-    explicit Selector() noexcept;
-    ~Selector() noexcept;
-    void reset() const noexcept;
-    void add(const Pipe &pipe) const noexcept;
-    void wait(uint sec, uint msec) const noexcept;
-    bool try_getline_in(const Pipe &pipe, char **pmsg) const noexcept;
-    bool try_getline_err(const Pipe &pipe, char **pmsg) const noexcept;
   };
-
+  
   class Dir {
     std::unique_ptr<class Dir_impl> _impl;
   public:

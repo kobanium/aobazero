@@ -1,0 +1,44 @@
+#net: "aoba_zero.prototxt"
+#net: "aoba_zero_256x40b.prototxt"
+#net: "aoba_zero_256x20b.prototxt"
+net: "aoba_zero_256x20b_mb128.prototxt"
+
+# test_iter specifies how many forward passes the test should carry out.
+# In the case of MNIST, we have test batch size 100 and 100 test iterations,
+# covering the full 10,000 testing images.
+#test_iter: 100
+# Carry out testing every 500 training iterations.
+test_interval: 500
+# The base learning rate, momentum and the weight decay of the network.
+weight_decay: 0.0002
+# The learning rate policy  ~/caffe/src/caffe/proto/caffe.proto
+#lr_policy: "inv"      # base_lr * (1 + gamma * iter) ^ (- power)
+#           "step"       base_lr * gamma ^ (floor(iter / step))
+#           "exp"        base_lr * gamma ^ iter
+#gamma: 0.0001
+#power: 0.75
+# Display every 100 iterations
+display: 2
+# snapshot intermediate results
+snapshot: 20000
+snapshot_prefix: "snapshots/"
+# solver mode: CPU or GPU
+solver_mode: GPU
+#solver_mode: CPU
+#solver_type: ADAGRAD # default = SGD=0, NESTEROV=1, ADAGRAD=2
+
+base_lr:    0.02   # training at a learning rate of 0.01 = 1e-2
+
+lr_policy: "step" # learning rate policy: drop the learning rate in "steps"
+                  # by a factor of gamma every stepsize iterations
+
+gamma: 0.5        # drop the learning rate by a factor of 10
+                  # (i.e., multiply it by a factor of gamma = 0.1)
+
+iter_size: 32
+
+stepsize:   10000000  # drop the learning rate every 100K iterations
+
+max_iter:   10010000  # train for 700K iterations total
+
+momentum: 0.9

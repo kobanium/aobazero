@@ -132,6 +132,14 @@ public:
     static void gather_features_yss_zero(NNPlanes& planes, float data[][9][9]);
     static Netresult_old get_scored_moves_internal(
       const GameState* state, NNPlanes & planes, int rotation);
+#ifdef USE_OPENCL_SELFCHECK
+//    void compare_net_outputs(const Netresult& data, const Netresult& ref);
+//int compare_net_outputs(std::vector<scored_node>& data, std::vector<scored_node>& ref);
+    int compare_net_outputs(std::vector<scored_node>& policy,
+			    std::vector<scored_node>& policy_ref,
+			    float value, float value_ref);
+    std::unique_ptr<ForwardPipe> m_forward_cpu;
+#endif
 
 private:
     std::pair<int, int> load_v1_network(std::istream& wtfile);
@@ -175,11 +183,6 @@ private:
     void select_precision(int channels);
 #endif
     std::unique_ptr<ForwardPipe> m_forward;
-#ifdef USE_OPENCL_SELFCHECK
-//    void compare_net_outputs(const Netresult& data, const Netresult& ref);
-    void compare_net_outputs(std::vector<scored_node>& data, std::vector<scored_node>& ref);
-    std::unique_ptr<ForwardPipe> m_forward_cpu;
-#endif
 
     NNCache m_nncache;
 

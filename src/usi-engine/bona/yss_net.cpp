@@ -16,6 +16,8 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <chrono>
+#include <exception>
 
 
 #include <limits.h>
@@ -40,44 +42,401 @@
 #include "lock.h"
 #include "yss_var.h"
 #include "yss_dcnn.h"
+#include "process_batch.h"
 
 //using namespace Utils;
 std::string default_weights;
 std::vector<int> default_gpus;
 void init_global_objects();	// Leela.cpp
+void initialize_network();
+
+bool fUseLeelaZeroOpenCL = false;	// only for test. disable USE_OPENCL_SELFCHECK
+
+#ifdef USE_OPENCL
+#define NN_PARALLEL
+#endif
+
+#ifdef NN_PARALLEL
+#include "nnet-srv.hpp"
+#include "nnet-ipc.hpp"
+
+using std::copy_n;
+
+std::vector<NNetIPC *> p_nnet_v;
+std::vector<int> nNNetID_v;
+int nNNetServiceNumber = -1;
+SeqPRN *p_seq_prn;	// プロセスが呼ばれる時点で SeqPRNServiceで確保されてるはず
+int nUseHalf = 0;
+int nUseWmma = 0;
+std::string sDirTune = "";
+#endif
+
+#ifdef USE_OPENCL
+#define THREAD_BATCH
+#endif
+
+#ifdef THREAD_BATCH
+using std::deque;
+static deque<NNetService> nnets;
+deque<SeqPRNService> seq_s;
+const int MAX_GPUS = 10;
+std::atomic<int> submit_num[MAX_GPUS] = {};
+std::atomic<int> submit_total[MAX_GPUS] = {};
+volatile bool stop_dummy_thread = false;
+int thread_batch_size;
+int double_thread_batch_size = 0;
+int dummy_num_threads;
+std::thread thread_submit_num_check[MAX_GPUS];
+int threads_per_GPU = 1;
+
+volatile bool is_prepare_dummy_data = false;
+std::mutex mutex_prepare_dummy_data;
+std::condition_variable cv_prepare_dummy_data;
+
+std::vector<unsigned short> dummy_nnmoves;
+float dummy_data[1*DCNN_CHANNELS*B_SIZE*B_SIZE];
+
+void prepare_dummy_data_unlock()
+{
+	std::unique_lock<std::mutex> uniq_lk(mutex_prepare_dummy_data);
+	is_prepare_dummy_data = true;
+	cv_prepare_dummy_data.notify_all();
+}
+
+void prepare_dummy_data(float *data, std::vector<unsigned short> &nnmoves)
+{
+	size_t size = nnmoves.size();
+	dummy_nnmoves.resize(size);
+	copy_n(data, NNAux::nch_input*NNAux::size_plane, dummy_data);
+	copy_n(nnmoves.data(), size, dummy_nnmoves.data() );
+
+//	while ( !is_prepare_dummy_data.compare_exchange_weak(false, true) );
+	prepare_dummy_data_unlock();
+}
+
+class AddDummy {
+public:
+	AddDummy(int id, int gnum) {
+		m_thread_id = id;
+		m_gnum = gnum;
+	};
+	void wait_loop();
+//private:
+	int m_thread_id = -1;
+	int m_gnum;
+	bool m_is_ready = false;	// for spurious wakeup
+	std::mutex m_mutex;
+	std::condition_variable m_cv;
+};
+
+std::vector<AddDummy *> pAD;
+
+template<class T>
+void atomic_add(std::atomic<T> &f, T d) {
+	T old = f.load();
+	while (!f.compare_exchange_weak(old, old + d));
+}
+
+void submit_add(int gnum, int add) {
+	atomic_add(submit_num[gnum], add);
+
+	if ( add == +1 ) {
+		atomic_add(submit_total[gnum], add);
+	}
+}
+
+void submit_block_sub(NNetIPC *p_nnet,int gnum, int move_num)
+{
+	submit_add(gnum, +1);
+	if ( p_nnet->submit_block(move_num) == -1 ) {	// lock. wait result.
+		PRT("Err. submit_block()\n"); debug();
+	}
+	submit_add(gnum, -1);
+}
+
+bool is_stop_dummy_thread() {
+	return stop_dummy_thread;
+}
+
+void AddDummy::wait_loop() {
+	{
+		std::unique_lock<std::mutex> uniq_lk(mutex_prepare_dummy_data);
+		cv_prepare_dummy_data.wait(uniq_lk, [this](){ return is_prepare_dummy_data; });
+	}
+
+	NNetIPC *p_nnet = p_nnet_v[m_thread_id];
+	copy_n(dummy_data, NNAux::nch_input*NNAux::size_plane,
+	       p_nnet->get_features()  );
+	copy_n(dummy_nnmoves.data(), dummy_nnmoves.size(),
+	       p_nnet->get_nnmoves());
+
+	while (true) {
+		{
+			std::unique_lock<std::mutex> uniq_lk(m_mutex);
+			m_cv.wait(uniq_lk, [this](){ return m_is_ready || stop_dummy_thread; });
+		}
+		if ( is_stop_dummy_thread() ) break;
+
+		submit_block_sub(p_nnet, m_gnum, (int)dummy_nnmoves.size());
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			m_is_ready = false;
+		}
+	}
+}
+
+void unlock_AddDummy(AddDummy *p)
+{
+	{
+		std::lock_guard<std::mutex> lock(p->m_mutex);
+		p->m_is_ready = true;
+	}
+	p->m_cv.notify_one();
+}
+
+void submit_num_check_loop(size_t gnum) {
+	PRT("start dummy_num_threads=%d,gnum=%d\n",dummy_num_threads,gnum);
+	std::vector<std::thread> th_p;
+	size_t base = dummy_num_threads * gnum;
+	int i;
+	for (i=0; i<dummy_num_threads; i++) {
+		AddDummy *p = pAD[base+i];
+		th_p.emplace_back(std::thread( &AddDummy::wait_loop, p));
+	}
+
+	const int wait_ns = 1000;	// 1000 nanoseconds = 1ms
+	int prev_total = submit_total[gnum].load();
+	// 1ms 以上、totalに変化がない場合batchをダミーで埋める。ダミーで埋めてる途中に通常が入るとおかしくなる?
+	while (true) {
+		if ( is_stop_dummy_thread() ) break;
+		std::this_thread::sleep_for(std::chrono::nanoseconds(wait_ns));
+		int total = submit_total[gnum].load();
+		bool is_progress = (total != prev_total);
+		prev_total = total;
+		if ( is_progress ) continue;
+		int num = submit_num[gnum].load();
+		if ( num == 0 || num >= double_thread_batch_size ) continue;
+
+		int dummy_running = 0;
+		for (i=0; i<dummy_num_threads; i++) {
+			AddDummy *p = pAD[base+i];
+			if ( p->m_is_ready == true ) dummy_running++;
+		}
+		if ( num == dummy_running ) continue;	// dummyが待ってるだけ
+		int wakeup_threads = double_thread_batch_size - num;
+//		PRT("gnum=%d,wakeup_threads=%d,num=%d,dummy_running=%d,total=%d\n",gnum,wakeup_threads,num,dummy_running,total);
+		int sum = 0;
+		for (i=0; i<dummy_num_threads; i++) {
+			AddDummy *p = pAD[base+i];
+			if ( p->m_is_ready == true ) continue;
+			unlock_AddDummy(p);
+			sum++;
+			if ( sum == wakeup_threads ) break;
+		}
+		if ( sum != wakeup_threads ) { static int count; if ( count++ < 10 ) PRT("not enough wakeup?\n"); }
+	}
+
+	for (i=0; i<dummy_num_threads; i++) {
+		AddDummy *p = pAD[base+i];
+		unlock_AddDummy(p);
+	}
+
+	for (std::thread& th : th_p) {
+		th.join();
+	}
+}
+
+void on_terminate_aobaz() {	// clean up shared memory
+  std::exception_ptr p = std::current_exception();
+  try { if (p) std::rethrow_exception(p); }
+  catch (const std::exception &e) { std::cout << e.what() << std::endl; }
+
+  try { OSI::Semaphore::cleanup(); }
+  catch (std::exception &e) { std::cerr << e.what() << std::endl; }
+  
+  try { OSI::MMap::cleanup(); }
+  catch (std::exception &e) { std::cerr << e.what() << std::endl; }
+
+  abort();
+}
+
+void on_signal_aobaz(int /*signum*/) {
+	on_terminate_aobaz();
+}
+
+void set_signal_terminate() {
+	std::set_terminate(on_terminate_aobaz);
+	OSI::handle_signal(on_signal_aobaz);
+}
+#endif
+
+bool is_process_batch()
+{
+#ifdef NN_PARALLEL
+	if ( nNNetServiceNumber >= 0 ) return true;
+#endif
+	return false;
+}
+bool is_thread_batch()
+{
+#ifdef THREAD_BATCH
+	if ( fUseLeelaZeroOpenCL ) return false;
+	if ( is_process_batch() ) return false;
+	return true;
+#endif
+	return false;
+}
+bool is_load_weight()
+{
+#ifdef NN_PARALLEL
+	if ( is_thread_batch() ) return false;
+	if ( is_process_batch() && nNNetID_v[0] != 0 ) return false;
+#endif
+	return true;
+}
+int get_nnet_id()
+{
+#ifdef NN_PARALLEL
+	if ( is_process_batch() ) return nNNetID_v[0];
+#endif
+	return 0;
+}
+
+void debug() {
+#ifdef THREAD_BATCH
+	if ( is_thread_batch() ) {
+		on_terminate_aobaz();
+	}
+#endif
+	exit(0);
+}
+
+uint64_t get_process_mem(int i)
+{
+#ifdef NN_PARALLEL
+	const int LEN = 7008768;
+	if ( i < 0 || i>= LEN ) { PRT("Err get_process_mem(%d)\n",i); debug(); }
+	return p_seq_prn->get_ptr()[i];	// 範囲を超えると0を返す？
+#endif
+	PRT("Err get_process_mem(%d)\n",i); debug();
+	return 0;
+}
 
 void init_network()
 {
-	GTP::setup_default_parameters();
-//	Random::get_Rng().seedrandom(cfg_rng_seed);
+#ifdef THREAD_BATCH
+	int num_P = 1;
+	int numGPU = (int)default_gpus.size();
+	if ( numGPU == 0       ) DEBUG_PRT("Err. numGPU=0\n");
+	if ( numGPU > MAX_GPUS ) DEBUG_PRT("Err. MAX_GPUS\n");
 
-//	cfg_weightsfile = "networks/20180122_i362_pro_flood_F64L29_b64_1_half_version_2.txt";
-//	cfg_weightsfile = "networks/20180620_i362_64x29_iter_1_version.txt";
-//	cfg_weightsfile = "/home/yss/aobazero/networks/20190306_64L29_policy_160_139_bn_relu_cut_visit_x4_iter_910000.txt";
+	threads_per_GPU = cfg_num_threads / numGPU;
+	if ( threads_per_GPU == 0 ) DEBUG_PRT("Err. threads_per_GPU=0\n");
+	if ( is_thread_batch() ) {
+		set_signal_terminate();
+
+		seq_s.emplace_back();
+
+		unsigned int num_thread = threads_per_GPU * numGPU;
+		if ( num_thread != cfg_num_threads ) {
+			PRT("cfg_num_threads must be GPUs x N. cfg_num_threads = %d -> %d\n",cfg_num_threads, num_thread);
+			cfg_num_threads = num_thread;
+		}
+
+		thread_batch_size = cfg_batch_size;
+		double_thread_batch_size = thread_batch_size * 1;
+		dummy_num_threads = thread_batch_size * 1 - 1;
+		num_P = threads_per_GPU + dummy_num_threads;	// スレッドはbatchの2倍、が最低でも必要。dummy用は(batch*2 - 1)が必要
+		if ( threads_per_GPU < thread_batch_size * 1 ) DEBUG_PRT("Err. not enought thread. threads_per_GPU = %d >= %d\n",threads_per_GPU,thread_batch_size * 2);
+		int num_B[MAX_GPUS];
+		int num_U[MAX_GPUS];
+		int num_H[MAX_GPUS];
+		int num_W[MAX_GPUS];
+		FName fname_W[MAX_GPUS];
+		int num_T[MAX_GPUS];
+		NNet::Impl impl_I[MAX_GPUS];
+		for (int i=0;i<numGPU;i++) {
+			num_B[i] = thread_batch_size;
+			num_U[i] = default_gpus[i];
+			num_H[i] = nUseHalf;
+			num_W[i] = nUseWmma;
+			fname_W[i].reset_fname(default_weights.c_str());
+			num_T[i] = -1;
+			impl_I[i] = NNet::opencl;	// NNet::cpublas
+			nnets.emplace_back(impl_I[i], i, num_P, num_B[i], num_U[i], num_H[i], num_W[i], num_T[i], false, fname_W[i], sDirTune.c_str());
+ 		}
+		PRT("num_P=%d,threads_per_GPU=%d,cfg_num_threads=%d,numGPU=%d,all P=%d\n",num_P,threads_per_GPU,cfg_num_threads,numGPU,num_P*numGPU);
+	}
+#endif
+
+#ifdef NN_PARALLEL
+	if ( is_process_batch() || is_thread_batch() ) {
+		p_seq_prn = new SeqPRN(is_thread_batch());
+		int nIPC = 0;
+		if ( is_process_batch() && default_gpus.size() != 1 && num_P != 1 ) DEBUG_PRT("Err. process_batch gpu size\n");
+		// GPSs = 2, b = 3, t = 18 (threads_per_GPU = 9, dummy_num_threads = 5) の場合、num_P = 14, (0..13, GPU=0), (14..27, GPU=1)
+		for (size_t gpus=0; gpus<default_gpus.size(); gpus++) for (int i=0; i<num_P; i++,nIPC++) {
+			p_nnet_v.push_back(new NNetIPC(is_thread_batch()));
+			int nnet_id = default_gpus[gpus];
+			if ( is_thread_batch() ) nnet_id = gpus;
+			if ( p_nnet_v[nIPC]->start(nnet_id) == -1 ) DEBUG_PRT("Err. p_nnet_v[%d]->start(%d)\n",nIPC,nnet_id);
+			nNNetID_v.push_back(p_nnet_v[nIPC]->get_id());
+//			PRT("nnet.start(%d), nNNetID=%d\n",nnet_id,nNNetID_v[nIPC]);
+			if ( ! is_thread_batch() ) break;
+  			if ( i < threads_per_GPU ) continue;
+		    pAD.push_back(new AddDummy(nIPC, (int)gpus));
+		}
+//		if ( nNNetID==0 ) for (int i=0;i<7008768+10000;i++) if ( (i%10000)==0) PRT("%6d;%016" PRIx64 "\n",i, get_process_mem(i) );
+		if ( is_thread_batch() ) {
+			for (size_t gnum=0; gnum<default_gpus.size(); gnum++) {
+				PRT("start thread=%d\n",gnum);
+				thread_submit_num_check[gnum] = std::thread( submit_num_check_loop, gnum );
+			}
+		}
+	}
+#endif
+
 	if ( !default_weights.empty() ) cfg_weightsfile = default_weights;
 
 #ifdef USE_OPENCL
 	if ( !default_gpus.empty() ) {
 		std::copy(default_gpus.begin(), default_gpus.end(), back_inserter(cfg_gpus) );
 	}
-//	PRT("cfg_rowtiles    =%d\n",cfg_rowtiles);
 #endif
 
 	init_global_objects();
-
-	PRT("cfg_softmax_temp=%.3f,cfg_random_temp=%.3f,cfg_num_threads=%d,cfg_batch_size=%d\n",cfg_softmax_temp,cfg_random_temp,cfg_num_threads,cfg_batch_size);
+	PRT("cfg_random_temp=%.3f,cfg_num_threads=%d,cfg_batch_size=%d,gpus=%d\n",cfg_random_temp,cfg_num_threads,cfg_batch_size,default_gpus.size());
 
 	// Initialize network
 //	Network::initialize();
+}
 
-/*
-static  auto network = std::make_unique<Network>();
-    auto playouts = 800;
-	std::string weightsfile("hogehoge");
-    network->initialize(playouts, weightsfile);
+void replace_network(const char *token)
+{
+	if ( ! is_load_weight() ) return;
+	cfg_weightsfile = token;
+	GTP::s_network.reset();
+	initialize_network();
+}
 
-//	Network::initialize(800 , weightsfile);
-*/
+void stop_thread_submit()
+{
+#ifdef THREAD_BATCH
+	stop_dummy_thread = true;
+
+	prepare_dummy_data_unlock();
+
+	for (size_t gnum=0; gnum<default_gpus.size(); gnum++) {
+		thread_submit_num_check[gnum].join();
+	}
+
+//	int n = p_nnet_v.size();
+//	for (int i=0; i<n; i++) p_nnet_v.pop_back();
+	for (size_t i=0; i<default_gpus.size(); i++) {
+		nnets.pop_back();
+	}
+	seq_s.pop_back();
+#endif
 }
 
 inline void set_dcnn_data(float data[][B_SIZE][B_SIZE], int n, int y, int x, float v=1.0f)
@@ -106,12 +465,12 @@ void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *
 	int add_base = 0;
 	int x,y;
  	const int t = ptree->nrep + ply - 1;	// 手数。棋譜の手数+探索深さ。ply は1から始まるので1引く。
-	int flip = (t&1);	// 後手の時は全部ひっくり返す
+	int flip = sideToMove;	// 後手の時は全部ひっくり返す
 	int loop;
 	const int T_STEP = 8;
 	const int STANDARDIZATION = 1;
 
-	if ( sideToMove != (t&1) ) { PRT("sideToMove Err\n"); debug(); }
+//	if ( sideToMove != (t&1) ) { PRT("sideToMove Err\n"); debug(); }
 	if ( ply < 1 ) DEBUG_PRT("ply=%d Err.\n",ply);
 	
 	for (loop=0; loop<T_STEP; loop++) {
@@ -128,7 +487,7 @@ void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *
 			int m = abs(k);
 			if ( m>=0x0e ) m--;	// m = 1...14
 			m--;
-			// 先手の歩、香、桂、銀、金、角、飛、王、と、杏、圭、全、馬、竜 ... 14種類、+先手の駒が全部1、で15種類
+			// 先手の歩、香、桂、銀、金、角、飛、王、と、杏、圭、全、馬、竜 ... 14種類
 			if ( k < 0 ) m += 14;
 			int yy = y, xx = x;
 			if ( flip ) {
@@ -200,12 +559,23 @@ void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *
 		set_dcnn_data( data, base, y,x);
 	}
 	if ( DCNN_CHANNELS == 362 ) {
+		float div = 1.0f;
+		if ( STANDARDIZATION ) div = 512.0f;
+		// 513手目が指せれば引き分け。floodgateは256手目が指せれば引き分け。選手権は321手目が指せれば引き分け。
+		int tt = t + sfen_current_move_number;
+		if ( nDrawMove ) {
+			int draw = nDrawMove;	// 256, 321
+			int w = 160;	// 何手前から増加させるか。256手引き分けでw=60なら196手から増加
+			if ( draw - w < 0 ) w = draw;
+			int d = draw - w;
+//			if ( tt > d ) tt += 513 - draw;				// 突然増加
+//			if ( tt > d ) tt = (tt-d)*(513-d)/w + d;	// 線形に増加
+			if ( tt > d ) tt = (int)(1.0 / (1.0 + exp(-5.0*((tt-d)*2.0/w - 1.0))) * (513 - d) + d);	// sigmoidで半分で急激に増加, a = 5
+//			PRT("tt=%d -> %d\n",t + sfen_current_move_number,tt);
+		}
 		for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
 //			set_dcnn_data( data, base+1, y,x, t);
-			float div = 1.0f;
-			if ( STANDARDIZATION ) div = 512.0f;
-			set_dcnn_data( data, base+1, y,x, (float)t/div);
-//			set_dcnn_data( data, base+1, y,x, 0);
+			set_dcnn_data( data, base+1, y,x, (float)tt/div);
 		}
 		add_base = 2;
 	}
@@ -274,10 +644,130 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 
 	set_dcnn_channels(ptree, sideToMove, ply, data);
 //	if ( 1 || ply==1 ) { prt_dcnn_data_table((float(*)[B_SIZE][B_SIZE])data);  }
-//	{ int sum=0; int i; for (i=0;i<size;i++) sum = 37*sum + (int)(data[i]+0.1); PRT("sum=%d\n",sum); }
+//	if ( 1 && ptree->nrep+ply==101+3 ) { int sum=0; int i; for (i=0;i<size;i++) sum = sum*37 + (int)(data[i]*1000.0f); PRT("sum=%08x,ply=%d,nrep=%d\n",sum,ply,ptree->nrep); }
 
-//	const auto result = Network::get_scored_moves_yss_zero((float(*)[B_SIZE][B_SIZE])data);
-	const auto result = GTP::s_network->get_scored_moves_yss_zero((float(*)[B_SIZE][B_SIZE])data);
+	int move_num = phg->child_num;
+	unsigned int * restrict pmove = ptree->move_last[0];
+	int i;
+
+	std::pair<std::vector<std::pair<float, int>>, float> result;
+
+	if ( is_process_batch() || is_thread_batch() ) {
+#ifdef NN_PARALLEL
+		if ( phg->child_num <= 0 || phg->child_num > SHOGI_MOVES_MAX ) { PRT("Err. phg->child_num=%d\n",phg->child_num); debug(); }
+		std::vector<unsigned short> nnmoves(phg->child_num);
+
+		for (i = 0; i < move_num; i++) {
+			int move = pmove[i];
+			int from       = (int)I2From(move);
+			int to         = (int)I2To(move);
+			int drop       = (int)From2Drop(from);
+			int is_promote = (int)I2IsPromote(move);
+			int bz = get_yss_z_from_bona_z(from);
+			int az = get_yss_z_from_bona_z(to);
+			int tk = 0;
+			if ( from >= nsquare ) {
+				bz = 0xff;
+				tk = drop;
+			}
+			int nf = is_promote ? 0x08 : 0x00;
+			if ( sideToMove ) {
+				flip_dccn_move(&bz,&az,&tk,&nf);
+			}
+			int yss_m = pack_te(bz,az,tk,nf);
+			int id = get_id_from_move(yss_m);
+
+			nnmoves[i] = id;
+		}
+
+		int thread_id = get_thread_id(ptree);
+		int gnum = thread_id / threads_per_GPU;
+		int mod = thread_id - gnum * threads_per_GPU;
+		int num_P = threads_per_GPU + dummy_num_threads;	// thread_id 0..17, threads_per_GPU = 9, dummy_num_threads = 5, num_P =14
+		NNetIPC *p_nnet = p_nnet_v[num_P * gnum + mod];
+
+		if ( is_thread_batch() && ! is_prepare_dummy_data ) {
+			prepare_dummy_data(data, nnmoves);
+		}
+		copy_n(data, NNAux::nch_input*NNAux::size_plane,
+		       p_nnet->get_features()  );
+		copy_n(nnmoves.data(), move_num, p_nnet->get_nnmoves());
+		submit_block_sub(p_nnet, gnum, move_num);
+
+		const float *nn_probs = p_nnet->get_probs();
+		const float  nn_value = p_nnet->get_value();
+
+		std::vector<std::pair<float, int>> policy_result;
+		const int POLICY_OUT_SIZE = 11259;
+		for (int idx = size_t{0}; idx < POLICY_OUT_SIZE; idx++) {
+			policy_result.emplace_back(0.0f, idx);
+		}
+
+		for (i = 0; i < move_num; i++) {
+			int id = nnmoves[i];
+			policy_result[id].first = nn_probs[i];
+		}
+
+		result = std::make_pair(policy_result, nn_value);
+
+#ifdef USE_OPENCL_SELFCHECK
+		if ( is_load_weight() && (0 || Random::get_Rng().randfix<SELFCHECK_PROBABILITY>() == 0) ) {
+			auto result_ref = GTP::s_network->get_scored_moves_yss_zero((float(*)[B_SIZE][B_SIZE])data);
+			
+			// 可能手でsoftmaxを再計算
+			float available_sum = 0;
+			auto cpu = result_ref.first;
+			for (i = 0; i < move_num; i++) {
+				int id = nnmoves[i];
+				available_sum += cpu[id].first;
+			}
+			std::vector<std::pair<float, int>> cpu_result;
+			for (int idx = size_t{0}; idx < POLICY_OUT_SIZE; idx++) {
+				cpu_result.emplace_back(0.0f, idx);
+			}
+			float mul = 1.0f;
+			if ( available_sum > 0 ) mul = 1.0f / available_sum;
+			for (i = 0; i < move_num; i++) {
+				int id = nnmoves[i];
+				cpu_result[id].first = cpu[id].first * mul;
+			}
+			
+//			int ret = GTP::s_network->compare_net_outputs(result.first, result_ref.first);
+//			int ret = GTP::s_network->compare_net_outputs(result.first, cpu_result);
+			int ret = GTP::s_network->compare_net_outputs(result.first, cpu_result,
+								      result.second, result_ref.second);
+			static int count = 0;
+			count++;
+			int per_bigs = 0;
+			float r0_sum=0,r1_sum=0;
+			for (i = 0; i < POLICY_OUT_SIZE; i++) {
+				auto bat = result.first, cpu = cpu_result; //result_ref.first;
+				float r0 = bat[i].first, r1 = cpu[i].first;
+				float diff = fabs(r0 - r1);
+				float per = 0;
+				if ( r0 != 0 ) per = (float)(100.0 * diff / r0);
+				r0_sum += r0;
+				r1_sum += r1;
+				if ( r0 != 0 && per > 1.0 ) {
+					per_bigs++;
+					PRT("%d:idx=%5d:batch=%9f,cpu=%9f,diff=%9f, %4.2f %%\n",count,i,r0,r1,diff, per);
+				}
+			}
+			static double v_diff_sum = 0;
+			double v_diff = fabs(result.second - result_ref.second);
+			v_diff_sum += v_diff;
+			PRT("ID=%2d:v_diff_ave=%.15f, count=%d\n",nNNetID_v[thread_id], v_diff_sum / count, count);
+			if ( ret || per_bigs ) {
+				PRT("ptree->nrep=%3d,ply=%2d,sideToMove=%d, batch_sum=%f, cpu_sum=%f,move_num=%d,per_bigs=%d,available_sum=%f\n",ptree->nrep,ply,sideToMove,r0_sum,r1_sum,move_num,per_bigs,available_sum);
+				PRT_path(ptree, sideToMove, ply);
+				if ( ret ) throw std::runtime_error("OpenCL self-check mismatch.");
+			}
+		}
+#endif
+#endif
+	} else {
+		result = GTP::s_network->get_scored_moves_yss_zero((float(*)[B_SIZE][B_SIZE])data);
+	}
 
 
 //	float xxx = NAN;
@@ -286,21 +776,14 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 	if ( is_nan_inf(raw_v) ) raw_v = 0;
 	float v_fix = raw_v;	// (raw_v + 1) / 2;
 	if ( sideToMove==BLACK ) v_fix = -v_fix;	// 手番関係なく先手勝ちが+1
-//	float v = (net_eval + 1.0f) / 2.0;	// 0 <= v <= 1
-//    if ( sideToMove ) {	// DCNNは自分が勝ちなら+1、負けなら-1を返す。探索中は先手は+1～0, 後手は 0～-1を返す。
-//        v = v - 1;
-//    }
-//	float v = f_rnd();
-//	if ( sideToMove==BLACK ) v = -v;
-//	phg->net_value      = v_fix;
 
-//  std::vector<Network::scored_node> nodelist;
 
 //	PRT("result.first.size()=%d\n",result.first.size());
 	auto &node = result.first;
 //	PRT("node.size()=%d\n",node.size());
 //	{ int i; for (i=0;i<60;i++) PRT("%f,%d\n",node[i].first,node[i].second); }
 
+	float err_sum = 0;
     float all_sum = 0.0f;
     for (const auto& node : result.first) {
         auto id = node.second;
@@ -323,16 +806,19 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 		int bona_m = (promotion << 14) | (from <<7) | to;
 		if ( yss_m == 0 ) bona_m = 0;
 		// "piece to move" は moveのみ。dropでは 0
-		
-	    if ( 0 && ply==1 && id < 100 ) PRT("%4d,%08x(%08x),%f\n",id,yss_m,bona_m, node.first);
+
+		if ( 0 ) {
+			float add = node.first;
+			if ( add > 0.98f ) add = 1.0f - add;	// only one escape king move position
+			err_sum += add*add;
+	    }
+	    if ( 0 ) PRT("%4d,%08x(%08x),%.15f\n",id,yss_m,bona_m, node.first);
 	}
+	if ( 0 ) PRT("ptree->nrep=%3d,ply=%2d:err_sum=%.10f,raw_v=%11.8f\n",ptree->nrep,ply,err_sum,raw_v);
 
 
 	float legal_sum = 0.0f;
 
-	int move_num = phg->child_num;
-	unsigned int * restrict pmove = ptree->move_last[0];
-	int i;
 	for ( i = 0; i < move_num; i++ ) {
 		int move = pmove[i];
 		CHILD *pc = &phg->child[i];
@@ -375,11 +861,11 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 	}
 
 	// sort
-	int j;
 	for ( i = 0; i < move_num-1; i++ ) {
 		CHILD *pc = &phg->child[i];
 		float max_b = pc->bias;
 		int   max_i = i;
+		int j;
 		for ( j = i+1; j < move_num; j++ ) {
 			CHILD *pc = &phg->child[j];
 			if ( max_b > pc->bias ) continue;
@@ -686,7 +1172,7 @@ void add_dirichlet_noise(float epsilon, float alpha, HASH_SHOGI *phg)
 		CHILD *pc = &phg->child[i];
         float score = pc->bias;
         score = score * (1 - epsilon) + epsilon * eta_a;
-        PRT("%3d:%8s,noise=%10f, bias=%f -> %f\n",i,str_CSA_move(pc->move),eta_a,pc->bias,score);
+        PRT("%3d:%8s,noise=%.9f, bias=%.9f -> %.9f\n",i,str_CSA_move(pc->move),eta_a,pc->bias,score);
         pc->bias = score;
     }
 }

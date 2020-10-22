@@ -379,8 +379,7 @@ static void *start_address( void *arg );
 #  endif
 
 static tree_t *find_child( void );
-static void init_state( const tree_t * restrict parent,
-			tree_t * restrict child );
+//static void init_state( const tree_t * restrict parent, tree_t * restrict child );
 static void copy_state( tree_t * restrict parent,
 			const tree_t * restrict child, int value );
 static void wait_work( int tid, tree_t *parent );
@@ -616,7 +615,7 @@ find_child( void )
 }
 
 
-static void
+void
 init_state( const tree_t * restrict parent, tree_t * restrict child )
 {
   int i, ply;
@@ -644,18 +643,26 @@ init_state( const tree_t * restrict parent, tree_t * restrict child )
   child->ntrans_inferior_hit   = 0;
   child->fail_high             = 0;
   child->fail_high_first       = 0;
+#if defined(YSS_ZERO)
+  ply = 1;
+#else
   ply = parent->tlp_ply;
+#endif
 
   child->anext_move[ply].value_cap1 = parent->anext_move[ply].value_cap1;
   child->anext_move[ply].value_cap2 = parent->anext_move[ply].value_cap2;
   child->anext_move[ply].move_cap1  = parent->anext_move[ply].move_cap1;
   child->anext_move[ply].move_cap2  = parent->anext_move[ply].move_cap2;
 
+#if defined(YSS_ZERO)
+  child->move_last[0]          = child->amove;
+#else
   child->move_last[ply]        = child->amove;
   child->save_eval[ply]        = parent->save_eval[ply];
   child->current_move[ply-1]   = parent->current_move[ply-1];
   child->nsuc_check[ply-1]     = parent->nsuc_check[ply-1];
   child->nsuc_check[ply]       = parent->nsuc_check[ply];
+#endif
   child->nrep                  = parent->nrep;
 
   memcpy( child->hist_good,  parent->hist_good,  sizeof(parent->hist_good) );
@@ -671,6 +678,19 @@ init_state( const tree_t * restrict parent, tree_t * restrict child )
       child->amove_killer[i] = parent->amove_killer[i];
       child->killers[i]      = parent->killers[i];
     }
+
+#if defined(YSS_ZERO)
+  // need to copy record_plus_ply_min_posi[0].
+  int loop = child->nrep + ply - 0;
+  if ( loop <= 0 ) { printf( "thread copy err.\n" ); debug(); }
+  for ( i = 0; i < loop; i++ )
+    {
+      child->record_plus_ply_min_posi[i] = parent->record_plus_ply_min_posi[i];
+      child->history_in_check[i]         = parent->history_in_check[i];
+      child->keep_sequence_hash[i]       = parent->keep_sequence_hash[i];
+    }
+  child->sequence_hash = parent->sequence_hash;
+#endif
 
 }
 

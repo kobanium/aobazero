@@ -1,4 +1,4 @@
-// Copyright (C) 2019 Team AobaZero
+// 2019 Team AobaZero
 // This source code is in the public domain.
 #ifndef INCLUDE_yss_var_h_GUARD	//[[
 #define INCLUDE_yss_var_h_GUARD

@@ -8,7 +8,7 @@
 #include "jqueue.hpp"
 #include "option.hpp"
 #include "osi.hpp"
-#include "version.hpp"
+#include "param.hpp"
 #include "xzi.hpp"
 #include <algorithm>
 #include <exception>
@@ -53,7 +53,7 @@ using uint  = unsigned int;
 constexpr uint snd_retry_interval  = 5U;    // in sec
 constexpr uint snd_max_retry       = 3U;    // in sec
 constexpr uint snd_sleep           = 200U;  // in msec
-constexpr uint wght_polling        = 300U;  // in sec
+constexpr uint wght_polling        = 30U;  // in sec
 constexpr uint wght_retry_interval = 7U;    // in sec
 
 constexpr uint maxlen_rec_xz       = 1024U * 1024U;
@@ -116,9 +116,9 @@ static uint16_t receive_header(const OSI::Conn &conn, uint TO, uint bufsiz) {
   
   return bytes_to_int<uint16_t>(buf + 2); }
 
-Client::Client() noexcept : _quit(false), _has_conn(false),
-			    _downloading(false), _nsend(0), _ndiscard(0),
-			    _wght_id(-1), _ver_engine(-1) {
+Client::Client() noexcept
+: _quit(false), _has_conn(false), _downloading(false), _nsend(0), _ndiscard(0),
+  _wght_id(-1), _ver_engine(-1) {
   _buf_wght_time[0] = '\0'; }
 
 Client::~Client() noexcept {}
@@ -138,7 +138,7 @@ void Client::get_new_wght() {
   int64_t no_wght = bytes_to_int<int64_t>(buf);
   uint nblock     = bytes_to_int<uint>(buf + 8);
   if (nblock == 0) die(ERR_INT("invalid nblock value %d", nblock));
-  if (no_wght < 0) die(ERR_INT("invalid weight no %" PRIi64 , no_wght));
+  if (no_wght < 0) die(ERR_INT("invalid weight no %" PRIi64, no_wght));
   if (no_wght == _wght_id) return;
   if (no_wght < _wght_id) die(ERR_INT(corrupt_fmt, _dwght.get_fname()));
 
@@ -164,7 +164,6 @@ void Client::get_new_wght() {
       if (remove(it->get_fname()) < 0) die(ERR_CLL("remove"));
     
     ofstream ofs(finfo.get_fname());
-    cout << "create new " << info_name << endl;
     ofs << "WeightNo " << no_wght << "\n";
     ofs.close();
     if (!ofs) {
@@ -234,8 +233,8 @@ void Client::get_new_wght() {
     if (remove(it->get_fname()) < 0) die(ERR_CLL("remove"));
 
   _wght_id = no_wght;
-  
-  lock_guard<mutex> lock(_m);
+
+  lock_guard<mutex> lock(_m_wght);
   _wght = make_shared<const WghtFile>(fwght, _keep_wght); }
 
 void Client::reader() noexcept {
@@ -367,5 +366,5 @@ void Client::add_rec(const char *p, size_t len) noexcept {
   _pJQueue->push_free(); }
 
 shared_ptr<const WghtFile> Client::get_wght() noexcept {
-  lock_guard<mutex> lock(_m);
+  lock_guard<mutex> lock(_m_wght);
   return _wght; }

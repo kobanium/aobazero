@@ -1,14 +1,15 @@
-1. AobaZero のビルド方法
-------------------------
+1. AobaZero が提供するプログラム群のビルド方法
+---------------------------------------------
 
-Ubuntu, CentOS, Windows でビルドする方法を記します。ビルド前に、利用したいハー
-ドウエアのベンダが提供する情報に従って、OpenCL 1.1 の環境を各自ご用意下さい。
-CPU のみで計算を行うプログラムをビルドする場合には OpenCL 環境は不要です。
-
+Ubuntu, CentOS, Windows でビルドする方法を記します。OpenCL 1.2 の開発・実行
+環境か、CPU 上で実行可能な BLAS (IntelMKL か OpenBLAS) が必要になります。両
+方使うことも可能です。
 
 1.1 Ubuntu
 
-Ubuntu での手順を記します。
+Ubuntu での手順を記します。ビルド前に、利用したいハードウエアのベンダが提供
+する情報に従って、OpenCL 1.2 の環境を各自ご用意下さい。CPU のみで計算を行う
+プログラムをビルドする場合には OpenCL 環境は不要です。
 
 - Boost や liblzma 等をインストール
 
@@ -20,9 +21,10 @@ Ubuntu での手順を記します。
 
 > make -j[number of threads]
 
-もしCPUのみで計算を行うプログラムをビルドしたいならば、src/usi_engine/Makefile
-の53行目を # でコメントし、54行目の # を消して、-DUSE_CPU_ONLY を有効にしてビ
-ルドして下さい。
+CPUのみで計算を行うプログラムをビルドしたいならば、
+src/usi_engine/Makefile の51行目を
+CPU_ONLY = 1
+にしてビルドして下さい。
 
 
 1.2 CentOS
@@ -31,47 +33,71 @@ CentOS での手順を記します。
 
 - liblzma などをインストール
 
-> sudo yum install xz-devel zlib-devel
+> sudo yum install epel-release
+> sudo yum install xz-devel zlib-devel opencl-headers
 
-- GCC 5.3.1 をインストール
+- GCC 7.3.1 をインストール
 
 > sudo yum -y install centos-release-scl
-> sudo yum -y install devtoolset-4
-> scl enable devtoolset-4 bash
+> sudo yum -y install devtoolset-7
+> scl enable devtoolset-7 bash
 
-GCC 5.3.1 が利用可能な環境で bash が起動します。
+GCC 7.3.1 が利用可能な環境で bash が起動します。
 
 - boost 1.58.0 をインストール
 
-> get http://sourceforge.net/projects/boost/files/boost/1.58.0/boost_1_58_0.tar.gz
+> cd
+> wget http://sourceforge.net/projects/boost/files/boost/1.58.0/boost_1_58_0.tar.gz
 > gzip -dc boost_1_58_0.tar.gz | tar xvf -
 > cd boost_1_58_0
 > ./bootstrap.sh
-> ./b2 install -j[number of threads] --prefix=/[a path with write permission]/inst-dts4
+> ./b2 install -j[number of threads] --prefix=/[a path with write permission]/inst-dts7
+
+- OpenBLAS を使うならばこれをインストール
+
+> cd
+> git clone https://github.com/xianyi/OpenBLAS.git
+> cd OpenBLAS
+> make -j[number of threads]
+> make install PREFIX=/[a path with write permission]/inst-dts7
+
+- Intel MKL を使うならばこれをインストール
+
+Intel 社が提供する情報に従ってインストールして下さい。
+また、Makefile.config を書き換えて MKL を使用してビルドするように指定して
+ください。
+
+- OpenCL を使うならばこれの実行環境をインストール
+
+利用したいハードウエアのベンダが提供する情報に従って、OpenCL 1.2 の環境を
+インストールする。
 
 - 環境変数の設定
 
-コンンパイラとリンカの boost のパスを設定します。
+コンンパイラとリンカのパスを設定します。
 
 Bourne Shell 系ならば
-> exprot CPLUS_INCLUDE_PATH=/path to inst-dts4/include:$CPLUS_INCLUDE_PATH
-> export LIBRARY_PATH=/path to inst-dits4/lib:$LIBRARY_PATH
-> export LD_RUN_PATH=/path to inst-dits4/lib:$LD_RUN_PATH
+> export CPLUS_INCLUDE_PATH=/path to inst-dts7/include:$CPLUS_INCLUDE_PATH
+> export LIBRARY_PATH=/path to inst-dts7/lib:$LIBRARY_PATH
+> export LD_RUN_PATH=/path to inst-dts7/lib:$LD_RUN_PATH
 
 C Shell 系ならば
-> setenv CPLUS_INCLUDE_PATH /path to inst-dts4/include:$CPLUS_INCLUDE_PATH
-> setenv LIBRARY_PATH /path to inst-dits4/lib:$LIBRARY_PATH
-> setenv LD_RUN_PATH /path to inst-dits4/lib:$LD_RUN_PATH
+> setenv CPLUS_INCLUDE_PATH /path to inst-dts7/include:$CPLUS_INCLUDE_PATH
+> setenv LIBRARY_PATH /path to inst-dts7/lib:$LIBRARY_PATH
+> setenv LD_RUN_PATH /path to inst-dts7/lib:$LD_RUN_PATH
 
-必要であれば、各ベンダが提供する OpenCL 開発環境へのパスも同様に設定します。
+これらに加えて、OpenCL やIntel MKL などのパスの環境変数も必要ならば設定して
+下さい。OpenCL, OpenBLAS 及び Intel MKL のパスは Makefile.config でも指定可
+能です。
 
 - make を実行
 
 > make -j[number of threads]
 
-もしCPUのみで計算を行うプログラムをビルドしたいならば、
-src/usi_engine/Makefile の53行目を # でコメントし、54行目の # を消して、
--DUSE_CPU_ONLY を有効にしてビルドして下さい。
+CPUのみで計算を行うプログラムをビルドしたいならば、
+src/usi_engine/Makefile の51行目を
+CPU_ONLY = 1
+にしてビルドして下さい。
 
 
 1.3 Windows 
@@ -85,14 +111,17 @@ Visual Studio 2017の「VS2017用 x64 Native Toolsコマンドプロンプト」
 
 - aobaz.exe のビルド
 
-Visual Studio 2017 で src/usi_engine/msvc/aoba-zero2017.sln を開きビルドします。
-「Windows SDK バージョン 10.0.17763.0 が見つかりません」のエラーメッセージが出
-る場合はプロジェクトプロパティの「全般」カテゴリの WindowsSDK バージョンを適切
-なバージョンに変更します。
+まず、上述の autousi.exe のビルドを済ませてください。これによって生成される
+幾つかのインクルードファイルが必要になります。そして、Visual Studio 2017
+src/usi_engine/msvc/aoba-zero2017.sln を開き、構成マネージャーで構成を
+Release、プラットフォームを x64 に設定しビルドします。「Windows SDK バージョ
+ン 10.0.17763.0 が見つかりません」のエラーメッセージが出る場合はプロジェクト
+プロパティの「全般」カテゴリの WindowsSDK バージョンを適切なバージョンに変更
+します。
 
 もしCPUのみで計算を行うプログラムをビルドしたいならば、プロジェクトプロパティ
-の「C/C++、プリプロセッサ」カテゴリのプリプロセッサの定義で「;USE_CPU_ONLY」を
-最後に追加します。
+の「C/C++、プリプロセッサ」カテゴリのプリプロセッサの定義で
+「;USE_OPENCL_AOBA」を削除して「;USE_CPU_ONLY」を最後に追加します。
 
 
 2. 計算資源を AobaZero のプロジェクトに提供する方法
