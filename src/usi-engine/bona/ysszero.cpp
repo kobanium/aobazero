@@ -1763,7 +1763,7 @@ void send_usi_info(tree_t * restrict ptree, int sideToMove, int ply, int nodes, 
 bool is_selfplay()
 {
 #ifdef USE_OPENCL
-	if ( nNNetServiceNumber >= 0 && fAddNoise && nVisitCount >= 0 ) return true;
+	if ( nNNetServiceNumber >= 0 && fAddNoise && nVisitCount > 0 ) return true;
 #endif
 	return false;
 }
