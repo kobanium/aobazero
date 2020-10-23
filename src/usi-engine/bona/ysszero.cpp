@@ -49,6 +49,9 @@ int nLimitUctLoop = 100;
 double dLimitSec = 0;
 int nDrawMove = 0;		// 引き分けになる手数。0でなし。floodgateは256, 選手権は321
 
+const float FIXED_RESIGN_WINRATE = 0.10;	// 自己対戦でこの勝率以下なら投了。0で投了しない。0.10 で勝率10%。 0 <= x <= +1.0
+float resign_winrate = 0;
+
 std::vector <HASH_SHOGI> hash_shogi_table;
 const int HASH_SHOGI_TABLE_SIZE_MIN = 1024*4*4;
 int Hash_Shogi_Table_Size = HASH_SHOGI_TABLE_SIZE_MIN;
@@ -992,15 +995,17 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		}
 	}
 
-	if ( 0 ) {
+	if ( 0 && is_selfplay() && resign_winrate == 0 ) {
 		int id = get_nnet_id();
 		int pid = getpid_YSS();
-		static int count;
+		static int count, games;
 		char str[TMP_BUF_LEN];
-		if ( ptree->nrep==0 ) count++;
-		sprintf(str,"res%03d_%05d_%05d.txt",id,pid,count);
+		if ( ptree->nrep==0 ) {
+			if ( ++games > 100 ) { games = 1; count++; }
+		}
+		sprintf(str,"res%03d_%05d_%05d.csa",id,pid,count);
 		FILE *fp = fopen(str,"a");
-		if ( fp==NULL ) debug();
+		if ( fp==NULL ) { PRT("fail res open.\n"); debug(); }
 
 		float best_v = -1;
 		if ( max_i >= 0 ) {
@@ -1015,6 +1020,20 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 			fprintf(fp,"%c%s,'%7.4f,%s\n",sg[ptree->nrep & 1],str_CSA_move(best_move),best_v,buf_move_count);
 		}
 		fclose(fp);
+	}
+
+	if ( is_selfplay() && resign_winrate > 0 && max_i >= 0 ) {
+		CHILD *pbest = &phg->child[max_i];
+		double v = (pbest->value + 1.0) / 2.0;	// -1 <= x <= +1  -->  0 <= x <= +1
+		if ( v < resign_winrate ) {
+			best_move = 0;
+			if ( 0 ) {
+				FILE *fp = fopen("restmp.log","a");
+				if ( fp==NULL ) { PRT("fail restmp open.\n"); debug(); }
+				fprintf(fp,"%3d:%5d:%3d:v=%7.4f(%7.4f), resign_winrate=%7.4f\n",get_nnet_id(), getpid_YSS(), ptree->nrep, v, pbest->value, resign_winrate);
+				fclose(fp);
+			}
+		}
 	}
 
 	PRT("%.2f sec, c=%d,net_v=%.3f,h_use=%d,po=%d,%.0f/s,ave_ply=%.1f/%d (%d/%d),Noise=%d,g=%d,mt=%d,b=%d\n",
@@ -1596,7 +1615,7 @@ void set_default_param()
 		return;
 	}
 #ifdef USE_OPENCL
-	if ( default_gpus.size() == 0 ) default_gpus.push_back(0);
+	if ( default_gpus.size() == 0 ) default_gpus.push_back(-1);	// -1 でbestを自動選択
 	int gpus = (int)default_gpus.size();
 	if ( cfg_num_threads == 0 && cfg_batch_size == 0 ) {
 		cfg_batch_size  = 7;
@@ -1741,9 +1760,23 @@ void send_usi_info(tree_t * restrict ptree, int sideToMove, int ply, int nodes, 
 	USIOut( "%s", str);
 }
 
+bool is_selfplay()
+{
+#ifdef USE_OPENCL
+	if ( nNNetServiceNumber >= 0 && fAddNoise && nVisitCount >= 0 ) return true;
+#endif
+	return false;
+}
+
 void usi_newgame()
 {
 	hash_shogi_table_clear();
+	if ( is_selfplay() ) {
+		resign_winrate = FIXED_RESIGN_WINRATE;
+		if ( (rand_m521() % 10) == 0 ) {	// 10%で投了を禁止。間違った投了が5％以下か確認するため
+			resign_winrate = 0;
+		}
+	}
 }
 
 
