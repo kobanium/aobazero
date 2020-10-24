@@ -1328,10 +1328,8 @@ static int get_best_device(OCL::Device &device_best) noexcept {
   for (auto &platform : platforms) {
     vector<OCL::Device> devices = platform.gen_devices_all();
     for (auto &device : devices) {
-      double value = static_cast<double>(device.gen_max_compute_units());
-      value *= static_cast<double>(device.gen_max_clock_frequency());
-      if (device.gen_type() == "CPU") value *= 0.1;
-      if (device.ok() && value_best < value) {
+      double value = device.evaluation();
+      if (value_best < value) {
 	id_best     = id;
 	value_best  = value;
 	device_best = move(device); }
