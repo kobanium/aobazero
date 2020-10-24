@@ -547,8 +547,8 @@ double OCL::Device::evaluation() const {
   double value = 1.0;
   value *= static_cast<double>(gen_max_compute_units());
   value *= static_cast<double>(gen_max_clock_frequency());
-  if (gen_name().find("Intel") != std::string::npos) value *= 0.1;
-  if (gen_type() == "CPU")                           value *= 0.5;
+  if      (gen_type() == "CPU") value *= 0.05;
+  else if (gen_name().find("Intel") != std::string::npos) value *= 0.1;
   return value; }
 
 OCL::Platform::Platform() {}
