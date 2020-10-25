@@ -116,7 +116,8 @@ extern unsigned char ailast_one[512];
 //#define BNZ_VER                 "9"	// 20190527
 //#define BNZ_VER                 "10"	// 20190708
 //#define BNZ_VER                 "11"	// 20190709
-#define BNZ_VER                 "12"	// 20201013
+//#define BNZ_VER                 "12"	// 20201013
+#define BNZ_VER                 "13"	// 20201023 resign 10%
 #define BNZ_NAME                "AobaZero"
 
 #define REP_MAX_PLY             32

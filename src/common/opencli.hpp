@@ -126,6 +126,7 @@ namespace OCL {
     std::string gen_local_mem_type() const;
     std::string gen_name() const;
     std::string gen_driver_version() const;
+    double evaluation() const;
     Platform gen_platform() const;
     uint gen_max_compute_units() const;
     size_t gen_max_work_group_size() const;

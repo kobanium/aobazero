@@ -500,8 +500,10 @@ string OCL::Device::gen_info() const {
      << "  Global Mem Size:      " << gen_global_mem_size() << "\n"
      << "  Max Mem Alloc Size:   " << gen_max_mem_alloc_size() << "\n"
      << "  Local Mem Type:       " << gen_local_mem_type() << "\n"
-     << "  Local Mem Size:       " << gen_local_mem_size() << "\n";
+     << "  Local Mem Size:       " << gen_local_mem_size() << "\n"
+     << "  Rough Evaluation:     " << evaluation() << "\n";
   return ss.str(); }
+
 Platform OCL::Device::gen_platform() const {
   cl_platform_id id = _impl->gen_info<cl_platform_id>(CL_DEVICE_PLATFORM);
   return Platform(Platform_impl(id)); }
@@ -539,6 +541,15 @@ size_t OCL::Device::gen_max_work_group_size() const {
   return _impl->gen_info<size_t>(CL_DEVICE_MAX_WORK_GROUP_SIZE); }
 uint OCL::Device::gen_max_clock_frequency() const {
   return _impl->gen_info<cl_uint>(CL_DEVICE_MAX_CLOCK_FREQUENCY); }
+double OCL::Device::evaluation() const {
+  if (!ok()) return -1.0;
+
+  double value = 1.0;
+  value *= static_cast<double>(gen_max_compute_units());
+  value *= static_cast<double>(gen_max_clock_frequency());
+  if      (gen_type() == "CPU") value *= 0.05;
+  else if (gen_name().find("Intel") != std::string::npos) value *= 0.1;
+  return value; }
 
 OCL::Platform::Platform() {}
 OCL::Platform::~Platform() {}
