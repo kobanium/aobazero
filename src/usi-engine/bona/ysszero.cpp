@@ -52,6 +52,10 @@ int nDrawMove = 0;		// 引き分けになる手数。0でなし。floodgateは25
 const float FIXED_RESIGN_WINRATE = 0.10;	// 自己対戦でこの勝率以下なら投了。0で投了しない。0.10 で勝率10%。 0 <= x <= +1.0
 float resign_winrate = 0;
 
+int    fAutoResign = 0;				// 過渡的なフラグ。投了の自動調整ありで、go visit で勝率も返す
+double dAutoResignWinrate = 0;
+
+
 std::vector <HASH_SHOGI> hash_shogi_table;
 const int HASH_SHOGI_TABLE_SIZE_MIN = 1024*4*4;
 int Hash_Shogi_Table_Size = HASH_SHOGI_TABLE_SIZE_MIN;
@@ -933,7 +937,17 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 	}
 	
 	buf_move_count[0] = 0;
-	sprintf(buf_move_count,"%d",sum_games);
+
+	if ( fAutoResign ) {
+		double v = 0;
+		if ( max_i >= 0 ) {
+			CHILD *pbest = &phg->child[max_i];
+			v = (pbest->value + 1.0) / 2.0;	// -1 <= x <= +1  -->  0 <= x <= +1
+		}
+		sprintf(buf_move_count,"v=%.04f,%d",v,sum_games);
+	} else {
+		sprintf(buf_move_count,"%d",sum_games);
+	}
 	for (i=0;i<sort_n;i++) {
 		char buf[7];
 		csa2usi( ptree, str_CSA_move(sort[i][1]), buf );
@@ -1001,7 +1015,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		static int count, games;
 		char str[TMP_BUF_LEN];
 		if ( ptree->nrep==0 ) {
-			if ( ++games > 100 ) { games = 1; count++; }
+			if ( ++games > 15 ) { games = 1; count++; }
 		}
 		sprintf(str,"res%03d_%05d_%05d.csa",id,pid,count);
 		FILE *fp = fopen(str,"a");
@@ -1022,19 +1036,28 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		fclose(fp);
 	}
 
-	if ( is_selfplay() && resign_winrate > 0 && max_i >= 0 ) {
+	if ( fAutoResign == 0 && is_selfplay() && resign_winrate > 0 && max_i >= 0 ) {
 		CHILD *pbest = &phg->child[max_i];
 		double v = (pbest->value + 1.0) / 2.0;	// -1 <= x <= +1  -->  0 <= x <= +1
 		if ( v < resign_winrate ) {
 			best_move = 0;
 			if ( 0 ) {
 				FILE *fp = fopen("restmp.log","a");
-				if ( fp==NULL ) { PRT("fail restmp open.\n"); debug(); }
-				fprintf(fp,"%3d:%5d:%3d:v=%7.4f(%7.4f), resign_winrate=%7.4f\n",get_nnet_id(), getpid_YSS(), ptree->nrep, v, pbest->value, resign_winrate);
-				fclose(fp);
+				if ( fp ) {
+					fprintf(fp,"%3d:%5d:%3d:v=%7.4f(%7.4f), resign_winrate=%7.4f\n",get_nnet_id(), getpid_YSS(), ptree->nrep, v, pbest->value, resign_winrate);
+					fclose(fp);
+				}
 			}
 		}
 	}
+	if ( fAutoResign && dAutoResignWinrate > 0 && max_i >= 0 ) {
+		CHILD *pbest = &phg->child[max_i];
+		double v = (pbest->value + 1.0) / 2.0;	// -1 <= x <= +1  -->  0 <= x <= +1
+		if ( v < dAutoResignWinrate ) {
+			best_move = 0;
+		}
+	}
+
 
 	PRT("%.2f sec, c=%d,net_v=%.3f,h_use=%d,po=%d,%.0f/s,ave_ply=%.1f/%d (%d/%d),Noise=%d,g=%d,mt=%d,b=%d\n",
 		ct,phg->child_num,phg->net_value,hash_shogi_use,loop,(double)loop/ct,ave_reached_ply,max_r_ply,ptree->nrep,nVisitCount,fAddNoise,default_gpus.size(),thread_max,cfg_batch_size );
@@ -1149,6 +1172,14 @@ double uct_tree(tree_t * restrict ptree, int sideToMove, int ply)
 	int select = -1;
 	int loop;
 	double max_value = -10000;
+
+	// 入玉宣言判定
+	if ( InCheck(sideToMove) == 0 && ply > 1 ) {	// root(ply=1)では判定しない。自己対局では宣言勝ちはautousi、"-i" では最後に行う。
+		if ( is_declare_win(ptree, sideToMove) ) {
+			UnLock(phg->entry_lock);
+			return 1;
+		}
+	}
 
 select_again:
  	for (loop=0; loop<child_num; loop++) {
@@ -1307,15 +1338,6 @@ select_again:
 		skip_search = 1;
 	}
 
-#if 1
-	// 入玉宣言判定
-	if ( skip_search == 0 && now_in_check == 0 ) {
-		if ( is_declare_win(ptree, sideToMove) ) {
-			win = 1;
-			skip_search = 1;
-		}
-	}
-#endif
 	if ( nDrawMove ) {
 		int d = ptree->nrep + ply - 1 + 1 + sfen_current_move_number;
 		if ( d >= nDrawMove ) {
@@ -1555,6 +1577,11 @@ int getCmdLineParam(int argc, char *argv[])
 		if ( strstr(p,"-i") ) {
 			PRT("usi info enable\n");
 			fUsiInfo = 1;
+		}
+		if ( strstr(p,"-r") ) {
+			PRT("fAutoResign. resign winrate=%.5f\n",nf);
+			fAutoResign = 1;
+			dAutoResignWinrate = nf;
 		}
 //		PRT("%s,%s\n",sa[0],sa[1]);
 	}
