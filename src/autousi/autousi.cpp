@@ -252,7 +252,8 @@ int main() {
     wght = Client::get().get_wght();
     deque<string> recs
       = PlayManager::get().manage_play(Client::get().has_conn(),
-				       wght->get_fname(), wght->get_crc64());
+				       wght->get_fname(), wght->get_crc64(),
+				       0.15f);
     
     for (const string &rec : recs) {
       Client::get().add_rec(rec.c_str(), rec.size());

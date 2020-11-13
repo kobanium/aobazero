@@ -60,6 +60,8 @@ public:
 };
 
 template <typename T> class JQueue;
+class EMAKeep;
+
 class RecKeep {
   using uint = unsigned int;
   struct RedunValue {
@@ -68,6 +70,7 @@ class RecKeep {
     RedunValue & operator=(const RedunValue &value) noexcept {
       no = value.no; count = value.count; return *this; }
   };
+  std::unique_ptr<EMAKeep> ema_keep_ptr;
   std::thread _thread;
   std::unique_ptr<JQueue<class JobIP>> _pJQueue;
   std::set<FNameID> _pool;

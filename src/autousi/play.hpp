@@ -30,7 +30,8 @@ public:
     noexcept;
   void end() noexcept;
   std::deque<std::string> manage_play(bool has_conn, const FNameID &wfname,
-				      uint64_t crc64) noexcept;
+				      uint64_t crc64, float th_resign)
+    noexcept;
   bool get_moves_eid0(std::string &move) noexcept;
   uint get_nengine() const noexcept {
     return static_cast<uint>(_engines.size()); }

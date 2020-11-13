@@ -7,12 +7,15 @@
 #include "shogibase.hpp"
 #include "hashtbl.hpp"
 #include "param.hpp"
+#include <algorithm>
 #include <chrono>
 #include <climits>
 #include <cstring>
 #include <fcntl.h>
+#include <string>
 #include <unistd.h>
 #include <sys/stat.h>
+using std::fill_n;
 using std::ios;
 using std::ifstream;
 using std::lock_guard;
@@ -21,31 +24,49 @@ using std::map;
 using std::max;
 using std::shared_ptr;
 using std::set;
+using std::string;
 using std::thread;
+using std::to_string;
 using std::this_thread::sleep_for;
 using std::chrono::seconds;
 using ErrAux::die;
 using namespace IOAux;
 using namespace Log;
+using uint = unsigned int;
 
 constexpr uint64_t size_cluster  = 10000U;
 constexpr char fname_wght_list[] = "weight-list.cfg";
+constexpr char fname_ema[]       = "ema.cfg";
+constexpr char fname_ema_tmp[]   = "ema.cf_";
 constexpr char fname_tmp[]       = "tmp.csa.x_";
 constexpr char fmt_arch[]        = "arch%012" PRIi64 ".csa.xz";
 constexpr char fmt_pool[]        = "no%012" PRIi64 ".csa.xz";
 constexpr char fmt_wght_scn[]    = "w%16[^.].txt.xz";
 constexpr char fmt_pool_scn[]    = "no%16[^.].csa.xz";
+constexpr uint ema_keep_umax     = 32U;
+constexpr uint ema_keep_N        = 32U;
+constexpr float ema_keep_deno    = 1000U;
 const PtrLen<const char> pl_CSAsepa("/\n", 2);
 
-static bool is_record_ok(const char *rec, size_t len_rec, uint64_t &digest,
-			 uint &len_play, float &ave_child) noexcept {
+
+static bool
+examine_record(const char *rec, size_t len_rec, uint64_t &digest,
+	       uint &len_play, float &ave_child, bool &flag_resign_autousi,
+	       float &value_min, uint &node_type) noexcept {
   assert(rec);
   constexpr char newline[] = "\n";
   char buf[len_rec + 1U];
   char *saveptr_line;
   char *line;
-    
-  len_play  = 0;
+  float value_min_black, value_min_white;
+
+  value_min_black = 100.0f;
+  value_min_white = 100.0f;
+  value_min       = 100.0f;
+  node_type       = 99U;
+
+  len_play            = 0;
+  flag_resign_autousi = false;
   ave_child = 0.0f;
   strcpy(buf, rec);
   line = strtok_r(buf, "\n", &saveptr_line);
@@ -86,28 +107,73 @@ static bool is_record_ok(const char *rec, size_t len_rec, uint64_t &digest,
   Node<Param::maxlen_play_learn> node;
   uint tot_nchild = 0;
   bool has_result = false;
+  enum Result { black_win = 0, draw, black_lose } result = draw;
   while (true) {
     line = strtok_r(nullptr, "\n", &saveptr_line);
     if (!line) break;
     digest = XZAux::crc64(line, digest);
     digest = XZAux::crc64(newline, 1U, digest);
     
-    if (!has_result && line[0] == '%'
-	&& node.get_type().is_term()
+    if (!has_result && line[0] == '%' && node.get_type().is_term()
 	&& strcmp(line + 1, node.get_type().to_str()) == 0) {
       has_result = true;
+      if      (node.get_type() == SAux::illegal_bwin) result = black_win;
+      else if (node.get_type() == SAux::illegal_wwin) result = black_lose;
+      else if (node.get_type() == SAux::repeated)     result = draw;
+      else if (node.get_type() == SAux::maxlen_term)  result = draw;
+      else die(ERR_INT("INTERNAL ERROR"));
+	
+      if      (result == black_win)  value_min = value_min_black;
+      else if (result == black_lose) value_min = value_min_white;
+      else value_min = std::min(value_min_black, value_min_white);
+      node_type = node.get_type().to_u();
       continue; }
     
     const char *token;
     char *saveptr_token, *endptr;
+    float value;
     long int num;
     Action action;
     token = strtok_r(line, ",\'", &saveptr_token);
     assert(token);
     action = node.action_interpret(token + 1, SAux::csa);
     if (!action.ok()) return false;
-    if (token[0] == '%') { node.take_action(action); continue; }
-    
+    if (token[0] == '%') { // TORYO or WINDCL
+      node.take_action(action);
+      token = strtok_r(nullptr, ",\'", &saveptr_token);
+      if (!token) {
+	if (node.get_type() == SAux::resigned) {
+	  if (SAux::black == node.get_turn()) result = black_lose;
+	  else                                result = black_win; }
+	else if (node.get_type() == SAux::windclrd) {
+	  if (SAux::black == node.get_turn()) result = black_win;
+	  else                                result = black_lose; }
+	else die(ERR_INT("INTERNAL ERROR"));
+	
+	if      (result == black_win)  value_min = value_min_black;
+	else if (result == black_lose) value_min = value_min_white;
+	else die(ERR_INT("INTERNAL ERROR"));
+	node_type = node.get_type().to_u();
+	continue; }
+
+      if (strcmp(token, "autousi") == 0) {
+	flag_resign_autousi = true;
+	node_type = node.get_type().to_u();
+	continue; }
+
+      return false; }
+
+    token = strtok_r(nullptr, ",\'", &saveptr_token);
+    assert(token);
+    value = strtof(token, &endptr);
+    if (endptr == token || *endptr != '\0' || value < 0.0f
+	|| value == HUGE_VALF) return false;
+
+    if (node.get_turn() == SAux::black) {
+      if (value < value_min_black) value_min_black = value; }
+    else {
+      if (value < value_min_white) value_min_white = value; }
+
     token = strtok_r(nullptr, ",\'", &saveptr_token);
     assert(token);
     num = strtol(token, &endptr, 10);
@@ -144,6 +210,51 @@ static void write_pooltemp(const FName &fxz, PtrLen<const char> pl) noexcept {
   xze.end();
   ofs.close();
   if (!ofs) die(ERR_INT("cannot write to %s", fxz.get_fname())); }
+
+class EMAKeep {
+  float _mu_rate[ema_keep_N];
+  string _signature;
+
+public:
+  explicit EMAKeep() noexcept {
+    _signature  = to_string(ema_keep_umax) + " ";
+    _signature += to_string(ema_keep_N)   + " ";
+    _signature += to_string(ema_keep_deno);
+
+    ifstream ifs(fname_ema);
+    bool flag = false;
+    if (ifs) {
+      string s;
+      ifs >> s;
+      if (s == _signature) flag = true; }
+
+    if (flag) for (uint u = 0; u < ema_keep_N; u++) ifs >> _mu_rate[u];
+    else fill_n(_mu_rate, ema_keep_N, 0.5f); }
+
+  void update(float min) noexcept {
+    uint u;
+    float value, a, b;
+    float step = ( static_cast<float>(ema_keep_umax)
+		   / static_cast<float>(ema_keep_N) );
+    a = (static_cast<float>(ema_keep_deno - 1U)
+	 / static_cast<float>(ema_keep_deno));
+    b = 1.0 / static_cast<float>(ema_keep_deno);
+    std::cout << "DBG: " << min << " " << step << std::endl;
+    for (u = 0; u < ema_keep_N; u++) {
+      value = static_cast<float>(u + 1U) * step;
+      if (min <= value) break;
+      _mu_rate[u] *= a; }
+    for (; u < ema_keep_N; u++)
+      _mu_rate[u] = _mu_rate[u] * a + b;
+
+    {
+      ofstream ofs(fname_ema_tmp);
+      ofs << _signature << "\n";
+      for (u = 0; u < ema_keep_N; u++) ofs << _mu_rate[u] << "\n";
+      if (!ofs) die(ERR_INT("cannot write to %s", fname_ema_tmp));
+    }
+    if (rename(fname_ema_tmp, fname_ema) < 0) die(ERR_CLL("rename")); }
+};
 
 bool WghtKeep::get_crc64(int64_t no, uint64_t &digest) const noexcept {
   auto it = _map_wght.find(no);
@@ -244,7 +355,7 @@ void RecKeep::close_arch_tmp() noexcept {
   if (!_ofs_arch_tmp) die(ERR_INT("cannot write to %s",
 				  _farch_tmp.get_fname())); }
 
-RecKeep::RecKeep() noexcept {}
+RecKeep::RecKeep() noexcept : ema_keep_ptr(new EMAKeep) {}
 RecKeep::~RecKeep() noexcept {}
 
 void RecKeep::open_arch_tmp() noexcept {
@@ -416,11 +527,14 @@ void RecKeep::transact(const JobIP *pjob) noexcept {
 
   // examine received message
   uint64_t digest;
-  uint len_play;
-  float ave_child;
-  if (!is_record_ok(pl_out.p, pl_out.len, digest, len_play, ave_child)) {
+  uint len_play, node_type;
+  float ave_child, value_min;
+  bool flag_resign_autousi;
+  if (!examine_record(pl_out.p, pl_out.len, digest, len_play, ave_child,
+		      flag_resign_autousi, value_min, node_type)) {
     _logger->out(pjob, bad_CSA_format);
     return; }
+  if (node_type == 99U) die(ERR_INT("INTERNAL ERROR"));
   
   if (len_play < _minlen_play) {
     _logger->out(pjob, "play too short (%u moves)", len_play);
@@ -448,8 +562,15 @@ void RecKeep::transact(const JobIP *pjob) noexcept {
   if (rename(_fpool_tmp.get_fname(), fpool.get_fname()) < 0)
     die(ERR_CLL("rename"));
   _pool.insert(fpool);
+
+  char buf[256];
+  if (flag_resign_autousi) sprintf(buf, "resign:y");
+  else {
+    ema_keep_ptr->update(value_min);
+    sprintf(buf, "resign:n, min:%.1f", value_min); }
   _logger->out(pjob, "record no. %" PRIi64 " arrived (crc64:%016" PRIx64
-	       ", ave:%4.1f, len:%3u)", id, digest, ave_child, len_play);
+	       ", ave:%4.1f, len:%3u, type:%u, %s)",
+	       id, digest, ave_child, len_play, node_type, buf);
 
   // archive a cluster if possible
   int64_t i64_start = _pool.begin()->get_id();
