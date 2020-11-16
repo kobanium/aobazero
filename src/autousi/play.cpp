@@ -228,6 +228,11 @@ public:
     char opt_q[] = "-q";
     if (!verbose_eng) argv[argc++] = opt_q;
 
+    char opt_r[]       = "-r";
+    char opt_r_value[] = "0.0";
+    argv[argc++] = opt_r;
+    argv[argc++] = opt_r_value;
+
     char opt_p[]       = "-p";
     char opt_p_value[] = "800";
     argv[argc++] = opt_p;
@@ -377,15 +382,16 @@ public:
 	moves_eid0.push(std::move(smove)); }
     
       const char *str_value = OSI::strtok(nullptr, " ,", &saveptr);
-      if (!str_value) die(ERR_INT("cannot read count (engine %s)", get_fp()));
-    
+      if (!str_value || str_value[0] != 'v' || str_value[1] != '=')
+	die(ERR_INT("cannot read value (engine %s)", get_fp()));
+
       char *endptr;
-      float value = strtof(str_value, &endptr);
-      if (endptr == str_value || *endptr != '\0' || value < 0.0f
+      float value = strtof(str_value+2, &endptr);
+      if (endptr == str_value+2 || *endptr != '\0' || value < 0.0f
 	  || value == HUGE_VALF)
 	die(ERR_INT("cannot interpret value %s (engine %s)",
-		    str_value, get_fp()));
-      if (value < 100.0f * th_resign) flag_resign = true;
+		    str_value+2, get_fp()));
+      if (value < th_resign) flag_resign = true;
 
       const char *str_count = OSI::strtok(nullptr, " ,", &saveptr);
       if (!str_count) die(ERR_INT("cannot read count (engine %s)", get_fp()));
@@ -398,7 +404,7 @@ public:
       num_best = num;
       {
 	char buf[256];
-	sprintf(buf, ",'%4.1f,%d", value, num);
+	sprintf(buf, ",'v=%.3f,%d", value, num);
 	new_record += buf;
       }
 
@@ -441,7 +447,7 @@ public:
       rec += _record_wght + string(", ") + _record_version + string("\n");
       rec += string("'") + _record_settings + string("\n");
       rec += _record_main;
-      rec += "%TORYO" + string("'autousi\n");
+      rec += "%TORYO" + string(",'autousi\n");
       _flag_playing = false;
       return move(rec); }
 
@@ -471,6 +477,7 @@ public:
   bool is_playing() const noexcept { return _flag_playing; }
   bool is_ready() const noexcept { return _flag_ready; }
   bool is_thinking() const noexcept { return _flag_thinking; }
+  bool get_do_resign() const noexcept { return _flag_do_resign; }
   uint get_eid() const noexcept { return _eid; }
   uint get_nmove() const noexcept { return _nmove; }
   int get_did() const noexcept { return _device_id; }
@@ -596,6 +603,10 @@ bool PlayManager::get_moves_eid0(string &move) noexcept {
   move.swap(_moves_eid0.front());
   _moves_eid0.pop();
   return true; }
+
+bool PlayManager::get_do_resign(uint u) const noexcept {
+  assert(u < _engines.size());
+  return _engines[u]->get_do_resign(); }
 
 uint PlayManager::get_eid(uint u) const noexcept {
   assert(u < _engines.size());

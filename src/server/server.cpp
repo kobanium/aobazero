@@ -108,13 +108,13 @@ int main() {
   OSI::prevent_multirun(FName(Param::name_server));
   set_terminate(on_terminate);
   if (remove(fname_quit) < 0 && errno != ENOENT) die(ERR_CLL("remove"));
+
   init();
   while (true) {
     ifstream ifs(fname_quit);
     if (ifs) break;
     
-    Listen::get().wait();
-  }
+    Listen::get().wait(); }
 
   RecKeep::get().end();
   WghtKeep::get().end();

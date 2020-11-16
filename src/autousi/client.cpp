@@ -53,7 +53,7 @@ using uint  = unsigned int;
 constexpr uint snd_retry_interval  = 5U;    // in sec
 constexpr uint snd_max_retry       = 3U;    // in sec
 constexpr uint snd_sleep           = 200U;  // in msec
-constexpr uint wght_polling        = 30U;  // in sec
+constexpr uint wght_polling        = 30U;   // in sec
 constexpr uint wght_retry_interval = 7U;    // in sec
 
 constexpr uint maxlen_rec_xz       = 1024U * 1024U;
@@ -105,7 +105,8 @@ WghtFile::~WghtFile() noexcept {
   remove(_fname.get_fname());
   _all.erase(_fname); }
 
-static uint16_t receive_header(const OSI::Conn &conn, uint TO, uint bufsiz) {
+static void receive_header(const OSI::Conn &conn, uint TO, uint bufsiz,
+			   int &ver_engine, float &th_resign) {
   char buf[8];
   conn.recv(buf, 8, TO, bufsiz);
   
@@ -114,7 +115,9 @@ static uint16_t receive_header(const OSI::Conn &conn, uint TO, uint bufsiz) {
   if (Major != Ver::major || Ver::minor < Minor)
     die(ERR_INT("Please update autousi!"));
   
-  return bytes_to_int<uint16_t>(buf + 2); }
+  ver_engine = bytes_to_int<uint16_t>(buf + 2);
+  th_resign  = (static_cast<float>(bytes_to_int<uint16_t>(buf + 4))
+		* (1.0f / 65536.0f)); }
 
 Client::Client() noexcept
 : _quit(false), _has_conn(false), _downloading(false), _nsend(0), _ndiscard(0),
@@ -126,7 +129,7 @@ Client::~Client() noexcept {}
 void Client::get_new_wght() {
   // get new weight information
   OSI::Conn conn(_saddr.get(), _port);
-  _ver_engine = receive_header(conn, _recvTO, _recv_bufsiz);
+  receive_header(conn, _recvTO, _recv_bufsiz, _ver_engine, _th_resign);
 
   char buf[BUFSIZ];
   static_assert(12 <= BUFSIZ, "BUSIZ too small");
@@ -286,7 +289,7 @@ void Client::sender() noexcept {
       
       try {
 	OSI::Conn conn(_saddr.get(), _port);
-	_ver_engine = receive_header(conn, _recvTO, _recv_bufsiz);
+	receive_header(conn, _recvTO, _recv_bufsiz, _ver_engine, _th_resign);
 	conn.send(buf, len_head, _sendTO, _send_bufsiz);
 	conn.send(pJob->get_p(), pJob->get_len(), _sendTO, _send_bufsiz);
 	_nsend += 1U;

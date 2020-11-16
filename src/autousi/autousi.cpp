@@ -170,7 +170,7 @@ static void output() noexcept {
   steady_clock::time_point time_now = steady_clock::now();
   if (time_now < time_last + seconds(print_status)) return;
   
-  static uint prev_nsend    = 0;
+  static uint prev_nsend = 0;
   double time_ave_tot = 0.0;
   uint ntot     = PlayManager::get().get_ngen_records();
   uint nsend    = Client::get().get_nsend();
@@ -190,9 +190,12 @@ static void output() noexcept {
     char spid[16], sdev[16], buf[46];
     int eid = PlayManager::get().get_eid(u);
     int did = PlayManager::get().get_did(u);
+    bool do_resign = PlayManager::get().get_do_resign(u);
     sprintf(spid, "%3u",  eid);
     if (did == -2) sprintf(sdev, "CPU");
     else           sprintf(sdev, "%3d", did);
+    if (!do_resign) sdev[0] = '*';
+
     fill_n(buf, sizeof(buf), '#');
     uint len = std::min(PlayManager::get().get_nmove(u) / 5,
 			static_cast<uint>(sizeof(buf)) - 1U);
@@ -208,7 +211,8 @@ static void output() noexcept {
   int64_t wght_id        = Client::get().get_wght()->get_id();
   bool    is_downloading = Client::get().is_downloading();
   const char *buf_time   = Client::get().get_buf_wght_time();
-  printf("- Recv:   Weights' ID %" PRIi64 ", ", wght_id);
+  printf("- Recv:   Weight's ID %" PRIi64 ", resign-th %.3f, ",
+	 wght_id, Client::get().get_th_resign());
 
   if (is_downloading) puts("NOW DOWNLOADING NEW WEIGHTS");
   else                printf("Last Check %s\n", buf_time);
@@ -250,10 +254,11 @@ int main() {
   while (! flag_signal) {
     output();
     wght = Client::get().get_wght();
+    float th_resign = Client::get().get_th_resign();
     deque<string> recs
       = PlayManager::get().manage_play(Client::get().has_conn(),
 				       wght->get_fname(), wght->get_crc64(),
-				       0.15f);
+				       th_resign);
     
     for (const string &rec : recs) {
       Client::get().add_rec(rec.c_str(), rec.size());

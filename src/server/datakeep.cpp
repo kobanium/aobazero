@@ -43,9 +43,11 @@ constexpr char fmt_arch[]        = "arch%012" PRIi64 ".csa.xz";
 constexpr char fmt_pool[]        = "no%012" PRIi64 ".csa.xz";
 constexpr char fmt_wght_scn[]    = "w%16[^.].txt.xz";
 constexpr char fmt_pool_scn[]    = "no%16[^.].csa.xz";
-constexpr uint ema_keep_umax     = 32U;
-constexpr uint ema_keep_N        = 32U;
-constexpr float ema_keep_deno    = 1000U;
+constexpr uint ema_keep_N        = 64U;
+constexpr uint ema_keep_deno     = 1000U;
+constexpr float ema_keep_max     = 0.32f;
+constexpr float ema_keep_err0    = 0.10f;
+constexpr float ema_keep_th      = 0.05f;
 const PtrLen<const char> pl_CSAsepa("/\n", 2);
 
 
@@ -77,12 +79,16 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
     int64_t no;
     
     token = strtok_r(line+ 2, " ", &saveptr_token);
+    if (!token) false;
+
     no = strtoll(token, &endptr, 10);
     if (endptr == token || *endptr != '\0' || no < 0 || no == LLONG_MAX)
       return false;
   
     token = strtok_r(nullptr, "(:", &saveptr_token);
     token = strtok_r(nullptr, ")", &saveptr_token);
+    if (!token) false;
+
     errno = 0;
     digest1 = strtoull(token, &endptr, 16);
     if (endptr == token || *endptr != '\0' || errno == ERANGE)
@@ -92,15 +98,16 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
     if (digest1 != digest2) return false; }
   
   line = strtok_r(nullptr, "\n", &saveptr_line);
-  if (line[0] != '\'') return false;
+  if (!line || line[0] != '\'') return false;
   
   line = strtok_r(nullptr, "\n", &saveptr_line);
-  if (line[0] != 'P' || line[1] != 'I' || line[2] != '\0') return false;
+  if (!line || line[0] != 'P' || line[1] != 'I' || line[2] != '\0')
+    return false;
   digest = XZAux::crc64(line, 2U, 0);
   digest = XZAux::crc64(newline, 1U, digest);
   
   line = strtok_r(nullptr, "\n", &saveptr_line);
-  if (line[0] != '+' || line[1] != '\0') return false;
+  if (!line || line[0] != '+' || line[1] != '\0') return false;
   digest = XZAux::crc64(line, 1U, digest);
   digest = XZAux::crc64(newline, 1U, digest);
   
@@ -164,7 +171,9 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
       return false; }
 
     token = strtok_r(nullptr, ",\'", &saveptr_token);
-    assert(token);
+    if (!token || token[0] != 'v' || token[1] != '=') false;
+
+    token += 2;
     value = strtof(token, &endptr);
     if (endptr == token || *endptr != '\0' || value < 0.0f
 	|| value == HUGE_VALF) return false;
@@ -175,7 +184,8 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
       if (value < value_min_white) value_min_white = value; }
 
     token = strtok_r(nullptr, ",\'", &saveptr_token);
-    assert(token);
+    if (!token) false;
+
     num = strtol(token, &endptr, 10);
     if (endptr == token || *endptr != '\0' || num < 1 || num == LONG_MAX)
       return false;
@@ -212,41 +222,52 @@ static void write_pooltemp(const FName &fxz, PtrLen<const char> pl) noexcept {
   if (!ofs) die(ERR_INT("cannot write to %s", fxz.get_fname())); }
 
 class EMAKeep {
-  float _mu_rate[ema_keep_N];
   string _signature;
+  float _mu_rate[ema_keep_N];
+  float _th;
+
+  void compute_th() noexcept {
+    float value;
+    float step = ( ema_keep_max / static_cast<float>(ema_keep_N) );
+    uint u;
+    for (u = 0; u < ema_keep_N; u++) {
+      if (ema_keep_th < _mu_rate[u]) break; }
+
+    _th = static_cast<float>(u) * step; }
 
 public:
   explicit EMAKeep() noexcept {
-    _signature  = to_string(ema_keep_umax) + " ";
+    _signature  = to_string(ema_keep_max) + " ";
     _signature += to_string(ema_keep_N)   + " ";
     _signature += to_string(ema_keep_deno);
 
     ifstream ifs(fname_ema);
     bool flag = false;
     if (ifs) {
-      string s;
-      ifs >> s;
-      if (s == _signature) flag = true; }
+      char buf[256];
+      ifs.getline(buf, sizeof(buf));
+      if (string(buf) == _signature) flag = true; }
 
-    if (flag) for (uint u = 0; u < ema_keep_N; u++) ifs >> _mu_rate[u];
-    else fill_n(_mu_rate, ema_keep_N, 0.5f); }
+    if (flag) {
+      for (uint u = 0; u < ema_keep_N; u++) ifs >> _mu_rate[u]; }
+    else fill_n(_mu_rate, ema_keep_N, ema_keep_err0);
+
+    compute_th(); }
 
   void update(float min) noexcept {
     uint u;
     float value, a, b;
-    float step = ( static_cast<float>(ema_keep_umax)
-		   / static_cast<float>(ema_keep_N) );
+    float step = ( ema_keep_max / static_cast<float>(ema_keep_N) );
     a = (static_cast<float>(ema_keep_deno - 1U)
 	 / static_cast<float>(ema_keep_deno));
     b = 1.0 / static_cast<float>(ema_keep_deno);
-    std::cout << "DBG: " << min << " " << step << std::endl;
+
     for (u = 0; u < ema_keep_N; u++) {
       value = static_cast<float>(u + 1U) * step;
       if (min <= value) break;
       _mu_rate[u] *= a; }
-    for (; u < ema_keep_N; u++)
-      _mu_rate[u] = _mu_rate[u] * a + b;
-
+    for (; u < ema_keep_N; u++) _mu_rate[u] = _mu_rate[u] * a + b;
+    compute_th();
     {
       ofstream ofs(fname_ema_tmp);
       ofs << _signature << "\n";
@@ -254,6 +275,11 @@ public:
       if (!ofs) die(ERR_INT("cannot write to %s", fname_ema_tmp));
     }
     if (rename(fname_ema_tmp, fname_ema) < 0) die(ERR_CLL("rename")); }
+
+  uint get_th16() const noexcept {
+    std::cout << "\nDBG-b: " << static_cast<uint>(_th * 65536.0f)
+	      << std::endl;
+    return static_cast<uint>(_th * 65536.0f); }
 };
 
 bool WghtKeep::get_crc64(int64_t no, uint64_t &digest) const noexcept {
@@ -355,7 +381,7 @@ void RecKeep::close_arch_tmp() noexcept {
   if (!_ofs_arch_tmp) die(ERR_INT("cannot write to %s",
 				  _farch_tmp.get_fname())); }
 
-RecKeep::RecKeep() noexcept : ema_keep_ptr(new EMAKeep) {}
+RecKeep::RecKeep() noexcept : _ema_keep_ptr(new EMAKeep) {}
 RecKeep::~RecKeep() noexcept {}
 
 void RecKeep::open_arch_tmp() noexcept {
@@ -481,6 +507,8 @@ void RecKeep::start(Logger *logger, const char *darch, const char *dpool,
     if (!_ofs_arch_tmp)
       die(ERR_INT("cannot write to %s", _farch_tmp.get_fname())); } }
 
+uint RecKeep::get_th16() const noexcept { return _ema_keep_ptr->get_th16(); }
+
 void RecKeep::end() noexcept {
   _pJQueue->end();
   _thread.join(); }
@@ -566,8 +594,9 @@ void RecKeep::transact(const JobIP *pjob) noexcept {
   char buf[256];
   if (flag_resign_autousi) sprintf(buf, "resign:y");
   else {
-    ema_keep_ptr->update(value_min);
-    sprintf(buf, "resign:n, min:%.1f", value_min); }
+    _ema_keep_ptr->update(value_min);
+    sprintf(buf, "resign:n, min:%.3f, th:%.3f", value_min,
+	    _ema_keep_ptr->get_th16() * (1.0f / 65536.0f) ); }
   _logger->out(pjob, "record no. %" PRIi64 " arrived (crc64:%016" PRIx64
 	       ", ave:%4.1f, len:%3u, type:%u, %s)",
 	       id, digest, ave_child, len_play, node_type, buf);

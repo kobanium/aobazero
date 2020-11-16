@@ -355,7 +355,8 @@ void Listen::handle_send(Peer &peer) noexcept {
     buf[0] = static_cast<char>(Ver::major);
     buf[1] = static_cast<char>(Ver::minor);
     int_to_bytes<ushort>(Ver::usi_engin, buf + 2);
-    buf[4] = buf[5] = buf[6] = buf[7] = 0;
+    int_to_bytes<ushort>(RecKeep::get().get_th16(), buf + 4);
+    buf[6] = buf[7] = 0;
 
     ssize_t ret = send_wrap(peer, buf, 8, 0);
     if (ret < 0 && errno == ECONNRESET) {

@@ -37,6 +37,7 @@ public:
     return static_cast<uint>(_engines.size()); }
   uint get_ngen_records() const noexcept { return _ngen_records; };
   uint get_nthinking() const noexcept { return _num_thinking; }
+  bool get_do_resign(uint u) const noexcept;
   uint get_eid(uint u) const noexcept;
   uint get_nmove(uint u) const noexcept;
   int get_did(uint u) const noexcept;

@@ -70,7 +70,7 @@ class RecKeep {
     RedunValue & operator=(const RedunValue &value) noexcept {
       no = value.no; count = value.count; return *this; }
   };
-  std::unique_ptr<EMAKeep> ema_keep_ptr;
+  std::unique_ptr<EMAKeep> _ema_keep_ptr;
   std::thread _thread;
   std::unique_ptr<JQueue<class JobIP>> _pJQueue;
   std::set<FNameID> _pool;
@@ -108,4 +108,5 @@ public:
   void end() noexcept;
   void transact(const JobIP *pJob) noexcept;
   void add(const char *prec, size_t len_rec, const OSI::IAddr &iaddr) noexcept;
+  uint get_th16() const noexcept;
 };
