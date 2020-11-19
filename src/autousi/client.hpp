@@ -43,7 +43,6 @@ class Client {
   char _buf_wght_time[256];
   FName _dwght;
   float _th_resign;
-  int _ver_engine;
   uint _max_retry, _retry_count, _recvTO, _recv_bufsiz, _sendTO, _send_bufsiz;
   uint _read_bufsiz, _port, _keep_wght;
   
@@ -70,6 +69,5 @@ public:
   uint get_nsend() const noexcept { return _nsend; };
   uint get_ndiscard() const noexcept { return _ndiscard; }
   float get_th_resign() const noexcept { return _th_resign; }
-  int get_ver_engine() const noexcept { return _ver_engine; }
   bool has_conn() const noexcept { return _has_conn; }
 };

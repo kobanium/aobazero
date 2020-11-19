@@ -44,16 +44,13 @@ constexpr char fmt_pool[]        = "no%012" PRIi64 ".csa.xz";
 constexpr char fmt_wght_scn[]    = "w%16[^.].txt.xz";
 constexpr char fmt_pool_scn[]    = "no%16[^.].csa.xz";
 constexpr uint ema_keep_N        = 64U;
-constexpr uint ema_keep_deno     = 1000U;
 constexpr float ema_keep_max     = 0.32f;
-constexpr float ema_keep_err0    = 0.10f;
-constexpr float ema_keep_th      = 0.05f;
 const PtrLen<const char> pl_CSAsepa("/\n", 2);
 
 
 static bool
 examine_record(const char *rec, size_t len_rec, uint64_t &digest,
-	       uint &len_play, float &ave_child, bool &flag_resign_autousi,
+	       uint &len_play, float &ave_child, bool &flag_no_resign,
 	       float &value_min, uint &node_type) noexcept {
   assert(rec);
   constexpr char newline[] = "\n";
@@ -67,8 +64,8 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
   value_min       = 100.0f;
   node_type       = 99U;
 
-  len_play            = 0;
-  flag_resign_autousi = false;
+  len_play       = 0;
+  flag_no_resign = false;
   ave_child = 0.0f;
   strcpy(buf, rec);
   line = strtok_r(buf, "\n", &saveptr_line);
@@ -79,7 +76,7 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
     int64_t no;
     
     token = strtok_r(line+ 2, " ", &saveptr_token);
-    if (!token) false;
+    if (!token) return false;
 
     no = strtoll(token, &endptr, 10);
     if (endptr == token || *endptr != '\0' || no < 0 || no == LLONG_MAX)
@@ -87,7 +84,7 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
   
     token = strtok_r(nullptr, "(:", &saveptr_token);
     token = strtok_r(nullptr, ")", &saveptr_token);
-    if (!token) false;
+    if (!token) return false;
 
     errno = 0;
     digest1 = strtoull(token, &endptr, 16);
@@ -95,7 +92,19 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
       die(ERR_INT("bad crc64 %s", token));
 
     if (!WghtKeep::get().get_crc64(no, digest2)) return false;
-    if (digest1 != digest2) return false; }
+    if (digest1 != digest2) return false;
+
+    token = strtok_r(nullptr, ",", &saveptr_token);
+    if (!token) return false;
+
+    token = strtok_r(nullptr, ",", &saveptr_token);
+    if (!token) return false;
+
+    token = strtok_r(nullptr, ", ", &saveptr_token);
+    if (token) {
+      std::cerr << "DBG3: " << token << std::endl;
+      if (strcmp(token, "no-resign") == 0) flag_no_resign = true;
+      else return false; } }
   
   line = strtok_r(nullptr, "\n", &saveptr_line);
   if (!line || line[0] != '\'') return false;
@@ -164,14 +173,15 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
 	continue; }
 
       if (strcmp(token, "autousi") == 0) {
-	flag_resign_autousi = true;
+	if (flag_no_resign) return false;
+	if (node.get_type() != SAux::resigned) return false;
 	node_type = node.get_type().to_u();
 	continue; }
 
       return false; }
 
     token = strtok_r(nullptr, ",\'", &saveptr_token);
-    if (!token || token[0] != 'v' || token[1] != '=') false;
+    if (!token || token[0] != 'v' || token[1] != '=') return false;
 
     token += 2;
     value = strtof(token, &endptr);
@@ -184,7 +194,7 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
       if (value < value_min_white) value_min_white = value; }
 
     token = strtok_r(nullptr, ",\'", &saveptr_token);
-    if (!token) false;
+    if (!token) return false;
 
     num = strtol(token, &endptr, 10);
     if (endptr == token || *endptr != '\0' || num < 1 || num == LONG_MAX)
@@ -223,23 +233,26 @@ static void write_pooltemp(const FName &fxz, PtrLen<const char> pl) noexcept {
 
 class EMAKeep {
   string _signature;
-  float _mu_rate[ema_keep_N];
+  float _estimate[ema_keep_N];
   float _th;
+  uint _deno;
+  float _mrate;
 
   void compute_th() noexcept {
     float value;
     float step = ( ema_keep_max / static_cast<float>(ema_keep_N) );
     uint u;
     for (u = 0; u < ema_keep_N; u++) {
-      if (ema_keep_th < _mu_rate[u]) break; }
+      if (_mrate < _estimate[u]) break; }
 
     _th = static_cast<float>(u) * step; }
 
 public:
-  explicit EMAKeep() noexcept {
+  explicit EMAKeep(uint deno, float mrate_init, float mrate) noexcept
+    : _deno(deno), _mrate(mrate) {
     _signature  = to_string(ema_keep_max) + " ";
     _signature += to_string(ema_keep_N)   + " ";
-    _signature += to_string(ema_keep_deno);
+    _signature += to_string(_deno);
 
     ifstream ifs(fname_ema);
     bool flag = false;
@@ -249,8 +262,8 @@ public:
       if (string(buf) == _signature) flag = true; }
 
     if (flag) {
-      for (uint u = 0; u < ema_keep_N; u++) ifs >> _mu_rate[u]; }
-    else fill_n(_mu_rate, ema_keep_N, ema_keep_err0);
+      for (uint u = 0; u < ema_keep_N; u++) ifs >> _estimate[u]; }
+    else fill_n(_estimate, ema_keep_N, mrate_init);
 
     compute_th(); }
 
@@ -258,28 +271,24 @@ public:
     uint u;
     float value, a, b;
     float step = ( ema_keep_max / static_cast<float>(ema_keep_N) );
-    a = (static_cast<float>(ema_keep_deno - 1U)
-	 / static_cast<float>(ema_keep_deno));
-    b = 1.0 / static_cast<float>(ema_keep_deno);
+    a = static_cast<float>(_deno - 1U) / static_cast<float>(_deno);
+    b = 1.0 / static_cast<float>(_deno);
 
     for (u = 0; u < ema_keep_N; u++) {
       value = static_cast<float>(u + 1U) * step;
       if (min <= value) break;
-      _mu_rate[u] *= a; }
-    for (; u < ema_keep_N; u++) _mu_rate[u] = _mu_rate[u] * a + b;
+      _estimate[u] *= a; }
+    for (; u < ema_keep_N; u++) _estimate[u] = _estimate[u] * a + b;
     compute_th();
     {
       ofstream ofs(fname_ema_tmp);
       ofs << _signature << "\n";
-      for (u = 0; u < ema_keep_N; u++) ofs << _mu_rate[u] << "\n";
+      for (u = 0; u < ema_keep_N; u++) ofs << _estimate[u] << "\n";
       if (!ofs) die(ERR_INT("cannot write to %s", fname_ema_tmp));
     }
     if (rename(fname_ema_tmp, fname_ema) < 0) die(ERR_CLL("rename")); }
 
-  uint get_th16() const noexcept {
-    std::cout << "\nDBG-b: " << static_cast<uint>(_th * 65536.0f)
-	      << std::endl;
-    return static_cast<uint>(_th * 65536.0f); }
+  uint get_th16() const noexcept { return static_cast<uint>(_th * 65536.0f); }
 };
 
 bool WghtKeep::get_crc64(int64_t no, uint64_t &digest) const noexcept {
@@ -381,7 +390,7 @@ void RecKeep::close_arch_tmp() noexcept {
   if (!_ofs_arch_tmp) die(ERR_INT("cannot write to %s",
 				  _farch_tmp.get_fname())); }
 
-RecKeep::RecKeep() noexcept : _ema_keep_ptr(new EMAKeep) {}
+RecKeep::RecKeep() noexcept {}
 RecKeep::~RecKeep() noexcept {}
 
 void RecKeep::open_arch_tmp() noexcept {
@@ -398,10 +407,13 @@ RecKeep & RecKeep::get() noexcept {
 void RecKeep::start(Logger *logger, const char *darch, const char *dpool,
 		    uint maxlen_job, size_t maxlen_rec, size_t maxlen_recv,
 		    uint log2_nindex_redun, uint minlen_play,
-		    uint minave_child) noexcept {
+		    uint minave_child, uint resign_ema_deno,
+		    float resign_ema_init, float resign_mrate) noexcept {
   assert(logger && darch && dpool);
   int64_t i64, i64_start, i64_end;
 
+  _ema_keep_ptr.reset(new EMAKeep(resign_ema_deno, resign_ema_init,
+				  resign_mrate));
   _pJQueue.reset(new JQueue<JobIP>(maxlen_job));
   _prec.reset(new char [maxlen_rec]);
   _redundancy_table.reset(log2_nindex_redun, 2U << log2_nindex_redun);
@@ -557,9 +569,9 @@ void RecKeep::transact(const JobIP *pjob) noexcept {
   uint64_t digest;
   uint len_play, node_type;
   float ave_child, value_min;
-  bool flag_resign_autousi;
+  bool flag_no_resign;
   if (!examine_record(pl_out.p, pl_out.len, digest, len_play, ave_child,
-		      flag_resign_autousi, value_min, node_type)) {
+		      flag_no_resign, value_min, node_type)) {
     _logger->out(pjob, bad_CSA_format);
     return; }
   if (node_type == 99U) die(ERR_INT("INTERNAL ERROR"));
@@ -592,11 +604,12 @@ void RecKeep::transact(const JobIP *pjob) noexcept {
   _pool.insert(fpool);
 
   char buf[256];
-  if (flag_resign_autousi) sprintf(buf, "resign:y");
-  else {
+  if (flag_no_resign) {
     _ema_keep_ptr->update(value_min);
     sprintf(buf, "resign:n, min:%.3f, th:%.3f", value_min,
-	    _ema_keep_ptr->get_th16() * (1.0f / 65536.0f) ); }
+	    _ema_keep_ptr->get_th16() * (1.0f / 65536.0f) );   }
+  else sprintf(buf, "resign:y");
+
   _logger->out(pjob, "record no. %" PRIi64 " arrived (crc64:%016" PRIx64
 	       ", ave:%4.1f, len:%3u, type:%u, %s)",
 	       id, digest, ave_child, len_play, node_type, buf);

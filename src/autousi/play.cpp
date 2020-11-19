@@ -335,7 +335,8 @@ public:
 	long int ver = strtol(token, &endptr, 10);
 	if (endptr == token || *endptr != '\0' || ver < 0 || 65535 < ver)
 	  die(ERR_INT("Bad message from engine (%s).", get_fp()));
-	_version = ver; }
+	_version = ver;
+	if (ver < Ver::usi_engine) die(ERR_INT("Please update usi engine!")); }
 
       return string(""); }
 
@@ -454,7 +455,8 @@ public:
     _record_main += new_record;
     if (_node.get_type().is_term()) {
       string rec;
-      rec += _record_wght + string(", ") + _record_version + string("\n");
+      rec += _record_wght + string(", ");
+      rec += _record_version + string(", no-resign\n");
       rec += string("'") + _record_settings + string("\n");
       rec += _record_main;
       rec += "%" + string(_node.get_type().to_str()) + string("\n");

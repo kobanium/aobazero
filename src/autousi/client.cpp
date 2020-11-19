@@ -105,8 +105,7 @@ WghtFile::~WghtFile() noexcept {
   remove(_fname.get_fname());
   _all.erase(_fname); }
 
-static void receive_header(const OSI::Conn &conn, uint TO, uint bufsiz,
-			   int &ver_engine, float &th_resign) {
+static float receive_header(const OSI::Conn &conn, uint TO, uint bufsiz) {
   char buf[8];
   conn.recv(buf, 8, TO, bufsiz);
   
@@ -114,22 +113,20 @@ static void receive_header(const OSI::Conn &conn, uint TO, uint bufsiz,
   uint Minor = static_cast<uchar>(buf[1]);
   if (Major != Ver::major || Ver::minor < Minor)
     die(ERR_INT("Please update autousi!"));
-  
-  ver_engine = bytes_to_int<uint16_t>(buf + 2);
-  th_resign  = (static_cast<float>(bytes_to_int<uint16_t>(buf + 4))
-		* (1.0f / 65536.0f)); }
+
+  return (static_cast<float>(bytes_to_int<uint16_t>(buf + 2))
+	  * (1.0f / 65536.0f)); }
 
 Client::Client() noexcept
 : _quit(false), _has_conn(false), _downloading(false), _nsend(0), _ndiscard(0),
-  _wght_id(-1), _ver_engine(-1) {
-  _buf_wght_time[0] = '\0'; }
+  _wght_id(-1) { _buf_wght_time[0] = '\0'; }
 
 Client::~Client() noexcept {}
 
 void Client::get_new_wght() {
   // get new weight information
   OSI::Conn conn(_saddr.get(), _port);
-  receive_header(conn, _recvTO, _recv_bufsiz, _ver_engine, _th_resign);
+  _th_resign = receive_header(conn, _recvTO, _recv_bufsiz);
 
   char buf[BUFSIZ];
   static_assert(12 <= BUFSIZ, "BUSIZ too small");
@@ -289,7 +286,7 @@ void Client::sender() noexcept {
       
       try {
 	OSI::Conn conn(_saddr.get(), _port);
-	receive_header(conn, _recvTO, _recv_bufsiz, _ver_engine, _th_resign);
+	_th_resign = receive_header(conn, _recvTO, _recv_bufsiz);
 	conn.send(buf, len_head, _sendTO, _send_bufsiz);
 	conn.send(pJob->get_p(), pJob->get_len(), _sendTO, _send_bufsiz);
 	_nsend += 1U;

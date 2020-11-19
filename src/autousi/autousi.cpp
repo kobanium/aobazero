@@ -254,7 +254,7 @@ int main() {
   while (! flag_signal) {
     output();
     wght = Client::get().get_wght();
-    float th_resign = Client::get().get_th_resign();
+    float th_resign  = Client::get().get_th_resign();
     deque<string> recs
       = PlayManager::get().manage_play(Client::get().has_conn(),
 				       wght->get_fname(), wght->get_crc64(),

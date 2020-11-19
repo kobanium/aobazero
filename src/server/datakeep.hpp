@@ -102,7 +102,8 @@ public:
   
   void start(Logger *logger, const char *darch, const char *dpool,
 	     uint maxlen_job, size_t maxlen_rec, size_t maxlen_recv,
-	     uint log2_nindex_redun, uint minlen_play, uint minave_child)
+	     uint log2_nindex_redun, uint minlen_play, uint minave_child,
+	     uint resign_ema_deno, float resign_ema_init, float resign_mrate)
     noexcept;
     
   void end() noexcept;
