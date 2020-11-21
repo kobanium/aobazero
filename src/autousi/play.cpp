@@ -50,6 +50,7 @@ using uint = unsigned int;
 
 constexpr double time_average_rate = 0.999;
 constexpr char fmt_log[]           = "engine%03u-%03u.log";
+static uint resign_count           = 0;
 static mutex m_seq;
 static deque<SeqPRNService> seq_s;
 
@@ -177,7 +178,7 @@ class USIEngine : public Child {
   uint64_t _crc64_wght;
   int _device_id, _nnet_id, _version;
   uint _eid, _nmove;
-  bool _flag_playing, _flag_ready, _flag_thinking;
+  bool _flag_playing, _flag_ready, _flag_thinking, _flag_do_resign;
 
   void out_log(const char *p) noexcept {
     assert(_ofs && p);
@@ -212,7 +213,8 @@ public:
     _id_wght(wfname.get_id()), _crc64_wght(crc64),
     _device_id(device_id), _nnet_id(nnet_id), _version(-1), _eid(eid),
     _nmove(0),
-    _flag_playing(false), _flag_ready(false), _flag_thinking(false) {
+    _flag_playing(false), _flag_ready(false), _flag_thinking(false),
+    _flag_do_resign(false) {
     assert(cname.ok() && 0 < cname.get_len_fname());
     assert(wfname.ok() && 0 < wfname.get_len_fname());
     assert(isalnum(ch) && -2 < nnet_id && nnet_id < 65536);
@@ -225,6 +227,11 @@ public:
 
     char opt_q[] = "-q";
     if (!verbose_eng) argv[argc++] = opt_q;
+
+    char opt_r[]       = "-r";
+    char opt_r_value[] = "0.0";
+    argv[argc++] = opt_r;
+    argv[argc++] = opt_r_value;
 
     char opt_p[]       = "-p";
     char opt_p_value[] = "800";
@@ -266,11 +273,13 @@ public:
 
   void start_newgame() noexcept {
     _node.clear();
-    _flag_playing  = true;
-    _flag_thinking = false;
-    _record_main   = string("PI\n+\n");
-    _nmove         = 0;
-    _startpos      = string("position startpos moves");
+    _flag_playing   = true;
+    _flag_thinking  = false;
+    if ( (resign_count++ % 10) == 0 ) _flag_do_resign = false;
+    else                              _flag_do_resign = true;
+    _record_main    = string("PI\n+\n");
+    _nmove          = 0;
+    _startpos       = string("position startpos moves");
 
     char buf[256];
     sprintf(buf, "%16" PRIx64, _crc64_wght);
@@ -290,7 +299,8 @@ public:
     _crc64_wght = crc64;
     engine_out("setoption name USI_WeightFile value %s", wfname.get_fname()); }
 
-  string update(char *line, queue<string> &moves_eid0) noexcept {
+  string update(char *line, queue<string> &moves_eid0, float th_resign)
+    noexcept {
     assert(line);
     char *token, *saveptr;
     token = OSI::strtok(line, " ,", &saveptr);
@@ -325,7 +335,8 @@ public:
 	long int ver = strtol(token, &endptr, 10);
 	if (endptr == token || *endptr != '\0' || ver < 0 || 65535 < ver)
 	  die(ERR_INT("Bad message from engine (%s).", get_fp()));
-	_version = ver; }
+	_version = ver;
+	if (ver < Ver::usi_engine) die(ERR_INT("Please update usi engine!")); }
 
       return string(""); }
 
@@ -349,6 +360,8 @@ public:
 		  str_move_usi, get_fp(),
 		  static_cast<const char *>(_node.to_str())));
 
+    bool flag_resign = false;
+    string new_record;
     if (actionPlay.is_move()) {
       steady_clock::time_point time_now = steady_clock::now();
       auto rep   = duration_cast<milliseconds>(time_now - _time_last).count();
@@ -358,9 +371,9 @@ public:
       _time_average      = _time_average_nume / _time_average_deno;
       _startpos         += " ";
       _startpos         += str_move_usi;
-      _record_main      += _node.get_turn().to_str();
       _nmove            += 1U;
-      _record_main      += actionPlay.to_str(SAux::csa);
+      new_record        += _node.get_turn().to_str();
+      new_record        += actionPlay.to_str(SAux::csa);
       if (_eid == 0) {
 	char buf[256];
 	sprintf(buf, " (%5.0fms)", _time_average);
@@ -369,30 +382,43 @@ public:
 	smove += buf;
 	moves_eid0.push(std::move(smove)); }
     
+      const char *str_value = OSI::strtok(nullptr, " ,", &saveptr);
+      if (!str_value || str_value[0] != 'v' || str_value[1] != '=')
+	die(ERR_INT("cannot read value (engine %s)", get_fp()));
+
+      char *endptr;
+      float value = strtof(str_value+2, &endptr);
+      if (endptr == str_value+2 || *endptr != '\0' || value < 0.0f
+	  || value == HUGE_VALF)
+	die(ERR_INT("cannot interpret value %s (engine %s)",
+		    str_value+2, get_fp()));
+      if (value < th_resign) flag_resign = true;
+
       const char *str_count = OSI::strtok(nullptr, " ,", &saveptr);
       if (!str_count) die(ERR_INT("cannot read count (engine %s)", get_fp()));
     
-      char *endptr;
       long int num = strtol(str_count, &endptr, 10);
-      if (endptr == str_count || *endptr != '\0' || num < 1
-	  || num == LONG_MAX)
-	die(ERR_INT("cannot interpret a visit count %s (engine %s)",
+      if (endptr == str_count || *endptr != '\0' || num < 1 || num == LONG_MAX)
+	die(ERR_INT("cannot interpret visit count %s (engine %s)",
 		    str_count, get_fp()));
     
       num_best = num;
-      _record_main += ",'";
-      _record_main += to_string(num);
+      {
+	char buf[256];
+	sprintf(buf, ",'v=%.3f,%d", value, num);
+	new_record += buf;
+      }
 
       // read candidate moves
       while (true) {
 	str_move_usi = OSI::strtok(nullptr, " ,", &saveptr);
-	if (!str_move_usi) { _record_main += "\n"; break; }
+	if (!str_move_usi) { new_record += "\n"; break; }
 
 	Action action = _node.action_interpret(str_move_usi, SAux::usi);
 	if (!action.is_move())
 	  die(ERR_INT("bad candidate %s (engine %s)", str_move_usi, get_fp()));
-	_record_main += ",";
-	_record_main += action.to_str(SAux::csa);
+	new_record += ",";
+	new_record += action.to_str(SAux::csa);
     
 	str_count = OSI::strtok(nullptr, " ,", &saveptr);
 	if (!str_count)
@@ -405,8 +431,8 @@ public:
 		      str_count, get_fp()));
 
 	num_tot += num;
-	_record_main += ",";
-	_record_main += to_string(num); } }
+	new_record += ",";
+	new_record += to_string(num); } }
 
     if (num_best < num_tot) die(ERR_INT("bad counts (engine %s)", get_fp()));
     _node.take_action(actionPlay);
@@ -417,9 +443,20 @@ public:
     assert(_node.ok());
 
     // terminal test
-    if (_node.get_type().is_term()) {
+    if (flag_resign && _flag_do_resign) {
       string rec;
       rec += _record_wght + string(", ") + _record_version + string("\n");
+      rec += string("'") + _record_settings + string("\n");
+      rec += _record_main;
+      rec += "%TORYO" + string(",'autousi\n");
+      _flag_playing = false;
+      return move(rec); }
+
+    _record_main += new_record;
+    if (_node.get_type().is_term()) {
+      string rec;
+      rec += _record_wght + string(", ");
+      rec += _record_version + string(", no-resign\n");
       rec += string("'") + _record_settings + string("\n");
       rec += _record_main;
       rec += "%" + string(_node.get_type().to_str()) + string("\n");
@@ -442,6 +479,7 @@ public:
   bool is_playing() const noexcept { return _flag_playing; }
   bool is_ready() const noexcept { return _flag_ready; }
   bool is_thinking() const noexcept { return _flag_thinking; }
+  bool get_do_resign() const noexcept { return _flag_do_resign; }
   uint get_eid() const noexcept { return _eid; }
   uint get_nmove() const noexcept { return _nmove; }
   int get_did() const noexcept { return _device_id; }
@@ -509,7 +547,8 @@ void PlayManager::end() noexcept {
   seq_s.clear(); }
 
 deque<string> PlayManager::manage_play(bool has_conn, const FNameID &wfname,
-				       uint64_t crc64) noexcept {
+				       uint64_t crc64, float th_resign)
+  noexcept {
   deque<string> recs;
 
   Child::wait(1000U);
@@ -524,7 +563,7 @@ deque<string> PlayManager::manage_play(bool has_conn, const FNameID &wfname,
       if (e->getline_in(line, sizeof(line)) == 0) flag_eof = true;
       else {
 	bool flag_thinking = e->is_thinking();
-	string s = e->update(line, _moves_eid0);
+	string s = e->update(line, _moves_eid0, th_resign);
 	if (!s.empty()) {
 	  _ngen_records += 1U;
 	  recs.push_back(move(s)); }
@@ -566,6 +605,10 @@ bool PlayManager::get_moves_eid0(string &move) noexcept {
   move.swap(_moves_eid0.front());
   _moves_eid0.pop();
   return true; }
+
+bool PlayManager::get_do_resign(uint u) const noexcept {
+  assert(u < _engines.size());
+  return _engines[u]->get_do_resign(); }
 
 uint PlayManager::get_eid(uint u) const noexcept {
   assert(u < _engines.size());
