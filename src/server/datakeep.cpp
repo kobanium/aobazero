@@ -102,7 +102,6 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
 
     token = strtok_r(nullptr, ", ", &saveptr_token);
     if (token) {
-      std::cerr << "DBG3: " << token << std::endl;
       if (strcmp(token, "no-resign") == 0) flag_no_resign = true;
       else return false; } }
   
