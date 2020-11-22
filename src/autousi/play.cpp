@@ -455,8 +455,11 @@ public:
     _record_main += new_record;
     if (_node.get_type().is_term()) {
       string rec;
-      rec += _record_wght + string(", ");
-      rec += _record_version + string(", no-resign\n");
+      if (_flag_do_resign) {
+	rec += _record_wght + string(", ") + _record_version + string("\n"); }
+      else {
+	rec += _record_wght + string(", ");
+	rec += _record_version + string(", no-resign\n"); }
       rec += string("'") + _record_settings + string("\n");
       rec += _record_main;
       rec += "%" + string(_node.get_type().to_str()) + string("\n");
