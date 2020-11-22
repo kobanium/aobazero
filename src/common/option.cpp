@@ -1,5 +1,8 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
+#ifdef _MSC_VER
+#  pragma warning( disable : 4127)
+#endif
 #include "err.hpp"
 #include "option.hpp"
 #include "osi.hpp"
@@ -14,6 +17,7 @@
 #include <vector>
 #include <cassert>
 #include <climits>
+#include <cmath>
 #include <cstring>
 using std::ifstream;
 using std::out_of_range;
