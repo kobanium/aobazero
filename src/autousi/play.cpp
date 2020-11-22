@@ -22,6 +22,7 @@
 #include <cctype>
 #include <cinttypes>
 #include <climits>
+#include <cmath>
 #include <csignal>
 #include <cstdarg>
 #include <cstdio>
