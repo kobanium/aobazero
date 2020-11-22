@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <chrono>
 #include <climits>
+#include <cmath>
 #include <cstring>
 #include <fcntl.h>
 #include <string>
