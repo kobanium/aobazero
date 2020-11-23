@@ -54,12 +54,24 @@ static void init() noexcept {
 			   {"MaxComPerAddr",     "104857600"},
 			   {"WeightBlock",       "1048576"},
 			   {"DirLog",            "./log"},
-			   {"LenLogArchive",     "67108864"}};
+			   {"LenLogArchive",     "67108864"},
+			   {"ResignEMADeno",     "2000"},
+			   {"ResignEMAInit",     "0.10"},
+			   {"ResignMRate",       "0.05"}};
   try { Config::read("server.cfg", m); } catch (exception &e) { die(e); }
   const char *dir_wght = Config::get_cstr(m, "DirWeight",   maxlen_path);
   const char *dir_arch = Config::get_cstr(m, "DirArchives", maxlen_path);
   const char *dir_pool = Config::get_cstr(m, "DirPool",     maxlen_path);
   const char *dir_log  = Config::get_cstr(m, "DirLog",      maxlen_path);
+  uint resign_ema_deno = Config::get<uint>(m, "ResignEMADeno",
+					   [](uint u){ return 0U < u; });
+  float resign_ema_init
+    = Config::get<float>(m, "ResignEMAInit",
+			 [](float v){ return 0.0 <= v && v <= 1.0; });
+  float resign_mrate
+    = Config::get<float>(m, "ResignMRate",
+			 [](float v){ return 0.0 <= v && v <= 1.0; });
+
   uint port_p      = Config::get<ushort>(m, "PortPlayer");
   uint size_queue  = Config::get<uint>  (m, "SizeQueue");
   uint wght_poll   = Config::get<uint>  (m, "WeightPolling");
@@ -89,11 +101,12 @@ static void init() noexcept {
   
   logger.reset(new Logger(dir_log, "server", len_logarch));
   logger->out(nullptr, "start server %d.%d (usi engine %d)",
-	      Ver::major, Ver::minor, Ver::usi_engin);
+	      Ver::major, Ver::minor, Ver::usi_engine);
   WghtKeep::get().start(logger.get(), dir_wght, wght_poll);
   RecKeep::get().start(logger.get(), dir_arch, dir_pool, size_queue,
 		       maxlen_csa, max_recv, log2_redun - 1U, minlen_play,
-		       minave_child);
+		       minave_child, resign_ema_deno, resign_ema_init,
+		       resign_mrate);
   Listen::get().start(logger.get(), port_p, backlog, selectTO, playerTO,
 		      max_accept, max_recv, max_send, len_block, maxconn_sec,
 		      maxconn_min, cutconn_min, maxlen_com); }
@@ -108,13 +121,13 @@ int main() {
   OSI::prevent_multirun(FName(Param::name_server));
   set_terminate(on_terminate);
   if (remove(fname_quit) < 0 && errno != ENOENT) die(ERR_CLL("remove"));
+
   init();
   while (true) {
     ifstream ifs(fname_quit);
     if (ifs) break;
     
-    Listen::get().wait();
-  }
+    Listen::get().wait(); }
 
   RecKeep::get().end();
   WghtKeep::get().end();
