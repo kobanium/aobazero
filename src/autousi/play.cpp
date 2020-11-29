@@ -361,8 +361,8 @@ public:
 		  str_move_usi, get_fp(),
 		  static_cast<const char *>(_node.to_str())));
 
+    string new_move, new_info;
     bool flag_resign = false;
-    string new_record;
     if (actionPlay.is_move()) {
       steady_clock::time_point time_now = steady_clock::now();
       auto rep   = duration_cast<milliseconds>(time_now - _time_last).count();
@@ -373,8 +373,8 @@ public:
       _startpos         += " ";
       _startpos         += str_move_usi;
       _nmove            += 1U;
-      new_record        += _node.get_turn().to_str();
-      new_record        += actionPlay.to_str(SAux::csa);
+      new_move          += _node.get_turn().to_str();
+      new_move          += actionPlay.to_str(SAux::csa);
       if (_eid == 0) {
 	char buf[256];
 	sprintf(buf, " (%5.0fms)", _time_average);
@@ -406,20 +406,20 @@ public:
       num_best = num;
       {
 	char buf[256];
-	sprintf(buf, ",'v=%.3f,%d", value, num);
-	new_record += buf;
+	sprintf(buf, "v=%.3f,%d", value, num);
+	new_info += buf;
       }
 
       // read candidate moves
       while (true) {
 	str_move_usi = OSI::strtok(nullptr, " ,", &saveptr);
-	if (!str_move_usi) { new_record += "\n"; break; }
+	if (!str_move_usi) { new_info += "\n"; break; }
 
 	Action action = _node.action_interpret(str_move_usi, SAux::usi);
 	if (!action.is_move())
 	  die(ERR_INT("bad candidate %s (engine %s)", str_move_usi, get_fp()));
-	new_record += ",";
-	new_record += action.to_str(SAux::csa);
+	new_info += ",";
+	new_info += action.to_str(SAux::csa);
     
 	str_count = OSI::strtok(nullptr, " ,", &saveptr);
 	if (!str_count)
@@ -431,9 +431,9 @@ public:
 	  die(ERR_INT("cannot interpret a visit count %s (engine %s)",
 		      str_count, get_fp()));
 
-	num_tot += num;
-	new_record += ",";
-	new_record += to_string(num); } }
+	num_tot  += num;
+	new_info += ",";
+	new_info += to_string(num); } }
 
     if (num_best < num_tot) die(ERR_INT("bad counts (engine %s)", get_fp()));
     _node.take_action(actionPlay);
@@ -449,11 +449,14 @@ public:
       rec += _record_wght + string(", ") + _record_version + string("\n");
       rec += string("'") + _record_settings + string("\n");
       rec += _record_main;
-      rec += "%TORYO" + string(",'autousi\n");
+      rec += "%TORYO" + string(",'autousi,resign-th=") + to_string(th_resign);
+      rec += string(",") + new_info;
       _flag_playing = false;
       return move(rec); }
 
-    _record_main += new_record;
+    if (! new_move.empty())
+      _record_main += new_move + string(",'") + new_info;
+
     if (_node.get_type().is_term()) {
       string rec;
       if (_flag_do_resign) {

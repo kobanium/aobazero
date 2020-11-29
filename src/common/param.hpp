@@ -3,7 +3,7 @@
 #pragma once
 namespace Ver {
   constexpr unsigned char major       = 1;
-  constexpr unsigned char minor       = 7;
+  constexpr unsigned char minor       = 8;
   constexpr unsigned short usi_engine = 14;
 }
 
