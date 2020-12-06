@@ -1123,15 +1123,17 @@ void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *p
 		v = std::tanh(f);		// -1 <= x <= +1   -->  -0.76 <= x <= +0.76
 //		v = f;
 //		v = 0;
-		if ( sideToMove==BLACK ) v = -v;
 //		{ static double va[2]; static int count[2]; va[sideToMove] += v; count[sideToMove]++; PRT("va[]=%10f,%10f\n",va[0]/(count[0]+1),va[1]/(count[1]+1)); }
 //		PRT("f=%10f,tanh()=%10f\n",f,v);
 	} else {
 		if ( move_num == 0 ) {
+			// get_network_policy_value() は常に先手が勝で(+1)、先手が負けで(-1)を返す。sideToMove は無関係
 			v = -1;
+			if ( sideToMove==BLACK ) v = +1;	// 後手番で可能手がないなら先手の勝
 		} else {
 			v = get_network_policy_value(ptree, sideToMove, ply, phg);
 		}
+//		{ PRT("ply=%2d,sideToMove=%d(BLACK=%d),move_num=%3d,v=%.5f\n",ply,sideToMove,BLACK,move_num,v); print_board(ptree); }
 	}
 	if ( sideToMove==BLACK ) v = -v;
 
@@ -1214,7 +1216,6 @@ select_again:
 	}
 	if ( select < 0 ) {
 		float v = -1;
-		if ( sideToMove==BLACK ) v = -1;
 //		PRT("no legal move. mate? ply=%d,child_num=%d,v=%.0f\n",ply,child_num,v);
 		UnLock(phg->entry_lock);
 		return v;
@@ -1329,10 +1330,8 @@ select_again:
 	if ( flag_sennitite != SENNITITE_NONE ) {
 		// 先手(WHITE)なら 勝=+1 負=-1,  後手(BLACK)なら 勝=+1 負=-1。Bonanzaの内部のblack,whiteは逆
 		win = 0;
-		if ( sideToMove==BLACK ) win = 0;			// draw
 		if ( flag_sennitite == SENNITITE_WIN ) {
 			win = +1.0;
-			if ( sideToMove==BLACK ) win = +1.0;
 		}
 //		PRT("flag_sennitite=%d, win=%.1f, ply=%d\n",flag_sennitite,win,ply);
 		skip_search = 1;
