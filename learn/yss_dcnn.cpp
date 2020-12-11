@@ -2447,13 +2447,13 @@ ZERO_DB zdb_one;
 ZERO_DB zdb[ZERO_DB_SIZE];
 int *pZDBsum = NULL;
 int zdb_count = 0;
-int zdb_count_start = 5200000;	// 400万棋譜から読み込む場合は4000000
+int zdb_count_start = 0; //23400000; //20300000; //18800000; //16400000;	//10300000; //5200000;	// 400万棋譜から読み込む場合は4000000
 int zero_kif_pos_num = 0;
 int zero_kif_games = 0;
 const int MINI_BATCH = 128;	// aoba_zero.prototxt の cross_entroy_scale も同時に変更すること！layerのnameも要変更
 const int ONE_SIZE = DCNN_CHANNELS*B_SIZE*B_SIZE;	// 362*9*9; *4= 117288 *64 = 7506432,  7MBにもなる mini_batch=64
 
-const int fReplayLearning = 0;	// すでに作られた棋譜からWindowをずらせて学習させる
+const int fReplayLearning = 1;	// すでに作られた棋譜からWindowをずらせて学習させる
 const int fWwwSample = 0;		// fReplayLearning も同時に1
 
 //const char ZERO_KIF_DB_FILENAME[] = "zerokif.db";
@@ -2481,7 +2481,7 @@ const int USE_XZ_NONE      = 0;
 const int USE_XZ_POOL_ONLY = 1;
 const int USE_XZ_BOTH      = 2;
 
-const int USE_XZ = USE_XZ_POOL_ONLY;	//  1...poolのみ xz で。2...poolもarchiveも xz で
+const int USE_XZ = USE_XZ_BOTH;	//  1...poolのみ xz で。2...poolもarchiveも xz で
 
 // archiveから棋譜番号=n の棋譜を取り出す。KifBuf[] に入る。速度無視。fpでは100番目以降が遅すぎて無理。
 int find_kif_from_archive(int search_n)
@@ -2790,7 +2790,19 @@ int shogi::wait_and_get_new_kif(int next_weight_n)
 	int add_kif_sum = 0;
 	for (;;) {
 		// call rsync
-		const int sleep_sec = 1200;		// wait some sec
+		int sleep_sec = 1200;		// wait some sec
+		FILE *fp = fopen("sleep.txt","r");
+		if ( fp==NULL ) {
+			PRT("fail open sleep.\n");
+		} else {
+			char str[TMP_BUF_LEN];
+			if ( fgets( str, TMP_BUF_LEN, fp ) ) {
+				sleep_sec = atoi(str);
+			}
+			if ( sleep_sec < 0 ) DEBUG_PRT("");
+			fclose(fp);
+		}
+
 		char str[256];
 		sprintf(str,"sleep %d",sleep_sec);
 		PRT("%s\n",str);
@@ -3464,11 +3476,16 @@ void start_zero_train(int *p_argc, char ***p_argv )
 //	const char sNet[] = "/home/yss/shogi/yssfish/snapshots/20191029/_iter_200000.caffemodel";	// w774
 //	const char sNet[] = "/home/yss/shogi/learn/snapshots/20191029/_iter_312.caffemodel";	// w775
 //	const char sNet[] = "/home/yss/shogi/learn/snapshots/20191107/_iter_3432.caffemodel";	// w786
-	const char sNet[] = "/home/yss/shogi/learn/snapshots/20200328/_iter_1370000.caffemodel";	// w923
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20200328/_iter_1370000.caffemodel";	// w923
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20200708/_iter_5260000.caffemodel";	// w1449
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20200928/_iter_5970000.caffemodel";	// w2046
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20201027/_iter_2440000.caffemodel";	// w2290
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20201109/_iter_1520000.caffemodel";	// w2442
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20201206/_iter_3070000.caffemodel";	// w2749
 
-	int next_weight_number =924;	// 現在の最新の番号 +1
+	int next_weight_number =2750;	// 現在の最新の番号 +1
 
-	net->CopyTrainedLayersFrom(sNet);	// caffemodelを読み込んで学習を再開する場合
+//	net->CopyTrainedLayersFrom(sNet);	// caffemodelを読み込んで学習を再開する場合
 //	load_aoba_txt_weight( net, "/home/yss/w000000000689.txt" );	// 既存のw*.txtを読み込む。*.caffemodelを何か読み込んだ後に
 	LOG(INFO) << "Solving ";
 	PRT("fReplayLearning=%d\n",fReplayLearning);
@@ -3476,8 +3493,7 @@ void start_zero_train(int *p_argc, char ***p_argv )
 	int iteration = 0;	// 学習回数
 	int add = 0;		// 追加された棋譜数
 	int remainder = 0;
-	int div = 0;
-	int update = 0;
+	int iter_weight = 0;
 
 wait_again:
 	if ( fReplayLearning ) {
@@ -3505,7 +3521,25 @@ wait_again:
 		remainder = add - nLoop * min_n;
 	}
 
-	PRT("nLoop=%d,add=%d,add_mul=%.5f,MINI_BATCH=%d,kDataSize=%d,remainder=%d,iteration=%d(%d/%d)\n",nLoop,add,add_mul,MINI_BATCH,kDataSize,remainder,iteration,update,div);
+	const int ITER_WEIGHT_BASE = 10000*AVE_MOVES / (ITER_SIZE*MINI_BATCH);	// 10000棋譜(平均128手)ごとにweightを作成
+	int iter_weight_limit = ITER_WEIGHT_BASE;
+	float reduce = 1.0;	// weightは10000棋譜ごとで学習回数を10000から8000などに減らす。棋譜生成速度が速すぎるため
+	FILE *fp = fopen("reduce.txt","r");
+	if ( fp==NULL ) {
+		PRT("fail open reduce.\n");
+	} else {
+		char str[TMP_BUF_LEN];
+		if ( fgets( str, TMP_BUF_LEN, fp ) ) {
+			reduce = atof(str);
+		}
+		nLoop             = (int)(reduce * nLoop);
+		iter_weight_limit = (int)(reduce * ITER_WEIGHT_BASE);
+		PRT("reduce=%7.4f, add=%d,nLoop=%d,iter_weight_limit=%d/%d\n",reduce,add,nLoop,iter_weight_limit,ITER_WEIGHT_BASE);
+		if ( reduce <= 0 || reduce > 1.0 || iter_weight_limit <= 0 ) DEBUG_PRT("");
+		fclose(fp);
+	}
+
+	PRT("nLoop=%d,add=%d,add_mul=%.3f,MINI_BATCH=%d,kDataSize=%d,remainder=%d,iteration=%d(%d/%d)\n",nLoop,add,add_mul,MINI_BATCH,kDataSize,remainder,iteration,iter_weight,iter_weight_limit);
 	int loop;
 	for (loop=0;loop<nLoop;loop++) {
 		static array<float, kDataSize * ONE_SIZE> input_data;	// 大きいのでstaticで
@@ -3542,10 +3576,10 @@ wait_again:
 //		solver->Solve();
 //		solver->Snapshot();	// prototxt の設定で保存される
 		iteration++;
-
-		div = 10000*AVE_MOVES / (ITER_SIZE*MINI_BATCH);	// 10000棋譜(平均128手)ごとにweightを作成
-		update = iteration % div;
-		if ( fReplayLearning==0 && update==0 ) {
+		iter_weight++;
+		
+		if ( fReplayLearning==0 && iter_weight >= iter_weight_limit ) {
+			iter_weight = 0;
 			solver->Snapshot();
 			convert_caffemodel(iteration, next_weight_number);
 			next_weight_number++;

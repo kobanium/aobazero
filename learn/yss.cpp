@@ -987,8 +987,12 @@ int shogi::LoadCSA()
 					}
 					str[n-1] = 0;
 					if ( count==0 ) {
-						all_visit = atoi(str);
-						pz->v_playouts_sum.push_back(all_visit);
+						if ( strstr(str,"v=") ) {
+							count--;
+						} else {
+							all_visit = atoi(str);
+							pz->v_playouts_sum.push_back(all_visit);
+						}
 					} else {
 						if ( (count&1)== 0 ) {
 							if ( b0==0 && b1==0 ) debug();
