@@ -406,7 +406,7 @@ public:
       num_best = num;
       {
 	char buf[256];
-	sprintf(buf, "v=%.3f,%d", value, num);
+	sprintf(buf, "v=%.3f,%ld", value, num);
 	new_info += buf;
       }
 

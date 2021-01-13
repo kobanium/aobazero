@@ -108,6 +108,7 @@ static bool flag_b          = false;
 static long int num_m       = 1;
 static long int num_P       = 1;
 static long int num_N       = 0;
+static long int num_d       = 0;
 static int num_B[2]         = {  1,  1};
 static int num_U[2]         = { -1, -1};
 static int num_H[2]         = {  0,  0};
@@ -166,6 +167,7 @@ int main(int argc, char **argv) {
   uint latest = 0;
   uint result[Color::ok_size][NodeType::ok_size][3] = {{{0}}};
   bool is_first = true;
+  if (num_d > 0) turn0 = SAux::white;
 
   OSI::handle_signal(on_signal);
   for (auto &ptr : games) {
@@ -435,21 +437,45 @@ static void node_update(USIEngine &myself, USIEngine &opponent,
 
 static void start_newgame(Game &game, uint nplay, const Color &turn0)
   noexcept {
+  bool fTurn0Black = (turn0 == SAux::black);
   cout << "'Play #" << nplay << " starts from player"
-       << (turn0 == SAux::black ? "0." : "1.") << endl;
+       << (fTurn0Black ? "0." : "1.") << endl;
 
+  bool fSenteName = fTurn0Black;
+  if ( num_d ) fSenteName = true;
   game.record  = "";
-  game.record += "N+player" + string(turn0 == SAux::black ? "0\n" : "1\n");
-  game.record += "N-player" + string(turn0 == SAux::black ? "1\n" : "0\n");
-  game.record += "PI\n+";
+  game.record += "N+player" + string(fSenteName ? "0\n" : "1\n");
+  game.record += "N-player" + string(fSenteName ? "1\n" : "0\n");
 
   game.nplay = nplay;
   game.turn0 = turn0;
-  game.node.clear();
+  game.node.clear(num_d);
+
+  if ( num_d == 0 ) {
+    game.record += "PI\n+";
+  } else {
+    string s = static_cast<const char *>(game.node.to_str());
+    for (int i=0; i<9; i++) s.at(30*i+1) = s.at(30*i+1)+1;
+    int n = s.find("Hand");
+    game.record += s.substr(0, n);
+    game.record += "-";
+  }
 
   child_out(game.engine0, "usinewgame");
   child_out(game.engine1, "usinewgame");
-  if (flag_f || ! flag_b) game.startpos = "position startpos moves";
+
+  if (num_d>0) { // hadicap game. drop ky,ka,hi,2mai,4mai,6mai. also change shogibase.cpp node.clear(min_d)
+	string init_pos[6] = {
+      "position sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/1NSGKGSNL",// ky
+      "position sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/7R1/LNSGKGSNL",	// ka
+      "position sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B7/LNSGKGSNL",	// hi
+      "position sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/9/LNSGKGSNL",	// 2mai
+      "position sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/9/1NSGKGSN1",	// 4mai
+      "position sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/9/2SGKGS2"		// 6mai
+    };
+    if (num_d>6 || !flag_f) die(ERR_INT("Handicap game Err. Must be with 'f'"));
+    game.startpos = init_pos[num_d-1] + " w - 1 moves";
+  } else if (flag_f || ! flag_b) game.startpos = "position startpos moves";
   else {
     game.startpos = "position " + book[nplay / 2U];
     std::stringstream ss(book[nplay / 2U]);
@@ -470,8 +496,8 @@ static void start_newgame(Game &game, uint nplay, const Color &turn0)
   child_out(game.engine0, game.startpos.c_str());
   child_out(game.engine1, game.startpos.c_str());
 
-  if (turn0 == SAux::black) child_out(game.engine0, "go");
-  else                      child_out(game.engine1, "go"); }
+  if (fTurn0Black) child_out(game.engine0, "go");
+  else             child_out(game.engine1, "go"); }
 
 static void start_engine(USIEngine &c) noexcept {
   assert(c.ok());
@@ -597,7 +623,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
   uint num;
 
   while (! flag_err) {
-    int opt = Opt::get(argc, argv, "0:1:c:m:P:I:B:U:H:W:T:frsub");
+    int opt = Opt::get(argc, argv, "0:1:c:m:d:P:I:B:U:H:W:T:frsub");
     if (opt < 0) break;
 
     switch (opt) {
@@ -609,6 +635,11 @@ static int get_options(int argc, const char * const *argv) noexcept {
     case 'u': flag_u = true; break;
     case 'b': flag_b = true; break;
     case 'c': shell.reset_fname(Opt::arg); break;
+    case 'd':
+      num_d = strtol(Opt::arg, &endptr, 10);
+      if (endptr == Opt::arg || *endptr != '\0'
+	  || num_d == LONG_MAX || num_d < 1) flag_err = true;
+      break;
     case 'm':
       num_m = strtol(Opt::arg, &endptr, 10);
       if (endptr == Opt::arg || *endptr != '\0'
@@ -736,6 +767,7 @@ Other options:
   -u       Print verbose USI messages.
   -b       Use positions recorded in records2016_10818.sfen (a collection of
            24 moves from the no-handicap initial position).
+  -d NUM   Handicap Game. NUM = 1(ky), 2(ka), 3(hi), 4(2mai), 5(4mai), 6(6mai)
   -c SHELL Use SHELL, e.g., /bin/csh, instead of /bin/sh.
   -P NUM   Generate NUM gameplays simultaneously. The default is 1.
   -I STR   Specifies nnet implementation. STR can conatin two characters
