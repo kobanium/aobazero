@@ -586,7 +586,7 @@ void Node<N>::clear(int num_d) noexcept {
     place(c, silver, sq79);  place(c, silver, sq39);
     place(c, gold,   sq69);  place(c, gold,   sq49);
     place(c, king,   sq59);
-    if ( num_d == 0 || uc == 1 ) {
+    if ( num_d == 0 || uc == 0 ) {
       place(c, knight, sq89);  place(c, knight, sq29);
       place(c, lance,  sq99);  place(c, lance,  sq19);
       place(c, bishop, sq88);  place(c, rook,   sq28);

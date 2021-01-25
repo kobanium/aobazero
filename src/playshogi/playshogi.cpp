@@ -466,12 +466,12 @@ static void start_newgame(Game &game, uint nplay, const Color &turn0)
 
   if (num_d>0) { // hadicap game. drop ky,ka,hi,2mai,4mai,6mai. also change shogibase.cpp node.clear(min_d)
 	string init_pos[6] = {
-      "position sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/1NSGKGSNL",// ky
-      "position sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/7R1/LNSGKGSNL",	// ka
-      "position sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B7/LNSGKGSNL",	// hi
-      "position sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/9/LNSGKGSNL",	// 2mai
-      "position sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/9/1NSGKGSN1",	// 4mai
-      "position sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/9/2SGKGS2"		// 6mai
+      "position sfen lnsgkgsn1/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",// ky
+      "position sfen lnsgkgsnl/1r7/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// ka
+      "position sfen lnsgkgsnl/7b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// hi
+      "position sfen lnsgkgsnl/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// 2mai
+      "position sfen 1nsgkgsn1/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// 4mai
+      "position sfen 2sgkgs2/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL"		// 6mai
     };
     if (num_d>6 || !flag_f) die(ERR_INT("Handicap game Err. Must be with 'f'"));
     game.startpos = init_pos[num_d-1] + " w - 1 moves";

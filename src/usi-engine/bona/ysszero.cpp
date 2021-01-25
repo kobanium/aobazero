@@ -365,7 +365,7 @@ int YssZero_com_turn_start( tree_t * restrict ptree )
 	} else {
 		csa2usi( ptree, str_CSA_move(m), buf );
 	}
-	char str_best[USI_BESTMOVE_LEN];
+	char str_best[USI_BESTMOVE_LEN+11+7];
 	if ( fUSIMoveCount ) {
 		sprintf( str_best,"bestmove %s,%s\n",buf,buf_move_count );
 	} else {
