@@ -295,7 +295,7 @@ public:
     _time_last = steady_clock::now(); }
 
   void engine_wght_update(const FNameID &wfname, uint64_t crc64) noexcept {
-    _record_wght += string(" and later");
+//    _record_wght += string(" and later");
     _id_wght    = wfname.get_id();
     _crc64_wght = crc64;
     engine_out("setoption name USI_WeightFile value %s", wfname.get_fname()); }
