@@ -19,12 +19,12 @@ debug:
 
 clang:
 	@echo "Detected OS: ${THE_OS}"
-	$(MAKE) CC=clang-5.0 CXX=clang++-5.0 \
+	$(MAKE) CC=clang CXX=clang++ \
 		CXXFLAGS='$(CXXFLAGS) -Wall -Wextra -Wno-missing-braces -O3 -flto -march=native -std=c++14 -DNDEBUG' \
 		LDFLAGS='$(LDFLAGS) -flto -fuse-linker-plugin' \
 		$(PROGRAM)
 
-DYNAMIC_LIBS = -lboost_system -lboost_filesystem -lboost_program_options -lpthread -lz -llzma -lrt
+DYNAMIC_LIBS = -lboost_system -lboost_filesystem -lboost_program_options -lpthread -lz -llzma # -lrt
 LIBS =
 
 ifeq ($(THE_OS),Linux)
@@ -39,7 +39,12 @@ ifeq ($(THE_OS),Darwin)
 	LIBS += -framework Accelerate
 	LIBS += -framework OpenCL
 #	CXXFLAGS += -I./Eigen
-	CXXFLAGS += -I/System/Library/Frameworks/Accelerate.framework/Versions/Current/Headers
+	CXXFLAGS += -I/System/Library/Frameworks/Accelerate.framework/Versions/Current/Headers -I/usr/local/opt/openblas/include
+	CXXFLAGS += -Xpreprocessor -fopenmp
+	LDFLAGS  += -L/usr/local/opt/openblas/lib -lomp -lopenblas
+else
+	CXXFLAGS += -fopenmp
+	LDFLAGS  += -fopenmp
 endif
 
 # for MKL instead of OpenBLAS
@@ -54,8 +59,6 @@ ifeq ($(CPU_ONLY), 1)
 CXXFLAGS += -DUSE_CPU_ONLY
 endif
 CXXFLAGS += -I. -I../common -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING
-CXXFLAGS += -fopenmp
-LDFLAGS  += -fopenmp
 
 CPPFLAGS += -MD -MP
 

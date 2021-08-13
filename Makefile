@@ -50,7 +50,7 @@ endif
 
 CXXFLAGS += -std=c++11 -Wextra -Ofast -march=native -mtune=native
 CPPFLAGS += -MD -MP -Isrc/common -DUSE_SSE4
-LDFLAGS  += -llzma -lpthread -lrt
+LDFLAGS  += -llzma -lpthread # -lrt
 
 TARGETS         := $(addprefix bin/, aobaz autousi server playshogi crc64 extract net-test gencode ocldevs)
 AUTOUSI_BASES   := $(addprefix src/autousi/, autousi client play) $(addprefix src/common/, iobase option jqueue xzi err shogibase osi child nnet nnet-cpu nnet-ocl nnet-srv opencli)

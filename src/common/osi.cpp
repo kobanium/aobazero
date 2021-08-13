@@ -525,7 +525,11 @@ public:
     if (clock_gettime(CLOCK_REALTIME, &ts) < -1)
       die(ERR_CLL("clock_gettime"));
     ts.tv_sec += timeout;
+    #ifdef __APPLE__
+    if (0 <= sem_wait(_psem)) return 0;
+    #else
     if (0 <= sem_timedwait(_psem, &ts)) return 0;
+    #endif
     if (errno != ETIMEDOUT) die(ERR_CLL("sem_timedwait"));
     return -1; }
   bool ok() const noexcept { return _psem != SEM_FAILED; } };
