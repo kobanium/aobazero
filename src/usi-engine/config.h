@@ -78,7 +78,9 @@ static constexpr auto KOMI = 7.5f;
  */
 #if !defined(__APPLE__) && !defined(__MACOSX)
 #if defined(USE_BLAS)
+#if !defined(USE_OPENBLAS)
 #define USE_OPENBLAS
+#endif
 #endif
 #endif
 

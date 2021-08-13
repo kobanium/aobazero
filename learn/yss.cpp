@@ -1,4 +1,4 @@
-// Copyright (C) 2019 Team AobaZero
+// 2019 Team AobaZero
 // This source code is in the public domain.
 /***************************************************************************/
 /*                    YSS 13  (Yamashita Shogi System)                     */
@@ -129,7 +129,7 @@ void shogi::initialize_yss()
 	make_unique_from_to();
 	make_move_id_c_y_x();
 
-	hyouji();
+//	hyouji();
 	PRT("size(shogi)=%d,hash=%d,int=%d,long=%d,float=%d,double=%d\n",sizeof(shogi),sizeof(HASH),sizeof(int),sizeof(long),sizeof(float),sizeof(double));
 	PRT("kb_c[][]=%d,kb_c[]=%d,kb_c[][]=%d\n",sizeof(kb_c),sizeof(kb_c[0]),sizeof(kb_c[0][0]) );
 }
@@ -987,12 +987,17 @@ int shogi::LoadCSA()
 					}
 					str[n-1] = 0;
 					if ( count==0 ) {
-						all_visit = atoi(str);
-						pz->v_playouts_sum.push_back(all_visit);
+						if ( strstr(str,"v=") ) {
+							count--;
+						} else {
+							all_visit = atoi(str);
+							pz->v_playouts_sum.push_back(all_visit);
+						}
 					} else {
 						if ( (count&1)== 0 ) {
 							if ( b0==0 && b1==0 ) debug();
-							int v = atoi(str); 
+							int v = atoi(str);
+							if ( v > 0xffff ) v = 0xffff;
 							sum_visit += v;
 							unsigned short m = (((unsigned char)b0) << 8) | ((unsigned char)b1); 
 							int move_visit = (m << 16) | v;
@@ -1139,12 +1144,14 @@ P-00AL
 			ZERO_DB *pz = &zdb_one;
 			pz->moves = tesuu;
 			pz->result = ZD_DRAW;
+			pz->result_type = RT_NONE;
 			if ( strstr(lpLine,"TORYO") ) {
 				if ( tesuu & 1 ) {
 					pz->result = ZD_S_WIN;
 				} else {
 					pz->result = ZD_G_WIN;
 				}
+				pz->result_type = RT_TORYO;
 			}
 			if ( strstr(lpLine,"KACHI") ) {
 				if ( tesuu & 1 ) {
@@ -1152,7 +1159,25 @@ P-00AL
 				} else {
 					pz->result = ZD_S_WIN;
 				}
+				pz->result_type = RT_KACHI;
 			}
+			// %+ILLEGAL_ACTION 先手(下手)の反則行為により、後手(上手)の勝ち
+			// %-ILLEGAL_ACTION 後手(上手)の反則行為により、先手(下手)の勝ち
+			if ( strstr(lpLine,"+ILLEGAL_ACTION") ) {	// 2020/03/27 連続王手の後、王側が逃げて千日手確定のみ
+				pz->result = ZD_G_WIN;
+				pz->result_type = RT_S_ILLEGAL_ACTION;
+			}
+			if ( strstr(lpLine,"-ILLEGAL_ACTION") ) {
+				pz->result = ZD_S_WIN;
+				pz->result_type = RT_G_ILLEGAL_ACTION;
+			}
+			if ( strstr(lpLine,"SENNICHITE") ) {
+				pz->result_type = RT_SENNICHITE;
+			}
+			if ( strstr(lpLine,"CHUDAN") ) {
+				pz->result_type = RT_CHUDAN;
+			}
+
 			int i,sum=0;
 			for (i=0;i<(int)pz->vv_move_visit.size();i++) {
 				sum += pz->vv_move_visit[i].size();

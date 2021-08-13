@@ -27,17 +27,17 @@ Silverら（2017a, 2018）は囲碁やチェスでの実験結果も報告して
 
 CPUだけのマシンは
 ```
-aobazero-1.3-w64-cpu-only.zip
+aobazero-1.5-w64-cpu-only.zip
 ```
 GPUがついたマシンは
 ```
-aobazero-1.3-w64-opencl.zip
+aobazero-1.5-w64-opencl.zip
 ```
 をダウンロード、展開して、中のclick_me.batを実行してください。
 
 Linuxの方は
 ```
-aobazero-1.3.tar.gz
+aobazero-1.5.tar.gz
 ```
 を展開してmakeしてから
 ```
@@ -47,20 +47,28 @@ aobazero-1.3.tar.gz
 
 # 将棋所で遊んでみたい
 CPU版をダウンロードして、click_me.batを実行します。しばらくすると最新のネットワークの重みファイルをダウンロードして「self-play start」が表示されて棋譜の生成を開始します。すかさずCtrl + Cで停止させます。(signal 1 caught)が表示されて、しばらく待つと止まります。  
-weight_save/の下にw000000000468.txt という230MBほどのファイルが作られます。
-(468、の数値は異なります)
+weight_save/の下にw000000002184.txt という230MBほどのファイルが作られます。
+(2184、の数値は異なります)
 
-aobazero-1.3-w64-cpu-only.zipに同梱されているaobaz.batを編集します。最後の1行が以下のようになっています。
+aobazero-1.5-w64-cpu-only.zipに同梱されているaobaz.batを編集します。最後の1行が以下のようになっています。
 ```
-bin/aobaz -q -i -p 30 -w weight_save\w000000000467.txt
+bin\aobaz -q -i -p 100 -w weight-save\w000000002184.txt
 ```
-この467の部分を実際にダウンロードしてきたファイル名に合わせて書き直し、保存します。  
+この2184の部分を実際にダウンロードしてきたファイル名に合わせて書き直し、保存します。
 将棋所にaobaz.batをエンジンとして登録します。  
-"-p 30"の30を増やすと強くなりますが、思考時間が長くなります。  
-CPU版は30で5秒ほどかかります。GPU版は800で3秒ほどかかります(GPUの性能に依存します)。  
-  
-将棋所はusiエンジンを動作させる将棋用のGUIです。こちらで入手できます。  
-将棋所のページ<http://shogidokoro.starfree.jp/>
+"-p 100"の100を増やすと強くなりますが、思考時間が長くなります。
+CPU版は100で5秒ほどかかります。GPU版は4000で3秒ほどかかります(GPUの性能に依存します)。
+
+将棋所はusiエンジンを動作させる将棋用のGUIです。こちらで入手できます。
+将棋所のページ
+<http://shogidokoro.starfree.jp/>
+
+# ShogiGUIで遊んでみたい
+AobaZeroはShogiGUIでも動作しますがengineに送られてくる局面が初期局面からの手順(position startpos moves ...)ではなく、
+現在局面のみ(position sfen ...)なので、過去7局面をNNの入力に必要とするAobaZeroの本来の実力は出せません。
+
+ShogiGUIのページ
+<http://shogigui.siganus.com/>
 
 # AobaZeroの紹介ページ
 今までに作成した棋譜や重み、棋譜のサンプルなどを公開しています。  
@@ -77,4 +85,4 @@ usiエンジンであるaobazはGPL v3です。それ以外はpublic domainで�
 # 参考文献
  - D. Silver, et al. (2017a). Mastering the game of Go without human knowledge, *Nature*, **550**, 354-359.
  - D. Silver, et al. (2017b).  Mastering Chess and Shogi by Self-Play with a General Reinforcement Learning Algorithm, arXiv:1712.01815.
- - D. Silver, et al. (2018). A general reinforcement learning algorithm that masters chess, shogi, and Go through self-play, *Science*, **362**, 1140-1144 ([a preprint version is avairable online](https://deepmind.com/documents/260/alphazero_preprint.pdf)).
+ - D. Silver, et al. (2018). A general reinforcement learning algorithm that masters chess, shogi, and Go through self-play, *Science*, **362**, 1140-1144 ([a preprint version is avairable online](https://deepmind.com/research/publications/general-reinforcement-learning-algorithm-masters-chess-shogi-and-go-through-self-play)).

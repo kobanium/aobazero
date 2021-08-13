@@ -26,7 +26,7 @@ public:
   ~WghtFile() noexcept;
   uint64_t get_crc64() const noexcept { return _crc64; }
   uint get_len_fname() const noexcept { return _fname.get_len_fname(); }
-  const char *get_fname() const noexcept { return _fname.get_fname(); }
+  const FNameID &get_fname() const noexcept { return _fname; }
   int64_t get_id() const noexcept { return _fname.get_id(); }
 };
 
@@ -38,11 +38,11 @@ class Client {
   std::unique_ptr<JQueue<Job>> _pJQueue;
   std::unique_ptr<char []> _prec_xz, _saddr;
   std::thread _thread_reader, _thread_sender;
-  std::mutex _m;
+  std::mutex _m_wght;
   std::shared_ptr<const WghtFile> _wght;
   char _buf_wght_time[256];
   FName _dwght;
-  int _ver_engine;
+  float _th_resign;
   uint _max_retry, _retry_count, _recvTO, _recv_bufsiz, _sendTO, _send_bufsiz;
   uint _read_bufsiz, _port, _keep_wght;
   
@@ -62,13 +62,12 @@ public:
 	     uint recv_bufsiz, uint sendTO, uint send_bufsiz, uint max_retry,
 	     uint size_queue, uint keep_wght) noexcept;
   void end() noexcept;
+  uint64_t get_wght_id() noexcept;
   std::shared_ptr<const WghtFile> get_wght() noexcept;
-
   const char *get_buf_wght_time() { return _buf_wght_time; }
-  uint64_t get_wght_id() { return _wght_id; }
   bool is_downloading() { return _downloading; }
   uint get_nsend() const noexcept { return _nsend; };
   uint get_ndiscard() const noexcept { return _ndiscard; }
-  int get_ver_engine() const noexcept { return _ver_engine; }
+  float get_th_resign() const noexcept { return _th_resign; }
   bool has_conn() const noexcept { return _has_conn; }
 };

@@ -15,10 +15,9 @@
 
 namespace SAux {
   using uint = unsigned int;
-  enum class Mode { CSA, USI };
-  constexpr Mode csa = Mode::CSA, usi = Mode::USI;
+  enum class Mode { CSA_MODE, USI_MODE };
+  constexpr Mode csa = Mode::CSA_MODE, usi = Mode::USI_MODE;
   constexpr unsigned int mode_size     = 2U;
-  constexpr unsigned int maxlen_path   = 513U;
   constexpr unsigned int maxsize_moves = 1024U;
   constexpr unsigned int file_size = 9U, rank_size = 9U;
   constexpr unsigned int ray_rank  = 0U, ray_file  = 1U;
@@ -90,7 +89,7 @@ public:
 };
 
 namespace SAux {
-  constexpr uint ublack(0), uwhite(1U);
+  constexpr uint ublack(0U), uwhite(1U);
   constexpr Color black(0U), white(1U); }
 
 class BMap {
@@ -246,6 +245,10 @@ public:
     assert(ok()); return tbl_sq_name[static_cast<int>(mode)][_u]; }
   constexpr uint to_ray(const Sq &sq) const noexcept {
     return tbl_sq_ray[_u][sq.to_u()]; }
+  constexpr uchar to_dir(const Sq &sq) const noexcept {
+    return tbl_sq_dir[_u][sq.to_u()]; }
+  constexpr uint to_distance(const Sq &sq) const noexcept {
+    return tbl_sq_distance[_u][sq.to_u()]; }
   constexpr const BMap & to_obstacle(const Sq &sq) const noexcept {
     return tbl_sq_obstacle[_u][sq.to_u()]; }
   constexpr const BMap & to_bmap() const noexcept {
@@ -305,7 +308,7 @@ class Pc {
 
 public:
   static constexpr uint all_size = 15U, ok_size = 14U, hand_size = 7U;
-  static constexpr uint unpromo_size = 8U, npawn = 18U;
+  static constexpr uint unpromo_size = 8U, npawn = 18U, npc = 40U;
   static constexpr uchar num_array[hand_size] = {18U, 4U, 4U, 4U, 4U, 2U, 2U};
   explicit constexpr Pc() noexcept : _u(14U) {}
   explicit constexpr Pc(uint u) noexcept :
@@ -326,7 +329,7 @@ public:
   constexpr bool is_slider() const noexcept { return tbl_slider[_u]; }
   constexpr bool can_promote() const noexcept { return _u < 7U && _u != 4U; }
   constexpr bool capt_ok() const noexcept { return _u < 14U && _u != 7U; }
-  constexpr uint to_u() const noexcept { return _u; }
+  constexpr uchar to_u() const noexcept { return _u; }
   const char *to_str(const SAux::Mode &mode = SAux::csa) const noexcept {
     assert(ok()); return tbl_pc_name[static_cast<int>(mode)][_u]; }
   constexpr Pc to_proPc() const noexcept { return Pc(tbl_promote[_u]); }
@@ -441,6 +444,7 @@ class Board {
       return c == v.c && pc == v.pc; }
     constexpr bool operator!=(const Value &v) const noexcept {
       return c != v.c || pc != v.pc; } };
+  ZKey _zkey;
   BMap _bm_pawn_atk[Color::ok_size];
   BMap _bm_sub_mobil[Color::ok_size][Pc::unpromo_size];
   BMap _bm_horse[Color::ok_size];
@@ -452,7 +456,6 @@ class Board {
   uchar _hand[Color::ok_size][Pc::hand_size];
   uchar _pawn_file[Color::ok_size][SAux::file_size];
   uchar _hand_color[Color::ok_size];
-  ZKey _zkey;
   ZKey make_zkey(const Color &turn) const noexcept;
   const BMap & to_atk(const Sq &sq, uint ray) const noexcept;
   Value get_value_wbt(const Sq &sq) const noexcept {
@@ -507,7 +510,7 @@ public:
     assert(c.ok()); return _bm_horse[c.to_u()]; }
   const BMap & get_bm_dragon(const Color &c) const noexcept {
     assert(c.ok()); return _bm_dragon[c.to_u()]; }
-  uint get_num_hand(const Color &c, const Pc &pc) const noexcept {
+  uchar get_num_hand(const Color &c, const Pc &pc) const noexcept {
     assert(c.ok() && pc.hand_ok()); return _hand[c.to_u()][pc.to_u()]; }
   bool have_pawn(const Color &c, int file) const noexcept {
     return 0 < _pawn_file[c.to_u()][file]; }
@@ -557,15 +560,17 @@ namespace SAux {
   constexpr NodeType illegal_win[2] = { illegal_bwin, illegal_wwin };
 }
 
+template<unsigned int N>
 class Node {
   using uint   = unsigned int;
   using ushort = unsigned short;
   using uchar  = unsigned char;
-  ZKey _path[SAux::maxlen_path];
+  ZKey _path[N];
   Board _board;
-  Color _turn;
-  ushort _len_incheck[SAux::maxlen_path + 1U];
+  ushort _len_incheck[N + 1U];
   ushort _len_path;
+  uchar _count_repeat;
+  Color _turn;
   NodeType _type;
 
 public:
@@ -575,6 +580,7 @@ public:
   bool is_nyugyoku() const noexcept { return _board.is_nyugyoku(_turn); }
   uint get_len_path() const noexcept { return _len_path; }
   Color get_turn() const noexcept { return _turn; }
+  uint get_count_repeat() const noexcept { return _count_repeat; }
   const Board &get_board() const noexcept { return _board; }
   FixLStr<512U> to_str() const noexcept { return _board.to_str(_turn); }
   bool ok() const noexcept;
@@ -586,18 +592,19 @@ public:
 			  SAux::Mode mode = SAux::csa) noexcept;
 };
 
+template<unsigned int N>
 class MoveSet {
   using uint   = unsigned int;
   using ushort = unsigned short;
   Action _moves[SAux::maxsize_moves];
-  uint _uend;
+  ushort _uend;
   
   template <uint UPCMobil>
   void add(const Color &turn, const Sq &from, const Sq &to, const Pc &pc,
 	   const Pc &cap) noexcept;
   void gen_pawn(const Board &board, const BMap &bm_target, const Color &turn)
     noexcept;
-  void gen_king(Node &node, const Color &turn) noexcept;
+  void gen_king(Node<N> &node, const Color &turn) noexcept;
   template <uint UPCMobil>
   void gen_nsg(const Board &board, const Color &turn, const BMap &bm_target,
 	       std::function<BMap(const Sq &, const Color &)> fatk) noexcept;
@@ -607,14 +614,15 @@ class MoveSet {
 		  std::function<BMap(const Board &, const Color &,
 				     const Sq &)> fatk) noexcept;
   void gen_drop(Board &board, const Color &turn, BMap bm_target) noexcept;
-  void gen_all_evation(Node &node) noexcept;
-  void gen_all_no_evation(Node &node) noexcept;
+  void gen_all_evation(Node<N> &node) noexcept;
+  void gen_all_no_evation(Node<N> &node) noexcept;
   
 public:
   explicit MoveSet() noexcept {}
-  void gen_all(Node &node) noexcept;
+  void gen_all(Node<N> &node) noexcept;
 
   const Action & operator[](uint u) const noexcept {
     assert(u < _uend); return _moves[u]; }
   uint size() const noexcept { return _uend; }
+  bool ok() const noexcept;
 };

@@ -1,5 +1,8 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
+#ifdef _MSC_VER
+#  pragma warning( disable : 4127)
+#endif
 #include "err.hpp"
 #include "option.hpp"
 #include "osi.hpp"
@@ -9,10 +12,12 @@
 #include <limits>
 #include <map>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <cassert>
 #include <climits>
+#include <cmath>
 #include <cstring>
 using std::ifstream;
 using std::out_of_range;
@@ -22,6 +27,7 @@ using std::max;
 using std::map;
 using std::mutex;
 using std::string;
+using std::stringstream;
 using std::cout;
 using std::cerr;
 using std::endl;
@@ -38,14 +44,14 @@ void Config::read(const char *fname, map<string, string> &m) {
   string s1, s2;
   bool bFirst;
   while (ifs.getline(line, sizeof(line))) {
-    token = OSI::strtok(line, " :\t,=", &saveptr);
+    token = OSI::strtok(line, " \t,=:", &saveptr);
     if (token == NULL || token[0] == '#') continue;
     s1 = string(token);
 
     s2 = string("");
     bFirst = true;
     while (true) {
-      token = OSI::strtok(NULL, " :\t,=", &saveptr);
+      token = OSI::strtok(NULL, " \t", &saveptr);
       if (token == NULL || token[0] == '#') break;
       if (bFirst) { bFirst = false; s2 += string(token); continue; }
       s2 += " ";
@@ -61,13 +67,19 @@ T Config::get(const map<string, string> &m, const char *p, bool (*ok)(T)) {
   
   char *endptr;
   const char *token = m.at(p).c_str();
-  long long int v = strtoll(token, &endptr, 10);
+  if (std::is_floating_point<T>::value == true) {
+    long double v = strtold(token, &endptr);
+    if (endptr == token || *endptr != '\0' || v == HUGE_VALL
+	|| numeric_limits<T>::max() < v || v < numeric_limits<T>::lowest()
+	|| !ok(static_cast<T>(v)))
+      throw ERR_INT("value of option %s invalid", p);
+    return static_cast<T>(v); }
 
+  long long int v = strtoll(token, &endptr, 10);
   if (endptr == token || *endptr != '\0' || v == LLONG_MAX || v == LLONG_MIN
       || numeric_limits<T>::max() < v || v < numeric_limits<T>::min()
       || !ok(static_cast<T>(v)))
     throw ERR_INT("value of option %s invalid", p);
-
   return static_cast<T>(v); }
 
 const char *Config::get_cstr(const map<string, string> &m, const char *p,
@@ -77,6 +89,15 @@ const char *Config::get_cstr(const map<string, string> &m, const char *p,
   
   if (maxlen < s.size() + 1) throw ERR_INT("value of option %s too long", p);
   return s.c_str(); }
+
+vector<string>
+Config::get_vecstr(const map<string, string> &m, const char *p) {
+  assert(p);
+  vector<string> vec;
+  stringstream ss( m.at(string(p)) );
+  string s;
+  while (ss >> s) vec.push_back(s);
+  return vec; }
 
 template<typename T>
 vector<T> Config::getv(const map<string, string> &m, const char *p,
@@ -102,6 +123,8 @@ vector<T> Config::getv(const map<string, string> &m, const char *p,
   if (ret.empty()) throw ERR_INT("value of option %s invalid", p);
   return ret; }
 
+template float Config::get<float>(const map<string, string> &, const char *,
+				  bool (*)(float));
 template ushort Config::get<ushort>(const map<string, string> &, const char *,
 				    bool (*)(ushort));
 template uint Config::get<uint>(const map<string, string> &, const char *,

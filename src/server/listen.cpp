@@ -6,7 +6,7 @@
 #include "listen.hpp"
 #include "logging.hpp"
 #include "osi.hpp"
-#include "version.hpp"
+#include "param.hpp"
 #include <chrono>
 #include <exception>
 #include <fstream>
@@ -369,7 +369,7 @@ void Listen::handle_send(Peer &peer) noexcept {
     char buf[8];
     buf[0] = static_cast<char>(Ver::major);
     buf[1] = static_cast<char>(Ver::minor);
-    int_to_bytes<ushort>(Ver::usi_engin, buf + 2);
+    int_to_bytes<ushort>(RecKeep::get().get_th16(), buf + 2);
     buf[4] = buf[5] = buf[6] = buf[7] = 0;
 
     ssize_t ret = send_wrap(peer, buf, 8, 0);

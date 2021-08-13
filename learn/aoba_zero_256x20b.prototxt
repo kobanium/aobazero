@@ -1311,7 +1311,7 @@ layer {
 
 
 layer {
-  name: "cross_entroy_scale"
+  name: "cross_entroy_scale" # if same name, Caffe uses *.caffemodel's value.
   type: "Scale"
   bottom: "cross_entropy_sum"
   top: "cross_entropy_scale"
@@ -1324,7 +1324,7 @@ layer {
     num_axes: 0
     filler {
       type: "constant"
-      value: 0.015625 # 1 / batch_size
+      value: 0.015625 # 1 / batch_size. if you change batch_size, you must change layer's "name" too.
     }
     bias_term: false
   }

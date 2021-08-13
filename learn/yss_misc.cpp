@@ -1,4 +1,4 @@
-// Copyright (C) 2019 Team AobaZero
+// 2019 Team AobaZero
 // This source code is in the public domain.
 // yss_misc.cpp
 #include <stdio.h>
@@ -1131,7 +1131,7 @@ int print_time()
 {
 	int year,month,day,week,hour,minute,second;
 	int timer = get_localtime(&year, &month, &day, &week, &hour, &minute, &second);
-	PRT("%4d-%02d-%02d %02d:%02d:%02d\n", year, month, day, hour, minute, second);
+	PRT("%4d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, minute, second);
 	return timer;
 }
 
@@ -1646,3 +1646,94 @@ void shogi::print_path()
 	}
 	PRT("\n");
 }
+
+
+#ifdef _DEBUG
+int shogi::check_move( int bz, int az, int tk, int nf )
+{
+	return check_move_sub( bz, az, tk, nf, 1 );
+}
+int shogi::check_move_hash( int bz, int az, int tk, int nf )
+{
+//	return 1;
+	return check_move_sub( bz, az, tk, nf, 0 );
+}
+
+// able_move と大差ないが、手番によるチェックを外す。---> 現在は YSS_KI2.C から呼んでいるだけ！しかもデバッグ用
+int shogi::check_move_sub( int bz, int az, int tk, int nf, int kiki_check_flag )
+{
+	int i,k,n,loop;
+
+	if ( bz == 0xff ) {	// 駒打ちの時
+		if ( init_ban[az] != 0 ) return(0);	// 既に駒があるところに打とうとしている。
+		if ( tk > 0x80 ) {
+			if ( mo_c[tk & 0x0f] == 0 ) return(0);
+			if ( tk == 0x81 && nifu_c(az) == 0  ) return(0);
+			if ( tk <= 0x82 && az > 0x90 ) return(0);	// 行き所がない
+			if ( tk == 0x83 && az > 0x80 ) return(0);
+		} else {
+			if ( mo_m[tk       ] == 0 ) return(0);
+			if ( tk == 0x01 && nifu_m(az) == 0  ) return(0);
+			if ( tk <= 0x02 && az < 0x20 ) return(0);	// 行き所がない
+			if ( tk == 0x03 && az < 0x30 ) return(0);
+		}
+		return (1);
+	}
+
+	if ( nf == 0x08 && (init_ban[bz] & 0x0f) > 0x08 ) {
+		PRT("成り駒がなっています！！！ move Error!. bz,az,nf = %x,%x,%x \n",bz,az,nf);
+		return 0;
+	}
+
+	k = init_ban[bz];
+	if ( k == 0 ) return(0);	// 盤上にない駒を動かそうとしている。
+	if ( tk == 0xff ) return 0;	// 壁に突っ込む。
+	if ( init_ban[az] != tk	) {
+		PRT("盤上にない駒を取ろうとしている！\n");
+/*	
+hyouji();
+PRT("bz,az,tk,nf=%x,%x,%x,%x :read_max=%d \n",bz,az,tk,nf,read_max );
+print_tejun();
+PRT("hash_code1,2 = %x,%x hash_motigoma = %x\n",hash_code1,hash_code2,hash_motigoma);
+*/
+		return(0);
+	}
+
+	n = ban[bz];	// 駒番号
+
+	if ( k > 0x80 ) {	// COM の駒
+		if ( nf == 0x08 ) {
+			if ( k >= 0x88 || k == 0x85 ) return(0);	// 成駒と王と金は成れない
+			if ( az < 0x70 && bz < 0x70 ) return(0);	// 成れない。
+		} else {
+			if ( k == 0x83 && az > 0x80 ) return(0);	// 不成は許されない。
+			if ( k <= 0x82 && az > 0x90 ) return(0);	// 不成は許されない。
+		}
+
+		if ( tk > 0x80 ) return (0);	// 自分の駒を取っている。
+
+		if ( kiki_check_flag == 0 ) return 1;	// 利きのデータをチェックしない場合
+		loop = kiki_c[az];
+		for (i=0; i<loop; i++) {
+			if ( kb_c[az][i] == n ) return(1);	// OK! 動かせる！
+		}
+	} else {
+		if ( nf == 0x08 ) {
+			if ( k >= 0x08 || k == 0x05 ) return(0);	// 成駒と王と金は成れない
+			if ( az > 0x40 && bz > 0x40 ) return(0);	// 成れない。
+		} else {
+			if ( k == 0x03 && az < 0x30 ) return(0);	// 不成は許されない。---> なぜかコメントにしていた。理由は？
+			if ( k <= 0x02 && az < 0x20 ) return(0);	// 不成は許されない。---> なぜかコメントにしていた。理由は？
+		}
+
+		if ( tk && tk < 0x80 ) return (0);	// 自分の駒を取っている。
+
+		if ( kiki_check_flag == 0 ) return 1;	// 利きのデータをチェックしない場合
+		loop = kiki_m[az];
+		for (i=0; i<loop; i++) {
+			if ( kb_m[az][i] == n ) return(1);
+		}
+	}
+	return (0);	// 動けない
+}
+#endif

@@ -60,6 +60,8 @@ public:
 };
 
 template <typename T> class JQueue;
+class EMAKeep;
+
 class RecKeep {
   using uint = unsigned int;
   struct RedunValue {
@@ -68,6 +70,7 @@ class RecKeep {
     RedunValue & operator=(const RedunValue &value) noexcept {
       no = value.no; count = value.count; return *this; }
   };
+  std::unique_ptr<EMAKeep> _ema_keep_ptr;
   std::thread _thread;
   std::unique_ptr<JQueue<class JobIP>> _pJQueue;
   std::set<FNameID> _pool;
@@ -99,10 +102,12 @@ public:
   
   void start(Logger *logger, const char *darch, const char *dpool,
 	     uint maxlen_job, size_t maxlen_rec, size_t maxlen_recv,
-	     uint log2_nindex_redun, uint minlen_play, uint minave_child)
+	     uint log2_nindex_redun, uint minlen_play, uint minave_child,
+	     uint resign_ema_deno, float resign_ema_init, float resign_mrate)
     noexcept;
     
   void end() noexcept;
   void transact(const JobIP *pJob) noexcept;
   void add(const char *prec, size_t len_rec, const OSI::IAddr &iaddr) noexcept;
+  uint get_th16() const noexcept;
 };

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 Team AobaZero
+// 2019 Team AobaZero
 // This source code is in the public domain.
 // yss_dcnn.h
 #ifndef INCLUDE_YSS_DCNN_H_GUARD	//[
@@ -46,7 +46,8 @@ typedef struct ZERO_DB {
 	uint64 date;	// 棋譜の日付(新しいものから順に)
 	int weight_n;	// weight番号
 	int index;		// 通し番号
-	int result;		// 結果。先手勝ち、後手勝ち、引き分け、持将棋(先手勝ち、後手勝ち、引き分け)、千日手、
+	int result;		// 結果。先手勝ち、後手勝ち、引き分け
+	int result_type;// 投了、千日手、中断(513手)、宣言勝ち、連続王手の王逃げによる反則勝、
 	int moves;		// 手数(棋譜のサイズと同じ)
 	vector <unsigned short> v_kif;			// 棋譜
 	vector <unsigned short> v_playouts_sum;	// Rootの探索数。通常は800固定
@@ -57,6 +58,8 @@ typedef struct ZERO_DB {
 extern ZERO_DB zdb_one;	// 棋譜読み込みで使用
 
 enum { ZD_DRAW, ZD_S_WIN, ZD_G_WIN };
+enum { RT_NONE, RT_TORYO, RT_KACHI, RT_SENNICHITE, RT_G_ILLEGAL_ACTION, RT_S_ILLEGAL_ACTION, RT_CHUDAN };
+
 
 void free_zero_db_struct(ZERO_DB *p);
 void start_zero_train(int *, char ***);
