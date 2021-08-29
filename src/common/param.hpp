@@ -16,8 +16,16 @@ namespace Param {
   constexpr uint len_seq_prn          = 7008768U;
   constexpr char name_autousi[]       = "/tmp/autousi.jBQoNA7kEd";
   constexpr char name_server[]        = "/tmp/server.jBQoNA7kEd";
+#ifdef __APPLE__
+  // macOSではSHM_NAME_MAXの定義がなく31固定の模様。オリジナルの名前はmacOSでは長すぎる。
   constexpr char name_sem_nnet[]      = "/sn.jBQoNA7kEd";
   constexpr char name_sem_lock_nnet[] = "/sln.jBQoNA7kEd";
   constexpr char name_seq_prn[]       = "/msp.jBQoNA7kEd";
   constexpr char name_mmap_nnet[]     = "/mn.jBQoNA7kEd";
+#else
+  constexpr char name_sem_nnet[]      = "/sem-nnet.jBQoNA7kEd";
+  constexpr char name_sem_lock_nnet[] = "/sem-lock-nnet.jBQoNA7kEd";
+  constexpr char name_seq_prn[]       = "/mmap-seq-prn.jBQoNA7kEd";
+  constexpr char name_mmap_nnet[]     = "/mmap-nnet.jBQoNA7kEd";
+#endif
 }

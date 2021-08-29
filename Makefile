@@ -1,5 +1,7 @@
 include Makefile.config
 
+THE_OS := $(shell uname -s)
+
 ENABLE_GDBINFO_AOBA ?= 0
 ifeq ($(ENABLE_GDBINFO_AOBA), 1)
 	CXXFLAGS += -g
@@ -17,7 +19,11 @@ USE_OpenCL_AOBA ?= 0
 ifeq ($(USE_OpenCL_AOBA), 1)
 	CPPFLAGS += -DUSE_OPENCL_AOBA
 	TARGETS  += bin/ocldevs
-	LIB_OpenCL := -lOpenCL
+	ifeq ($(THE_OS),Darwin)
+		LIB_OpenCL := -framework OpenCL
+	else
+		LIB_OpenCL := -lOpenCL
+	endif
 	CPPFLAGS += -I$(OpenCL_INC_AOBA)
 endif
 
@@ -50,7 +56,11 @@ endif
 
 CXXFLAGS += -std=c++11 -Wextra -Ofast -march=native -mtune=native
 CPPFLAGS += -MD -MP -Isrc/common -DUSE_SSE4
-LDFLAGS  += -llzma -lpthread # -lrt
+LDFLAGS  += -llzma -lpthread
+ifneq ($(THE_OS),Darwin)
+# macOSではlibrtのリンクは不要
+LDFLAGS  += -lrt
+endif
 
 TARGETS         := $(addprefix bin/, aobaz autousi server playshogi crc64 extract net-test gencode ocldevs)
 AUTOUSI_BASES   := $(addprefix src/autousi/, autousi client play) $(addprefix src/common/, iobase option jqueue xzi err shogibase osi child nnet nnet-cpu nnet-ocl nnet-srv opencli)

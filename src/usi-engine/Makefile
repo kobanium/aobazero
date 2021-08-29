@@ -24,7 +24,11 @@ clang:
 		LDFLAGS='$(LDFLAGS) -flto -fuse-linker-plugin' \
 		$(PROGRAM)
 
-DYNAMIC_LIBS = -lboost_system -lboost_filesystem -lboost_program_options -lpthread -lz -llzma # -lrt
+DYNAMIC_LIBS = -lboost_system -lboost_filesystem -lboost_program_options -lpthread -lz -llzma
+ifneq ($(THE_OS),Darwin)
+# macOSではlibrtのリンクは不要
+DYNAMIC_LIBS  += -lrt
+endif
 LIBS =
 
 ifeq ($(THE_OS),Linux)
@@ -40,11 +44,7 @@ ifeq ($(THE_OS),Darwin)
 	LIBS += -framework OpenCL
 #	CXXFLAGS += -I./Eigen
 	CXXFLAGS += -I/System/Library/Frameworks/Accelerate.framework/Versions/Current/Headers -I/usr/local/opt/openblas/include
-	CXXFLAGS += -Xpreprocessor -fopenmp
-	LDFLAGS  += -L/usr/local/opt/openblas/lib -lomp -lopenblas
-else
-	CXXFLAGS += -fopenmp
-	LDFLAGS  += -fopenmp
+	LDFLAGS  += -L/usr/local/opt/openblas/lib -lopenblas
 endif
 
 # for MKL instead of OpenBLAS
@@ -59,6 +59,13 @@ ifeq ($(CPU_ONLY), 1)
 CXXFLAGS += -DUSE_CPU_ONLY
 endif
 CXXFLAGS += -I. -I../common -DMINIMUM -DTLP -DCSA_LAN -DUSI -DYSS_ZERO -DNO_LOGGING
+ifeq ($(THE_OS),Darwin)
+CXXFLAGS += -Xpreprocessor -fopenmp
+LDFLAGS  += -lomp
+else
+CXXFLAGS += -fopenmp
+LDFLAGS  += -fopenmp
+endif
 
 CPPFLAGS += -MD -MP
 
