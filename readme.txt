@@ -1,7 +1,7 @@
 1. AobaZero が提供するプログラム群のビルド方法
 ---------------------------------------------
 
-Ubuntu, CentOS, Windows でビルドする方法を記します。OpenCL 1.2 の開発・実行
+Ubuntu, CentOS, Windows, macOS でビルドする方法を記します。OpenCL 1.2 の開発・実行
 環境か、CPU 上で実行可能な BLAS (IntelMKL か OpenBLAS) が必要になります。両
 方使うことも可能です。
 
@@ -123,6 +123,17 @@ Release、プラットフォームを x64 に設定しビルドします。「Wi
 の「C/C++、プリプロセッサ」カテゴリのプリプロセッサの定義で
 「;USE_OPENCL_AOBA」を削除して「;USE_CPU_ONLY」を最後に追加します。
 
+1.4 macOS
+
+macOS での手順を記します。
+
+- Boost や liblzma 等をインストール
+
+> brew install boost xz zlib
+
+- make を実行
+
+> make -j[number of threads]
 
 2. 計算資源を AobaZero のプロジェクトに提供する方法
 ---------------------------------------------------
