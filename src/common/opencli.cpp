@@ -30,9 +30,15 @@ using std::vector;
 using namespace OCL;
 using namespace ErrAux;
 
+#ifdef __APPLE__
+constexpr char options[]            = "-cl-std=CL1.2";
+constexpr char options_aggressive[] = "-cl-std=CL1.2 "
+                                      "-cl-fast-relaxed-math";
+#else
 constexpr char options[]            = "-Werror -cl-std=CL1.2";
 constexpr char options_aggressive[] = "-Werror -cl-std=CL1.2 "
                                       "-cl-fast-relaxed-math";
+#endif
 
 class OCL::Memory_impl {
   cl_mem _mem;
