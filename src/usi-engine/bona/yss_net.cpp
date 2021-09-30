@@ -883,7 +883,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 	if ( all_sum > legal_sum && legal_sum > 0 ) mul = 1.0f / legal_sum;
 	for ( i = 0; i < phg->child_num; i++ ) {
 		CHILD *pc = &phg->child[i];
-		if ( 0 && ply==1 && i < 30 ) {
+		if ( 0 && ply==1 && i < 200 ) {
 			PRT("%3d:%s(%08x), bias=%8f->(%8f)\n",i,str_CSA_move(pc->move), get_yss_packmove_from_bona_move(pc->move), pc->bias, pc->bias*mul);
 		}
 		pc->bias *= mul;
@@ -1140,6 +1140,105 @@ int get_yss_packmove_from_bona_move(int move)
 	int nf = is_promote ? 0x08 : 0x00;
 	return pack_te(bz,az,tk,nf);
 }
+
+/*
+// 着手不可能な手は0を返す。
+int shogi::get_packmove_from_2187_policy(int z2187, bool fGoteTurn)
+{
+	int bz = 0,az = 0,tk = 0,nf = 0;
+	if ( z2187 >= 81*20 ) {	// drop
+		bz = 0xff;
+		z2187 -= 81*20;
+	}
+	if ( z2187 >= 81*10 ) {	// nari
+		nf = 0x08;
+		z2187 -= 81*10;
+	}
+	int dir;
+	for (dir=9;dir>0;dir--) {
+		if ( z2187 >= 81*dir ) {
+			z2187 -= 81*dir;
+			break;
+		}
+	}
+	int y = z2187 / 9;
+	int x = z2187 - y*9;
+	if ( y<0 || y>8 || x<0 || x>8 ) DEBUG_PRT("");
+	if ( fGoteTurn ) {
+		y = 8 - y;
+		x = 8 - x;
+	}
+	az = (y+1)*16 + (x+1);
+	if ( bz==0xff && dir >= 7 ) DEBUG_PRT("");
+	if ( bz==0xff ) {
+		tk = dir + 1;
+		if ( fGoteTurn ) tk += 0x80;
+	} else if ( dir == 8 ) {
+		bz = az + 0x21;
+		if ( fGoteTurn ) bz = az - 0x21;
+	} else if ( dir == 9 ) {
+		bz = az + 0x1f;
+		if ( fGoteTurn ) bz = az - 0x1f;
+	} else {
+		// z8[8] = { +0x01, +0x11, +0x10, +0x0f, -0x01, -0x11, -0x10, -0x0f };
+		int dz = z8[dir];
+		if ( fGoteTurn ) dz = -dz;
+		for (bz = az+dz; ;bz += dz) {
+			if ( init_ban[bz] ) break;
+		}
+//		PRT("z_org=%4d,dir=%d,az=%02x,bz=%02x(%02x):",z_org,dir,az,bz, init_ban[bz]	);
+
+		if ( init_ban[bz] == 0xff ) return 0;
+//		if ( init_ban[bz] == 0xff || (bz&0xf0) > 0x90 || (bz&0x0f)==0 || (bz&0x0f)==0 ) DEBUG_PRT("z_org=%4d,az=%02x,dir=%d\n",z_org,az,dir);
+	
+	}
+	return pack_te(bz,az,tk,nf);
+}
+*/
+
+// 移動先、とその位置に来る方向(8+2)、成(8+2)、駒打ち、で 9x9 * (10 + 10 + 7) = 81*27 = 2187 通りで一意に決まる
+// https://tadaoyamaoka.hatenablog.com/entry/2017/05/07/155418
+// 盤外からの移動や、打てない駒、4段目以上での下から以外の移動での成、を削除すると 1600? 通り。指し手の最大が593だから半分近い！
+int get_dlshogi_policy(int bz, int az, int tk, int nf) {
+	int fDrop = 0;
+	int fNari = (nf!=0);
+	int dir = -1;
+	if ( bz==0xff ) {
+		fDrop = 1;
+		dir = (tk & 0x0f) - 1;
+	} else for (;;) {
+		// bz と az から方向を決定
+		if ( az == bz - 0x21 ) { dir = 8; break; }	// 桂馬
+		if ( az == bz - 0x1f ) { dir = 9; break; }
+		int dx =  (bz & 0x0f)     -  (az & 0x0f);
+		int dy = ((bz & 0xf0)>>4) - ((az & 0xf0)>>4);
+		if ( dx==0 ) {
+			if ( dy > 0 ) dir = 2;
+			if ( dy < 0 ) dir = 6;
+		} else if ( dy==0 ) {
+			if ( dx > 0 ) dir = 0;
+			if ( dx < 0 ) dir = 4;
+		} else {
+			if ( abs(dx) != abs(dy) ) DEBUG_PRT("");
+			if ( dx > 0 && dy > 0 ) dir = 1;
+			if ( dx < 0 && dy > 0 ) dir = 3;
+			if ( dx < 0 && dy < 0 ) dir = 5;
+			if ( dx > 0 && dy < 0 ) dir = 7;
+		}
+		break;
+	}
+	int ax = (az & 0x0f);
+	int ay = (az & 0xf0) >> 4;
+	int z81 = (ay-1)*9 + (ax-1);
+	int index = z81 + 81*dir + fNari*(81*10) + fDrop*(81*20);
+	if ( index < 0 || index >= 2187 || dir < 0 ) DEBUG_PRT("");
+	return index;
+}
+
+
+
+
+
 
 // alpha ... Chess = 0.3, Shogi = 0.15, Go = 0.03
 // epsilon = 0.25

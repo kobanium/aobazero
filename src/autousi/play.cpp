@@ -247,6 +247,13 @@ public:
     argv[argc++] = opt_m;
     argv[argc++] = opt_m_value;
 
+#if 1
+    char opt_mtemp[]       = "-mtemp";
+    char opt_mtemp_value[] = "1.3";
+    argv[argc++] = opt_mtemp;
+    argv[argc++] = opt_mtemp_value;
+#endif
+
     char opt_w[] = "-w";
     unique_ptr<char []> opt_w_value(new char [wfname.get_len_fname() + 1U]);
     memcpy(opt_w_value.get(),

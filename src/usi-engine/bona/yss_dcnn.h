@@ -86,6 +86,8 @@ int is_declare_win(tree_t * restrict ptree, int sideToMove);
 int is_declare_win_root(tree_t * restrict ptree, int sideToMove);
 int get_thread_id(tree_t * restrict ptree);
 bool is_selfplay();
+bool isKLDGainSmall(tree_t * restrict ptree, int sideToMove);
+void init_KLDGain_prev_dist_visits_total(int games_sum);
 
 // yss_net.cpp
 void init_network();

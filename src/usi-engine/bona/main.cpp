@@ -49,6 +49,7 @@ main()
 #if defined(YSS_ZERO)
   GTP::setup_default_parameters();
   usi_mode = usi_on;
+  strcpy(engine_name, str_myname);
   if ( getCmdLineParam(argc, argv) < 0 ) {
     out_error( "%s", str_error );
     return EXIT_SUCCESS;

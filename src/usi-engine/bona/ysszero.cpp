@@ -23,12 +23,10 @@
 #include <atomic>
 
 #include "shogi.h"
-
 #include "lock.h"
 #include "yss_var.h"
 #include "yss_dcnn.h"
 #include "process_batch.h"
-
 #include "../GTP.h"
 
 int NOT_USE_NN = 0;
@@ -46,6 +44,7 @@ int fClearHashAlways = 0;
 int fUsiInfo = 0;
 
 int nLimitUctLoop = 100;
+int nLimitVisit = 0;
 double dLimitSec = 0;
 int nDrawMove = 0;		// 引き分けになる手数。0でなし。floodgateは256, 選手権は321
 
@@ -55,6 +54,8 @@ float resign_winrate = 0;
 int    fAutoResign = 0;				// 過渡的なフラグ。投了の自動調整ありで、go visit で勝率も返す
 double dAutoResignWinrate = 0;
 
+double dSelectRandom = 0;			// この確率で乱数で選んだ手を指す 0 <= x <= 1.0。0 でなし無効
+char engine_name[SIZE_CMDLINE];
 
 std::vector <HASH_SHOGI> hash_shogi_table;
 const int HASH_SHOGI_TABLE_SIZE_MIN = 1024*4*4;
@@ -479,8 +480,6 @@ void hash_shogi_table_clear()
 {
 	Hash_Shogi_Mask       = Hash_Shogi_Table_Size - 1;
 	HASH_ALLOC_SIZE size = sizeof(HASH_SHOGI) * Hash_Shogi_Table_Size;
-//	if ( hash_shogi_table == NULL ) hash_shogi_table = (HASH_SHOGI*)malloc( size );
-//	if ( hash_shogi_table == NULL ) { PRT("Fail malloc hash_shogi\n"); debug(); }
 	hash_shogi_table.resize(Hash_Shogi_Table_Size);	// reserve()だと全要素のコンストラクタが走らないのでダメ
 	PRT("HashShogi=%7d(%3dMB),sizeof(HASH_SHOGI)=%d,Hash_SHOGI_Mask=%d\n",Hash_Shogi_Table_Size,(int)(size/(1024*1024)),sizeof(HASH_SHOGI),Hash_Shogi_Mask);
 	hash_shogi_table_reset();
@@ -809,6 +808,7 @@ void uct_tree_loop(tree_t * restrict ptree, int sideToMove, int ply)
 {
 	ptree->sum_reached_ply = 0;
 	ptree->max_reached_ply = 0;
+	ptree->root_games_sum = 0;
 	for (;;) {
 		ptree->reached_ply = 0;
 		uct_tree(ptree, sideToMove, ply);
@@ -820,6 +820,8 @@ void uct_tree_loop(tree_t * restrict ptree, int sideToMove, int ply)
 			if ( check_stop_input() == 1 ) set_stop_search();
 			if ( IsHashFull() ) set_stop_search();
 			if ( is_limit_sec() ) set_stop_search();
+			if ( nLimitVisit && ptree->root_games_sum >= nLimitVisit ) set_stop_search();
+			if ( isKLDGainSmall(ptree, sideToMove) ) set_stop_search();
 		}
 		if ( is_stop_search() ) break;
 	}
@@ -849,6 +851,8 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 	if ( fAddNoise ) add_dirichlet_noise(epsilon, alpha, phg);
 //{ void test_dirichlet_noise(float epsilon, float alpha);  test_dirichlet_noise(0.25f, 0.03f); }
 	PRT("root phg->hash=%" PRIx64 ", child_num=%d\n",phg->hashcode64,phg->child_num);
+
+	init_KLDGain_prev_dist_visits_total(phg->games_sum);
 
 	search_start_ct = get_clock();
 
@@ -887,6 +891,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 	int best_move = 0;
 	int max_i = -1;
 	int max_games = 0;
+//	double max_value = -999;
 	int sum_games = 0;
 	const int SORT_MAX = MAX_LEGAL_MOVES;	// 593
 	int sort[SORT_MAX][2];
@@ -895,8 +900,10 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 
 	for (i=0;i<phg->child_num;i++) {
 		CHILD *pc = &phg->child[i];
+//		if ( pc->games > max_games || (pc->games == max_games && pc->value > max_value) ) {
 		if ( pc->games > max_games ) {
 			max_games = pc->games;
+//			max_value = pc->value;
 			max_i = i;
 		}
 		sum_games += pc->games;
@@ -1009,6 +1016,15 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		}
 	}
 
+	if ( dSelectRandom > 0 && phg->child_num > 0 ) {
+		double r = f_rnd();
+		if ( r < dSelectRandom ) {
+			int ri = rand_m521() % phg->child_num;
+			best_move = phg->child[ri].move;
+			PRT("ri=%d,r=%.3f,dSelectRandom=%.3f,best=%s\n",ri,r,dSelectRandom,str_CSA_move(best_move));
+		}
+	}
+
 	if ( 0 && is_selfplay() && resign_winrate == 0 ) {
 		int id = get_nnet_id();
 		int pid = getpid_YSS();
@@ -1058,6 +1074,19 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		}
 	}
 
+	if ( 0 ) {
+		FILE *fp = fopen("maxvisit.log","a");
+		if ( fp ) {
+			static int max_v = 0, min_v = INT_MAX;
+			static uint64_t count = 0, sum = 0;
+			sum += loop_count;
+			count++;
+			if ( loop_count > max_v ) max_v = loop_count;
+			if ( loop_count < min_v ) min_v = loop_count;
+			fprintf(fp,"%3d:%5d:%8ld,games=%5d,ave=%6.1f,max=%d,min=%d\n",get_nnet_id(), getpid_YSS(), count,loop_count,(double)sum/count,max_v,min_v);
+			fclose(fp);
+		}
+	}
 
 	PRT("%.2f sec, c=%d,net_v=%.3f,h_use=%d,po=%d,%.0f/s,ave_ply=%.1f/%d (%d/%d),Noise=%d,g=%d,mt=%d,b=%d\n",
 		ct,phg->child_num,phg->net_value,hash_shogi_use,loop,(double)loop/ct,ave_reached_ply,max_r_ply,ptree->nrep,nVisitCount,fAddNoise,default_gpus.size(),thread_max,cfg_batch_size );
@@ -1405,6 +1434,7 @@ select_again:
 	pc->games++;			// この手を探索した回数
 	phg->games_sum++;
 	phg->age = thinking_age;
+	if ( ply==1 ) ptree->root_games_sum = phg->games_sum;
 
 	UnLock(phg->entry_lock);
 	return win;
@@ -1510,6 +1540,16 @@ int getCmdLineParam(int argc, char *argv[])
 			nDrawMove = n;
 			continue;
 		}
+		if ( strstr(p,"-sel_rand") ) {
+			PRT("dSelectRandom=%f\n",nf);
+			dSelectRandom = nf;
+			continue;
+		}
+		if ( strstr(p,"-name") ) {
+			strcpy(engine_name, q);
+			PRT("name=%s\n",q);
+			continue;
+		}
 #ifdef USE_OPENCL
 		if ( strstr(p,"-dirtune") ) {
 			PRT("DirTune=%s\n",q);
@@ -1544,6 +1584,12 @@ int getCmdLineParam(int argc, char *argv[])
 		if ( strstr(p,"-p") ) {
 			PRT("playouts=%d\n",n);
 			nLimitUctLoop = n;
+			set_Hash_Shogi_Table_Size(n);
+		}
+		if ( strstr(p,"-v") ) {
+			PRT("visits=%d\n",n);
+			nLimitUctLoop = n;
+			nLimitVisit = n;
 			set_Hash_Shogi_Table_Size(n);
 		}
 		if ( strstr(p,"-t") ) {
@@ -1917,3 +1963,59 @@ int is_declare_win_root(tree_t * restrict ptree, int sideToMove)
 	if ( now_in_check ) return 0;
 	return is_declare_win(ptree, sideToMove);
 }
+
+
+
+std::vector<int> prev_dist_;
+int prev_dist_visits_total_;
+
+bool isKLDGainSmall(tree_t * restrict ptree, int sideToMove) {
+	const double MinimumKLDGainPerNode = 0;	//0.000002;	// 0で無効, lc0は 0.000005
+	const int KLDGainAverageInterval = 100;
+	if ( MinimumKLDGainPerNode <= 0) return false;
+	bool ret = false;
+	HASH_SHOGI *phg = HashShogiReadLock(ptree, sideToMove);
+	UnLock(phg->entry_lock);
+
+ 	if ( phg->games_sum >= KLDGainAverageInterval && prev_dist_.size() == 0 ) {
+		// 探索木の再利用で100以上ならそれを基準に
+	} else {
+	 	if ( phg->games_sum < prev_dist_visits_total_ + KLDGainAverageInterval ) return false;
+	}
+
+	std::vector<int> new_visits;
+    for (int i=0;i<phg->child_num;i++) {
+		new_visits.push_back(phg->child[i].games);
+	}
+
+	if (prev_dist_.size() != 0) {
+		double sum1 = 0.0;
+		double sum2 = 0.0;
+		for (decltype(new_visits)::size_type i = 0; i < new_visits.size(); i++) {
+			sum1 += prev_dist_[i];
+			sum2 += new_visits[i];
+		}
+		double kldgain = 0.0;
+		for (decltype(new_visits)::size_type i = 0; i < new_visits.size(); i++) {
+			double old_p = prev_dist_[i] / sum1;
+			double new_p = new_visits[i] / sum2;
+			if (prev_dist_[i] != 0) {
+				kldgain += old_p * log(old_p / new_p);
+			}
+		}
+		if ( kldgain / (sum2 - sum1) < MinimumKLDGainPerNode ) {
+			ret = true;
+		}
+		PRT("%8d:kldgain=%f,%f,sum1=%.0f,sum2=%.0f\n",phg->games_sum,kldgain,kldgain / (sum2 - sum1),sum1,sum2);
+	}
+	prev_dist_.swap(new_visits);
+	prev_dist_visits_total_ = phg->games_sum;
+	return ret;
+}
+
+void init_KLDGain_prev_dist_visits_total(int games_sum) {
+	prev_dist_visits_total_ = games_sum;
+	prev_dist_.clear();
+//	PRT("prev_dist_.size()=%d\n",prev_dist_.size());
+}
+

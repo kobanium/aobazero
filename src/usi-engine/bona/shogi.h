@@ -119,7 +119,8 @@ extern unsigned char ailast_one[512];
 //#define BNZ_VER                 "12"	// 20201013
 //#define BNZ_VER                 "13"	// 20201023 resign 10%
 //#define BNZ_VER                 "14"	// 20201108 declare win bug fix. fAutoResign
-#define BNZ_VER                 "15"	// 20201207 sente 1 mate bug fix
+//#define BNZ_VER                 "15"	// 20201207 sente 1 mate bug fix
+#define BNZ_VER                 "16"	// 20200930 kldgain, visit Limit, name
 #define BNZ_NAME                "AobaZero"
 
 #define REP_MAX_PLY             32
@@ -732,6 +733,7 @@ struct tree {
   int reached_ply;
   int max_reached_ply;
   int sum_reached_ply;
+  int root_games_sum;
 #endif
   uint64_t node_searched;
   unsigned int *move_last[ PLY_MAX ];
@@ -988,6 +990,7 @@ extern const char *str_server_err;
 #endif
 extern const char *str_myname;
 extern const char *str_version;
+extern char engine_name[];
 extern const min_posi_t min_posi_no_handicap;
 extern const int ashell_h[ SHELL_H_LEN ];
 extern const int aikkp[16];
