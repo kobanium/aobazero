@@ -585,7 +585,7 @@ public:
   FixLStr<512U> to_str() const noexcept { return _board.to_str(_turn); }
   bool ok() const noexcept;
   
-  void clear() noexcept;
+  void clear(int num_d = 0) noexcept;
   Board &get_board() noexcept { return _board; }
   void take_action(const Action &a) noexcept;
   Action action_interpret(const char *cstr,

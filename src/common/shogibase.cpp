@@ -572,21 +572,43 @@ bool Node<N>::ok() const noexcept {
   return true; }
 
 template<uint N>
-void Node<N>::clear() noexcept {
+void Node<N>::clear(int num_d) noexcept {
   _board.clear();
   _count_repeat = 0;
   _turn         = black;
+  if ( num_d > 0 ) _turn = white;
   auto place = [&](const Color &c, const Pc &pc,
 		   const Sq &sq){ _board.place_sq(c, pc,  sq.rel(c)); };
   for (uint uc = 0; uc < Color::ok_size; ++uc) {
     Color c(uc);
     for (uint u = sq97.to_u(); u < sq98.to_u(); ++u) place(c, pawn, Sq(u));
-    place(c, bishop, sq88);  place(c, rook,   sq28);
-    place(c, lance,  sq99);  place(c, lance,  sq19);
-    place(c, knight, sq89);  place(c, knight, sq29);
+
     place(c, silver, sq79);  place(c, silver, sq39);
     place(c, gold,   sq69);  place(c, gold,   sq49);
-    place(c, king,   sq59); }
+    place(c, king,   sq59);
+    if ( num_d == 0 || uc == 0 ) {
+      place(c, knight, sq89);  place(c, knight, sq29);
+      place(c, lance,  sq99);  place(c, lance,  sq19);
+      place(c, bishop, sq88);  place(c, rook,   sq28);
+      continue;
+    }
+    if ( num_d == 6 ) continue;
+    place(c, knight, sq89);  place(c, knight, sq29);
+    if ( num_d == 5 ) continue;
+    if ( num_d == 1 ) {
+                               place(c, lance,  sq19);
+      place(c, bishop, sq88);  place(c, rook,   sq28);
+      continue;
+    }
+    place(c, lance,  sq99);  place(c, lance,  sq19);
+    if ( num_d == 4 ) continue;
+    if ( num_d == 2 ) {
+      place(c, rook,   sq28);
+    }
+    if ( num_d == 3 ) {
+      place(c, bishop, sq88);
+    }
+  }
   
   _path[0]        = _board.get_zkey();
   _len_incheck[0] = 0;

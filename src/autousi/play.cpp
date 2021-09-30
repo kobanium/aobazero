@@ -247,6 +247,13 @@ public:
     argv[argc++] = opt_m;
     argv[argc++] = opt_m_value;
 
+#if 1
+    char opt_mtemp[]       = "-mtemp";
+    char opt_mtemp_value[] = "1.3";
+    argv[argc++] = opt_mtemp;
+    argv[argc++] = opt_mtemp_value;
+#endif
+
     char opt_w[] = "-w";
     unique_ptr<char []> opt_w_value(new char [wfname.get_len_fname() + 1U]);
     memcpy(opt_w_value.get(),
@@ -295,7 +302,7 @@ public:
     _time_last = steady_clock::now(); }
 
   void engine_wght_update(const FNameID &wfname, uint64_t crc64) noexcept {
-    _record_wght += string(" and later");
+//    _record_wght += string(" and later");
     _id_wght    = wfname.get_id();
     _crc64_wght = crc64;
     engine_out("setoption name USI_WeightFile value %s", wfname.get_fname()); }
@@ -393,7 +400,8 @@ public:
 	  || value == HUGE_VALF)
 	die(ERR_INT("cannot interpret value %s (engine %s)",
 		    str_value+2, get_fp()));
-      if (value < th_resign) flag_resign = true;
+//    if (value < th_resign) flag_resign = true;
+      if (value < th_resign && _nmove > 30) flag_resign = true;
 
       const char *str_count = OSI::strtok(nullptr, " ,", &saveptr);
       if (!str_count) die(ERR_INT("cannot read count (engine %s)", get_fp()));
@@ -406,7 +414,7 @@ public:
       num_best = num;
       {
 	char buf[256];
-	sprintf(buf, "v=%.3f,%d", value, num);
+	sprintf(buf, "v=%.3f,%ld", value, num);
 	new_info += buf;
       }
 
