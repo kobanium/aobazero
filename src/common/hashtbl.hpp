@@ -9,6 +9,9 @@
 #include <cstdint>
 #include <climits>
 
+#ifdef __APPLE__
+typedef unsigned int uint;
+#endif
 namespace HTAux { uint16_t pearson16(const uint8_t *x, uint len) noexcept; }
 
 class Key64 {

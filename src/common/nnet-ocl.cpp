@@ -697,8 +697,8 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
 const string code_sgemm_child_half = R"(
 void sgemm_child(__global const half *gA, __global const half *gB,
                  __global float *gC, uint ulm, uint uln,
-                 __local float lA[SGEMM_NPK][SGEMM_NLM*SGEMM_NPM],
-                 __local float lB[SGEMM_NPK][SGEMM_NLN*SGEMM_NPN]) {
+                 __local float *lA,
+                 __local float *lB) {
   float pC[SGEMM_NPM][SGEMM_NPN];
   float pB[SGEMM_NPN];
   float pA;
@@ -713,16 +713,16 @@ void sgemm_child(__global const half *gA, __global const half *gB,
   for (uint ugk = 0; ugk < NK / SGEMM_NPK; ++ugk) {
     barrier(CLK_LOCAL_MEM_FENCE);
     for (uint u = 0; u < SGEMM_NPK; u += (2U*SGEMM_NLN) / SGEMM_NPM) {
-      lA[u + ulA2][ulA1]      = vload_half((u + ulA2)*NM + ulA1, gA);
-      lA[u + ulA2][ulA1 + 1U] = vload_half((u + ulA2)*NM + ulA1 + 1U, gA); }
+      lA[(u + ulA2)*SGEMM_NLM*SGEMM_NPM + ulA1]      = vload_half((u + ulA2)*NM + ulA1, gA);
+      lA[(u + ulA2)*SGEMM_NLM*SGEMM_NPM + ulA1 + 1U] = vload_half((u + ulA2)*NM + ulA1 + 1U, gA); }
     for (uint u = 0; u < SGEMM_NPK; u += (2U*SGEMM_NLM) / SGEMM_NPN) {
-      lB[u + ulB2][ulB1]      = vload_half((u + ulB2)*NN + ulB1, gB);
-      lB[u + ulB2][ulB1 + 1U] = vload_half((u + ulB2)*NN + ulB1 + 1U, gB); }
+      lB[(u + ulB2)*SGEMM_NLN*SGEMM_NPN + ulB1]      = vload_half((u + ulB2)*NN + ulB1, gB);
+      lB[(u + ulB2)*SGEMM_NLN*SGEMM_NPN + ulB1 + 1U] = vload_half((u + ulB2)*NN + ulB1 + 1U, gB); }
     barrier(CLK_LOCAL_MEM_FENCE);
 
     for (uint upk = 0; upk < SGEMM_NPK; ++upk) {
       for (uint upn = 0; upn < SGEMM_NPN; ++upn)
-        pB[upn] = lB[upk][upn*SGEMM_NLN + uln];
+        pB[upn] = lB[upk*SGEMM_NLN*SGEMM_NPN + upn*SGEMM_NLN + uln];
       for (uint upm = 0; upm < SGEMM_NPM; ++upm) {
         pA = lA[upk][ulm*SGEMM_NPM + upm];
         for (uint upn = 0; upn < SGEMM_NPN; ++upn)
@@ -757,8 +757,8 @@ void compute_matM(__global const half *gA, __global const half *gB,
 const string code_sgemm_child = R"(
 void sgemm_child(__global const float *gA, __global const float *gB,
                  __global float *gC, uint ulm, uint uln,
-                 __local float lA[SGEMM_NPK][SGEMM_NLM*SGEMM_NPM],
-                 __local float lB[SGEMM_NPK][SGEMM_NLN*SGEMM_NPN]) {
+                 __local float *lA,
+                 __local float *lB) {
   float pC[SGEMM_NPM][SGEMM_NPN];
   float pB[SGEMM_NPN];
   float pA;
@@ -773,16 +773,16 @@ void sgemm_child(__global const float *gA, __global const float *gB,
   for (uint ugk = 0; ugk < NK / SGEMM_NPK; ++ugk) {
     barrier(CLK_LOCAL_MEM_FENCE);
     for (uint u = 0; u < SGEMM_NPK; u += SGEMM_NLN / SGEMM_NPM)
-      lA[u + ulA2][ulA1] = gA[(u + ulA2)*NM + ulA1];
+      lA[(u + ulA2)*SGEMM_NLM*SGEMM_NPM + ulA1] = gA[(u + ulA2)*NM + ulA1];
     for (uint u = 0; u < SGEMM_NPK; u += SGEMM_NLM / SGEMM_NPN)
-      lB[u + ulB2][ulB1] = gB[(u + ulB2)*NN + ulB1];
+      lB[(u + ulB2)*SGEMM_NLN*SGEMM_NPN + ulB1] = gB[(u + ulB2)*NN + ulB1];
     barrier(CLK_LOCAL_MEM_FENCE);
 
     for (uint upk = 0; upk < SGEMM_NPK; ++upk) {
       for (uint upn = 0; upn < SGEMM_NPN; ++upn)
-        pB[upn] = lB[upk][upn*SGEMM_NLN + uln];
+        pB[upn] = lB[upk*SGEMM_NLN*SGEMM_NPN + upn*SGEMM_NLN + uln];
       for (uint upm = 0; upm < SGEMM_NPM; ++upm) {
-        pA = lA[upk][ulm*SGEMM_NPM + upm];
+        pA = lA[upk*SGEMM_NLM*SGEMM_NPM + ulm*SGEMM_NPM + upm];
         for (uint upn = 0; upn < SGEMM_NPN; ++upn)
           pC[upm][upn] += pA * pB[upn]; } }
     gA += SGEMM_NPK*NM;
@@ -792,10 +792,10 @@ void sgemm_child(__global const float *gA, __global const float *gB,
   for (uint upm = 0; upm < SGEMM_NPM; ++upm) {
     barrier(CLK_LOCAL_MEM_FENCE);
     for (uint upn = 0; upn < SGEMM_NPN; ++upn)
-      lC[ulm][upn*SGEMM_NLN + uln] = pC[upm][upn];
+      lC[ulm*SGEMM_NLN*SGEMM_NPN + upn*SGEMM_NLN + uln] = pC[upm][upn];
     barrier(CLK_LOCAL_MEM_FENCE);
     for (uint u = 0; u < SGEMM_NLM; u += SGEMM_NLM / SGEMM_NPN)
-      gC[(u + ulB2)*SGEMM_NPM*NN + upm*NN + ulB1] = lC[u + ulB2][ulB1]; } }
+      gC[(u + ulB2)*SGEMM_NPM*NN + upm*NN + ulB1] = lC[(u + ulB2)*SGEMM_NLN*SGEMM_NPN + ulB1]; } }
 )";
 
 const string code_compute_matM = R"(
@@ -814,7 +814,7 @@ void compute_matM(__global const float *gA, __global const float *gB,
                   __attribute__((aligned(SIZE_ALIGN)));
   __local float lB[SGEMM_NPK][SGEMM_NLN*SGEMM_NPN]
                   __attribute__((aligned(SIZE_ALIGN)));
-  sgemm_child(gA, gB, gC, ulm, uln, lA, lB); }
+  sgemm_child(gA, gB, gC, ulm, uln, &(lA[0][0]), &(lB[0][0])); }
 )";
 const string code_sgemm = R"(
 __kernel __attribute__((reqd_work_group_size(SGEMM_NLN,SGEMM_NLM,1)))
