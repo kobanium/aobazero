@@ -102,6 +102,8 @@ constexpr uint size_book    = 10831U;
 static string book_file;
 static void load_book_file(string file=str_book) noexcept;
 
+const char *str_go_visit[] = { "go", "go visit" };
+static int go_visit = 0;
 static bool flag_f          = false;
 static bool flag_r          = false;
 static bool flag_u          = false;
@@ -421,10 +423,62 @@ static void node_update(USIEngine &myself, USIEngine &opponent,
 		static_cast<const char *>(node.to_str())));
 
   if (action.is_move()) {
-    if ((node.get_len_path() % 8U) == 0) record += "\n";
-    else record += ",";
+    if ( go_visit ) {
+      record += "\n";
+    } else {
+      if ((node.get_len_path() % 8U) == 0) record += "\n";
+      else record += ",";
+    }
     record += node.get_turn().to_str();
-    record += action.to_str(SAux::csa); }
+    record += action.to_str(SAux::csa);
+ }
+
+  if ( action.is_move() && go_visit ) {
+    string new_info;
+    const char *str_value = strtok(nullptr, " ,");
+    if (!str_value || str_value[0] != 'v' || str_value[1] != '=') die(ERR_INT("cannot read value (engine)"));
+    char *endptr;
+    float value = strtof(str_value+2, &endptr);
+    if (endptr == str_value+2 || *endptr != '\0' || value < 0.0f || value == HUGE_VALF) die(ERR_INT("cannot interpret value %s (engine)", str_value+2));
+    const char *str_count = strtok(nullptr, " ,");
+    if (!str_count) die(ERR_INT("cannot read count (engine)"));
+    long int num = strtol(str_count, &endptr, 10);
+    if (endptr == str_count || *endptr != '\0' || num < 1 || num == LONG_MAX) die(ERR_INT("cannot interpret visit count %s (engine)", str_count));
+    int num_all = num;
+    {
+      char buf[256];
+      sprintf(buf, "v=%.3f,%ld", value, num);
+      new_info += buf;
+    }
+    // read candidate moves
+    int num_tot = 0;
+    while (true) {
+      char *str_move_usi = strtok(nullptr, " ,");
+      if (!str_move_usi) {
+//      new_info += "\n";
+        break;
+      }
+
+      Action action = node.action_interpret(str_move_usi, SAux::usi);
+      if (!action.is_move()) die(ERR_INT("bad candidate %s (engine)", str_move_usi));
+      new_info += ",";
+      new_info += action.to_str(SAux::csa);
+
+      str_count = strtok(nullptr, " ,");
+      if (!str_count) die(ERR_INT("cannot read count (engine)"));
+
+      num = strtol(str_count, &endptr, 10);
+      if (endptr == str_count || *endptr != '\0' || num < 1 || num == LONG_MAX) die(ERR_INT("cannot interpret a visit count %s (engine)", str_count));
+
+      num_tot  += num;
+      new_info += ",";
+      new_info += to_string(num);
+    }
+    if (num_all < num_tot) die(ERR_INT("bad counts (engine)"));
+
+    record += ",'" + new_info;
+  }
+
   node.take_action(action);
 
   // Declare win if possible
@@ -436,7 +490,8 @@ static void node_update(USIEngine &myself, USIEngine &opponent,
   startpos += string(" ") + string(token);
   child_out(myself,   startpos.c_str());
   child_out(opponent, startpos.c_str());
-  child_out(opponent, "go"); }
+  child_out(opponent, str_go_visit[go_visit]);
+}
 
 static void start_newgame(Game &game, uint nplay, const Color &turn0)
   noexcept {
@@ -523,8 +578,9 @@ static void start_newgame(Game &game, uint nplay, const Color &turn0)
   child_out(game.engine0, game.startpos.c_str());
   child_out(game.engine1, game.startpos.c_str());
 
-  if (fTurn0Black) child_out(game.engine0, "go");
-  else             child_out(game.engine1, "go"); }
+  if (fTurn0Black) child_out(game.engine0, str_go_visit[go_visit]);
+  else             child_out(game.engine1, str_go_visit[go_visit]);
+}
 
 static void start_engine(USIEngine &c) noexcept {
   assert(c.ok());
@@ -661,6 +717,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
     case 's': flag_s = true; break;
     case 'u': flag_u = true; break;
     case 'b': flag_b = true; break;
+    case 'v': go_visit = 1; break;
     case 'c': shell.reset_fname(Opt::arg); break;
     case 'd':
       num_d = strtol(Opt::arg, &endptr, 10);
@@ -800,6 +857,7 @@ Other options:
   -b       Use positions recorded in records2016_10818.sfen (a collection of
            24 moves from the no-handicap initial position).
   -o STR   Use positions recorded file.
+  -v       use 'go visit' to get aobak 'v=' and searched moves and nodes.
   -d NUM   Handicap Game. NUM = 1(ky), 2(ka), 3(hi), 4(2mai), 5(4mai), 6(6mai)
   -c SHELL Use SHELL, e.g., /bin/csh, instead of /bin/sh.
   -P NUM   Generate NUM gameplays simultaneously. The default is 1.
