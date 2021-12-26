@@ -52,13 +52,16 @@ typedef struct ZERO_DB {
 	vector <unsigned short> v_kif;			// 棋譜
 	vector <unsigned short> v_playouts_sum;	// Rootの探索数。通常は800固定
 	vector < vector<unsigned int> > vv_move_visit;		// (手+選択回数)のペア
-//	unsigned char kif[MAX_ZERO_MOVES*2];	// *2 はKDB形式
+	vector <unsigned short> v_score_x10k;	// Rootの評価値。自分から見た勝率。1.0で勝ち。0.0で負け。1万倍されている。
 } ZERO_DB;
 
 extern ZERO_DB zdb_one;	// 棋譜読み込みで使用
 
 enum { ZD_DRAW, ZD_S_WIN, ZD_G_WIN };
 enum { RT_NONE, RT_TORYO, RT_KACHI, RT_SENNICHITE, RT_G_ILLEGAL_ACTION, RT_S_ILLEGAL_ACTION, RT_CHUDAN };
+const int RT_MAX = 7;	// 7種類
+
+const unsigned short NO_ROOT_SCORE = 10001;
 
 
 void free_zero_db_struct(ZERO_DB *p);
