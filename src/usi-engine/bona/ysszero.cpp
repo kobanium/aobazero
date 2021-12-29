@@ -1088,6 +1088,46 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		}
 	}
 
+	if ( 0 ) {	// https://github.com/lightvector/KataGo/blob/master/docs/KataGoMethods.md#policy-surprise-weighting の計測
+		double g_sum = 0, b_sum = 0;
+		for (int i = 0; i < phg->child_num; i++) {
+			double g = phg->child[i].games;
+			double b = phg->child[i].bias;
+			if ( g==0 ) continue;
+			g_sum += g;
+			b_sum += b;
+		}
+		double kld0 = 0, kld1 = 0;
+		for (int i = 0; i < phg->child_num; i++) {
+			double g = phg->child[i].games;
+			double b = phg->child[i].bias;
+			if ( g==0 ) continue;
+			double g_p = g / g_sum;
+			double b_p = b / b_sum;
+			kld0 += g_p * log(g_p / b_p);
+			kld1 += b_p * log(b_p / g_p);	// KataGoではこっち？
+		}
+		PRT("kld0=%f,kld1=%f\n",kld0,kld1);
+		int n = ptree->nrep;
+		const int MAX = 512;
+		if ( n > MAX-1 ) n = MAX-1;
+		static double kld_sum[MAX];
+		static int kld_m[MAX];
+		kld_sum[n] += kld1;
+		kld_m[n] ++;
+		static int count;
+		if ( (++count % 200) == 0 ) {
+			FILE *fp = fopen("surprize.log","a");
+			if ( fp ) {
+				fprintf(fp,"%3d:%6d:%8d:",get_nnet_id(), getpid_YSS(), count);
+				for (int i = 0; i < MAX; i++) fprintf(fp,"%f,",kld_sum[i]/(kld_m[n]+(kld_m[n]==0)));
+				fprintf(fp,"\n");
+			}
+			fclose(fp);
+		}
+	}
+
+
 	PRT("%.2f sec, c=%d,net_v=%.3f,h_use=%d,po=%d,%.0f/s,ave_ply=%.1f/%d (%d/%d),Noise=%d,g=%d,mt=%d,b=%d\n",
 		ct,phg->child_num,phg->net_value,hash_shogi_use,loop,(double)loop/ct,ave_reached_ply,max_r_ply,ptree->nrep,nVisitCount,fAddNoise,default_gpus.size(),thread_max,cfg_batch_size );
 
