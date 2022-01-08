@@ -42,6 +42,7 @@ int fPrtNetworkRawPath = 0;
 int fVerbose = 1;
 int fClearHashAlways = 0;
 int fUsiInfo = 0;
+double MinimumKLDGainPerNode = 0;	//0.000002;	// 0で無効, lc0は 0.000005
 
 int nLimitUctLoop = 100;
 int nLimitVisit = 0;
@@ -873,7 +874,6 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		th.join();
 	}
 
-	int loop = uct_count.load();
 	int sum_r_ply = 0;
 	int max_r_ply = 0;
 	for (i=0;i<thread_max;i++) {
@@ -882,9 +882,8 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		if ( ptree->max_reached_ply > max_r_ply ) max_r_ply = ptree->max_reached_ply;
 	}
 
-	int loop_count = loop;
-	if ( loop_count == 0 ) loop_count = 1;
-	double ave_reached_ply = (double)sum_r_ply / loop_count;
+	int playouts = uct_count.load();
+	double ave_reached_ply = (double)sum_r_ply / (playouts + (playouts==0));
 	double ct = get_spend_time(search_start_ct);
 
 	// select best
@@ -1051,6 +1050,28 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		}
 		fclose(fp);
 	}
+	if ( 0 ) {
+		static int search_sum = 0;
+		static int playouts_sum = 0;
+		const int M = 81;
+		static int playouts_dist[M] = { 0 };
+		static int games = 0;
+		static int prev_nrep = +999;
+		if ( ptree->nrep < prev_nrep ) games++;
+		prev_nrep = ptree->nrep;
+		search_sum++;
+		playouts_sum += playouts;
+		int m = playouts / 100;
+		if ( m > M-1 ) m = M-1;
+		playouts_dist[m]++;
+		FILE *fp = fopen("playouts_dist.log","a");
+		if ( fp ) {
+			fprintf(fp,"%7d:%4d:search_sum=%5d,playouts_ave=%7.2f:",getpid_YSS(),games,search_sum, (float)playouts_sum/search_sum );
+			for (i=0;i<M;i++) fprintf(fp,"%d,",playouts_dist[i]);
+			fprintf(fp,"\n");
+			fclose(fp);
+		}
+	}
 
 	if ( fAutoResign == 0 && is_selfplay() && resign_winrate > 0 && max_i >= 0 ) {
 		CHILD *pbest = &phg->child[max_i];
@@ -1079,11 +1100,11 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		if ( fp ) {
 			static int max_v = 0, min_v = INT_MAX;
 			static uint64_t count = 0, sum = 0;
-			sum += loop_count;
+			sum += playouts;
 			count++;
-			if ( loop_count > max_v ) max_v = loop_count;
-			if ( loop_count < min_v ) min_v = loop_count;
-			fprintf(fp,"%3d:%5d:%8ld,games=%5d,ave=%6.1f,max=%d,min=%d\n",get_nnet_id(), getpid_YSS(), count,loop_count,(double)sum/count,max_v,min_v);
+			if ( playouts > max_v ) max_v = playouts;
+			if ( playouts < min_v ) min_v = playouts;
+			fprintf(fp,"%3d:%5d:%8ld,games=%5d,ave=%6.1f,max=%d,min=%d\n",get_nnet_id(), getpid_YSS(), count,playouts,(double)sum/count,max_v,min_v);
 			fclose(fp);
 		}
 	}
@@ -1129,7 +1150,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 
 
 	PRT("%.2f sec, c=%d,net_v=%.3f,h_use=%d,po=%d,%.0f/s,ave_ply=%.1f/%d (%d/%d),Noise=%d,g=%d,mt=%d,b=%d\n",
-		ct,phg->child_num,phg->net_value,hash_shogi_use,loop,(double)loop/ct,ave_reached_ply,max_r_ply,ptree->nrep,nVisitCount,fAddNoise,default_gpus.size(),thread_max,cfg_batch_size );
+		ct,phg->child_num,phg->net_value,hash_shogi_use,playouts,(double)playouts/ct,ave_reached_ply,max_r_ply,ptree->nrep,nVisitCount,fAddNoise,default_gpus.size(),thread_max,cfg_batch_size );
 
 	return best_move;
 }
@@ -1585,6 +1606,11 @@ int getCmdLineParam(int argc, char *argv[])
 			dSelectRandom = nf;
 			continue;
 		}
+		if ( strstr(p,"-kldgain") ) {
+			PRT("MinimumKLDGainPerNode=%f\n",nf);
+			MinimumKLDGainPerNode = nf;
+			continue;
+		}
 		if ( strstr(p,"-name") ) {
 			strcpy(engine_name, q);
 			PRT("name=%s\n",q);
@@ -2010,9 +2036,8 @@ std::vector<int> prev_dist_;
 int prev_dist_visits_total_;
 
 bool isKLDGainSmall(tree_t * restrict ptree, int sideToMove) {
-	const double MinimumKLDGainPerNode = 0;	//0.000002;	// 0で無効, lc0は 0.000005
 	const int KLDGainAverageInterval = 100;
-	if ( MinimumKLDGainPerNode <= 0) return false;
+	if ( MinimumKLDGainPerNode <= 0 ) return false;
 	bool ret = false;
 	HASH_SHOGI *phg = HashShogiReadLock(ptree, sideToMove);
 	UnLock(phg->entry_lock);
@@ -2021,6 +2046,13 @@ bool isKLDGainSmall(tree_t * restrict ptree, int sideToMove) {
 		// 探索木の再利用で100以上ならそれを基準に
 	} else {
 	 	if ( phg->games_sum < prev_dist_visits_total_ + KLDGainAverageInterval ) return false;
+	}
+
+	double min_kld;
+	if ( phg->games_sum < 500 ) {
+		min_kld = 0.000001;		// 少ないノード数では厳しい条件の方が強い。総playout数の増加もそれほどなし。
+	} else {
+		min_kld = MinimumKLDGainPerNode;
 	}
 
 	std::vector<int> new_visits;
@@ -2039,14 +2071,13 @@ bool isKLDGainSmall(tree_t * restrict ptree, int sideToMove) {
 		for (decltype(new_visits)::size_type i = 0; i < new_visits.size(); i++) {
 			double old_p = prev_dist_[i] / sum1;
 			double new_p = new_visits[i] / sum2;
-			if (prev_dist_[i] != 0) {
+			if ( old_p != 0 && new_p != 0 ) {
 				kldgain += old_p * log(old_p / new_p);
 			}
 		}
-		if ( kldgain / (sum2 - sum1) < MinimumKLDGainPerNode ) {
-			ret = true;
-		}
-		PRT("%8d:kldgain=%f,%f,sum1=%.0f,sum2=%.0f\n",phg->games_sum,kldgain,kldgain / (sum2 - sum1),sum1,sum2);
+		double x = kldgain / (sum2 - sum1);
+		if ( x < min_kld ) ret = true;
+		PRT("%8d:kldgain=%.7f,%.7f,sum1=%.0f,sum2=%.0f,ret=%d\n",phg->games_sum,kldgain,x,sum1,sum2,ret);
 	}
 	prev_dist_.swap(new_visits);
 	prev_dist_visits_total_ = phg->games_sum;
@@ -2058,4 +2089,3 @@ void init_KLDGain_prev_dist_visits_total(int games_sum) {
 	prev_dist_.clear();
 //	PRT("prev_dist_.size()=%d\n",prev_dist_.size());
 }
-
