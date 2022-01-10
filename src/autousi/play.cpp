@@ -234,10 +234,22 @@ public:
     argv[argc++] = opt_r;
     argv[argc++] = opt_r_value;
 
+#if 0	// normal
     char opt_p[]       = "-p";
     char opt_p_value[] = "800";
     argv[argc++] = opt_p;
     argv[argc++] = opt_p_value;
+#else
+    char opt_p[]       = "-p";
+    char opt_p_value[] = "3200";
+    argv[argc++] = opt_p;
+    argv[argc++] = opt_p_value;
+
+    char opt_kld[]       = "-kldgain";
+    char opt_kld_value[] = "0.0000013";
+    argv[argc++] = opt_kld;
+    argv[argc++] = opt_kld_value;
+#endif
 
     char opt_n[] = "-n";
     argv[argc++] = opt_n;
