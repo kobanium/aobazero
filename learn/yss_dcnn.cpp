@@ -394,7 +394,7 @@ char *find_next_file(char *sDir, const char *sExt)
 		if ( strstr(dp->d_name, sExt )==NULL                                    ) continue;
 		break;	// found
 	}
-	static char filename[TMP_BUF_LEN];
+	static char filename[TMP_BUF_LEN*2];
 	sprintf(filename, "%s/%s",dir_name, dp->d_name);
 	return filename;
 }
@@ -425,7 +425,7 @@ int get_one_v_file(char *filename, const char *dir_list[])
 	static int dir_num = 0;
 	static int dir_i   = 0;
 	static char *p_current_dir = NULL;
-	static char str_current_dir[TMP_BUF_LEN];
+	static char str_current_dir[TMP_BUF_LEN*2];
 	static int sum_dir = 0;
 	static int all_files = 0;
 
@@ -2339,18 +2339,6 @@ using std::ifstream;
 using std::ios;
 using std::unique_ptr;
 using namespace Err;
-/*
-static size_t is_xz_exist(const char *fname) noexcept {
-  ifstream ifs(fname, ios::binary);
-  if (!ifs) return 0;
-
-  DevNul devnul;
-  XZDecode<ifstream, DevNul> xzd;
-  if (!xzd.decode(&ifs, &devnul, SIZE_MAX)) die(ERR_INT("XZDecode::decode()"));
-  
-  return xzd.get_len_out();
-}
-*/
 static size_t read_xz_if_exist(const char *fname, unique_ptr<char []> &ptr) noexcept {
   ifstream ifs(fname, ios::binary);
   if (!ifs) {
@@ -2437,26 +2425,25 @@ void free_zero_db_struct(ZERO_DB *p)
 	std::vector<unsigned short>().swap(p->v_kif);			// memory free hack for vector. 
 	std::vector<unsigned short>().swap(p->v_playouts_sum);
 	vector< vector<unsigned int> >().swap(p->vv_move_visit); 
+	std::vector<unsigned short>().swap(p->v_score_x10k);
 }
 
-const int ZERO_DB_SIZE = 500000;	// 100000,  500000
+const int ZERO_DB_SIZE = 1000000;	//500000;	// 100000,  500000
 const int MAX_ZERO_MOVES = 513;	// 512手目を後手が指して詰んでなければ。513手目を先手が指せば無条件で引き分け。
 ZERO_DB zdb_one;
 
-//ZERO_DB *pZDB = NULL;	// 動的確保はできない
 ZERO_DB zdb[ZERO_DB_SIZE];
 int *pZDBsum = NULL;
 int zdb_count = 0;
-int zdb_count_start = 0; //23400000; //20300000; //18800000; //16400000;	//10300000; //5200000;	// 400万棋譜から読み込む場合は4000000
+int zdb_count_start = 48000000; //38700000; //33900000;//27300000; //26100000; //23400000; //20300000; //18800000; //16400000;	//10300000; //5200000;	// 400万棋譜から読み込む場合は4000000
 int zero_kif_pos_num = 0;
 int zero_kif_games = 0;
 const int MINI_BATCH = 128;	// aoba_zero.prototxt の cross_entroy_scale も同時に変更すること！layerのnameも要変更
 const int ONE_SIZE = DCNN_CHANNELS*B_SIZE*B_SIZE;	// 362*9*9; *4= 117288 *64 = 7506432,  7MBにもなる mini_batch=64
 
-const int fReplayLearning = 1;	// すでに作られた棋譜からWindowをずらせて学習させる
+const int fReplayLearning = 0;	// すでに作られた棋譜からWindowをずらせて学習させる
 const int fWwwSample = 0;		// fReplayLearning も同時に1
 
-//const char ZERO_KIF_DB_FILENAME[] = "zerokif.db";
 
 void init_zero_kif_db()
 {
@@ -2481,7 +2468,7 @@ const int USE_XZ_NONE      = 0;
 const int USE_XZ_POOL_ONLY = 1;
 const int USE_XZ_BOTH      = 2;
 
-const int USE_XZ = USE_XZ_BOTH;	//  1...poolのみ xz で。2...poolもarchiveも xz で
+const int USE_XZ = USE_XZ_POOL_ONLY;	//  1...poolのみ xz で。2...poolもarchiveも xz で
 
 // archiveから棋譜番号=n の棋譜を取り出す。KifBuf[] に入る。速度無視。fpでは100番目以降が遅すぎて無理。
 int find_kif_from_archive(int search_n)
@@ -2647,6 +2634,14 @@ int get_guess_resign_moves(int moves)
 
 void shogi::add_one_kif_to_db()
 {
+#if 1	// 40bのデータを使わない
+	if ( 39825686 <= zdb_count && zdb_count <= 47075521 ) {
+		static int count;
+		if ( (count++ % 10000)==0 ) PRT("skip 40b = %d\n",zdb_count);
+		zdb_count++;
+		return;
+	}
+#endif
 	ZERO_DB *pdb = &zdb[zdb_count % ZERO_DB_SIZE];	// 古いのは上書き
 	ZERO_DB *p   = &zdb_one;
 	free_zero_db_struct(pdb);
@@ -2673,6 +2668,7 @@ void shogi::add_one_kif_to_db()
 	pdb->v_kif          = p->v_kif;
 	pdb->v_playouts_sum = p->v_playouts_sum;
 	pdb->vv_move_visit  = p->vv_move_visit;
+	pdb->v_score_x10k   = p->v_score_x10k;
 //	PRT("%6d:index=%d,res=%d,%3d:%08x %08x %08x\n",zdb_count,pdb->index,p->result,p->moves,hash_code1,hash_code2,hash_motigoma);
 	zdb_count++;
 }
@@ -2708,6 +2704,7 @@ void update_pZDBsum()
 	if ( loop > ZERO_DB_SIZE ) loop = ZERO_DB_SIZE;
 	for (i=0;i<loop;i++) {
 		ZERO_DB *p = &zdb[i];
+		if ( p->result_type < 0 || p->result_type >= RT_MAX ) DEBUG_PRT("");
 		zero_kif_pos_num += p->moves;
 		pZDBsum[i] = zero_kif_pos_num;
 		zero_kif_games += (p->moves != 0);
@@ -3141,14 +3138,25 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 		if ( p->result == ZD_S_WIN ) win_r = +1;
 		if ( p->result == ZD_G_WIN ) win_r = -1;
 		if ( p->result == ZD_DRAW  ) win_r = 0;
-		
+
+		unsigned int score_x10k = p->v_score_x10k[j];
+		float score_div = (float)score_x10k / 10000.0f;
+		float score     = score_div * 2.0f - 1.0f;	// +1.0 >= x >= -1.0,   自分から見た勝率
+
 		if ( (t&1)==1 ) {
 			hanten_sasite(&bz,&az,&tk,&nf);	// 指し手を先後反転
 			win_r = -win_r;	// 勝敗まで反転はしなくてよい？ 反転した方が学習が簡単なはず。出てきた結果を反転
 		}
+
+		// 実際の勝敗と探索値の平均を学習。https://tadaoyamaoka.hatenablog.com/entry/2018/07/01/121411
+		float ave_r = ((float)win_r + score) / 2.0;
+		if ( score_x10k == NO_ROOT_SCORE ) ave_r = win_r;
+//		ave_r = win_r;	// not use average
+//		PRT("(%.3f,%.3f)",(float)win_r,score);
+
 		int playmove_id = get_move_id_c_y_x(pack_te(bz,az,tk,nf));
 		label_policy[i] = (float)playmove_id;
-		label_value[i]  = (float)win_r;
+		label_value[i]  = (float)ave_r;
 
 		if ( POLICY_VISIT ) {
 			int k;
@@ -3193,18 +3201,6 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 }
 
 
-void prepare_kif_db_test()
-{
-	const int kDataSize = MINI_BATCH * 1;
-	static float input_data[kDataSize * ONE_SIZE];
-	static float policy_data[kDataSize];
-	static float value_data[kDataSize];
-	static float policy_visit_data[kDataSize][MOVE_C_Y_X_ID_MAX];
-
-	PS->init_prepare_kif_db();
-	PS->prepare_kif_db(0, kDataSize, input_data, policy_data, value_data, policy_visit_data);
-}
-
 void convert_caffemodel(int iteration, int weight_number)
 {
 	print_time();
@@ -3213,6 +3209,8 @@ void convert_caffemodel(int iteration, int weight_number)
 	if ( fp==NULL ) DEBUG_PRT("");
 	fprintf(fp,"#!/bin/bash\n");
 	fprintf(fp,"cd /home/yss/test/extract/\n");
+	fprintf(fp,"export LD_LIBRARY_PATH=/home/yss/caffe_cpu/build/lib:\n");
+	fprintf(fp,"export PYTHONPATH=/home/yss/caffe_cpu/python:$PYTHONPATH\n");
 //	fprintf(fp,"python ep_del_bn_scale_factor_version_short_auto.py /home/yss/shogi/yssfish/snapshots/_iter_%d.caffemodel\n",iteration);
 	fprintf(fp,"python ep_del_bn_scale_factor_version_short_auto.py /home/yss/shogi/learn/snapshots/_iter_%d.caffemodel\n",iteration);
 #if 0
@@ -3462,6 +3460,16 @@ void start_zero_train(int *p_argc, char ***p_argv )
 	std::shared_ptr<Solver<float>> solver;
 	solver.reset(SolverRegistry<float>::CreateSolver(solver_param));
 
+/*
+	solver_param.set_base_lr(0.01);
+	solver_param.set_display(100);
+	solver_param.set_max_iter(10000000);
+	solver_param.set_lr_policy("step");
+	solver_param.set_gamma(0.5);
+	solver_param.set_power(0.75);
+	solver_param.set_momentum(0.9);
+	solver_param.set_weight_decay(0.0002);
+*/
 	//評価用のデータを取得
 	const auto net      = solver->net();
 //	const char sNet[] = "20190419replay_lr001_wd00002_100000_1018000/_iter_36000.caffemodel";	// w449
@@ -3482,37 +3490,55 @@ void start_zero_train(int *p_argc, char ***p_argv )
 //	const char sNet[] = "/home/yss/shogi/learn/snapshots/20201027/_iter_2440000.caffemodel";	// w2290
 //	const char sNet[] = "/home/yss/shogi/learn/snapshots/20201109/_iter_1520000.caffemodel";	// w2442
 //	const char sNet[] = "/home/yss/shogi/learn/snapshots/20201206/_iter_3070000.caffemodel";	// w2749
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20201228/_iter_2720000.caffemodel";	// w3021
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210111/_iter_1760000.caffemodel";	// w3076
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210131/_iter_2272000.caffemodel";	// w3147
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210311/_iter_4832000.caffemodel";	// w3298
+//	const char sNet[] = "/home/yss/shogi/learn/40b_8x_39770000_games_iter_3870190.caffemodel";	// 40b,  next = w3460
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210426/_iter_5152000.caffemodel";	// w3459 = w3703
+	const char sNet[] = "/home/yss/shogi/learn/snapshots/20211225/_iter_2112000.caffemodel";	// w3769
 
-	int next_weight_number =2750;	// 現在の最新の番号 +1
 
-//	net->CopyTrainedLayersFrom(sNet);	// caffemodelを読み込んで学習を再開する場合
+	int next_weight_number = 3770;	// 現在の最新の番号 +1
+
+	net->CopyTrainedLayersFrom(sNet);	// caffemodelを読み込んで学習を再開する場合
 //	load_aoba_txt_weight( net, "/home/yss/w000000000689.txt" );	// 既存のw*.txtを読み込む。*.caffemodelを何か読み込んだ後に
 	LOG(INFO) << "Solving ";
 	PRT("fReplayLearning=%d\n",fReplayLearning);
 
 	int iteration = 0;	// 学習回数
 	int add = 0;		// 追加された棋譜数
-	int remainder = 0;
+//	int remainder = 0;
 	int iter_weight = 0;
-
+	float remain = 0;
+	
 wait_again:
 	if ( fReplayLearning ) {
 		add = PS->add_a_little_from_archive();
 		if ( add < 0 ) { PRT("done..\n"); solver->Snapshot(); return; }
-		if ( zdb_count <=  120000 ) goto wait_again;	// no000000121031.csa まではrandom 棋譜なので
+//		if ( zdb_count <=  120000 ) goto wait_again;	// no000000121031.csa まではrandom 棋譜なので
 //		if ( zdb_count <= 2520000 ) goto wait_again;
 //		if ( zdb_count >  2948000 ) { PRT("done..w648.\n"); solver->Snapshot(); return; }
 	} else {
-		if ( 0 && iteration==0 && next_weight_number==1 ) {
-			add = 2000;	// 初回のみダミーで2000棋譜追加したことにする(途中再開は 0 && に)
+		if ( 1 && iteration==0 && next_weight_number==3770 ) {
+			add = 800;	// 初回のみダミーで2000棋譜追加したことにする(途中再開は 0 && に)
 		} else {
 			add = PS->wait_and_get_new_kif(next_weight_number);
 		}
 	}
 
+	// AlphaZeroは2400万棋譜、70万回学習、mini-batch=4096、1000回学習ごとに重み更新、なので34285棋譜(=2400/(700000/1000))
+	// mini-batch=128 だと32000回学習((4096/128)*1000)ごとに重み更新、なので34285棋譜で32000回学習。1棋譜で1.0714回学習。
+	const float ADJUST = 1.07142857;
 	const int AVE_MOVES = 128;	// 1局の平均手数
-	float add_mul = (float)AVE_MOVES / MINI_BATCH;
+	float add_mul = ADJUST * (float)AVE_MOVES / MINI_BATCH;
 	int nLoop = (int)((float)add*add_mul); // MB=64でadd*2, MB=128でadd*1, MB=180でadd*0.711
+	remain += add*add_mul - nLoop;
+	if ( remain > 1 ) {
+		nLoop += 1;
+		remain -= 1;
+	}
+/*	
 	// (ITER_SIZE*MINI_BATCH)=4096 なら最低でも32棋譜必要(32*128=4096)
 	int min_n = ITER_SIZE*MINI_BATCH / AVE_MOVES;
 	if ( min_n > 1 ) {
@@ -3520,8 +3546,9 @@ wait_again:
 		nLoop = add / min_n;
 		remainder = add - nLoop * min_n;
 	}
-
-	const int ITER_WEIGHT_BASE = 10000*AVE_MOVES / (ITER_SIZE*MINI_BATCH);	// 10000棋譜(平均128手)ごとにweightを作成
+*/
+//	const int ITER_WEIGHT_BASE = 10000*AVE_MOVES / (ITER_SIZE*MINI_BATCH);	// 10000棋譜(平均128手)ごとにweightを作成
+	const int ITER_WEIGHT_BASE = 32000*AVE_MOVES / (ITER_SIZE*MINI_BATCH);	// 32000回             ごとにweightを作成
 	int iter_weight_limit = ITER_WEIGHT_BASE;
 	float reduce = 1.0;	// weightは10000棋譜ごとで学習回数を10000から8000などに減らす。棋譜生成速度が速すぎるため
 	FILE *fp = fopen("reduce.txt","r");
@@ -3539,7 +3566,7 @@ wait_again:
 		fclose(fp);
 	}
 
-	PRT("nLoop=%d,add=%d,add_mul=%.3f,MINI_BATCH=%d,kDataSize=%d,remainder=%d,iteration=%d(%d/%d)\n",nLoop,add,add_mul,MINI_BATCH,kDataSize,remainder,iteration,iter_weight,iter_weight_limit);
+	PRT("nLoop=%d,add=%d,add_mul=%.3f,MINI_BATCH=%d,kDataSize=%d,remain=%.3f,iteration=%d(%d/%d)\n",nLoop,add,add_mul,MINI_BATCH,kDataSize,remain,iteration,iter_weight,iter_weight_limit);
 	int loop;
 	for (loop=0;loop<nLoop;loop++) {
 		static array<float, kDataSize * ONE_SIZE> input_data;	// 大きいのでstaticで

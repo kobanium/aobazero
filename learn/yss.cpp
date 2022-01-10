@@ -435,6 +435,7 @@ void debug_print(const char *fmt, ... )
 	va_end(ap);
 	static char text_out[TMP_BUF_LEN*2];
 	sprintf(text_out,"%s%s",debug_str,text);
+	PRT_ON();
 	PRT("%s\n",text_out);
 	debug();
 }
@@ -896,6 +897,7 @@ int shogi::LoadCSA()
 	char c;
 	int prt_flag = 1;
 	int fShortCSA = 0;	// 盤面を座標で指定する詰将棋用
+	char sIndex[256];
 
 	tesuu = 0;
 	hirate_ban_init(KomaOti);		// 盤面の初期化　平手の状態へ
@@ -933,18 +935,6 @@ int shogi::LoadCSA()
 			prt_flag = 0;
 			ban_saikousei();	// 盤面の再構成。
 			check_kn();			// 盤面の状態が正常化チェック
-/*
-			if ( fShinpo == 2 ) {	// 吉村さん問題集の場合
-				ReadOneLine(lpLine); 
-				ReadOneLine(lpLine);
-				ReadOneLine(lpLine);
-				ReadOneLine(lpLine);
-				ReadOneLine(lpLine);
-				PRT("正解=%s",lpLine);
-				strcpy(sYoshi660Seikai,lpLine);
-				break;
-			}
-*/
 		}
 
 		// csa形式のコメントを取り込む
@@ -954,6 +944,7 @@ int shogi::LoadCSA()
 //			for (i=0;i<n;i++) PRT("%c",lpLine[i]);
 			if ( tesuu == 0 ) {
 				if ( strncmp(lpLine,"'no",3)==0 ) {
+					strncpy(sIndex,lpLine,255);
 				}
 				if ( strncmp(lpLine,"'w ",3)==0 ) {
 					char *p = strchr(lpLine,',');
@@ -975,12 +966,13 @@ int shogi::LoadCSA()
 				char *p = lpLine + 1;
 				int count = 0, all_visit = 0, sum_visit = 0;
 				int b0 = 0,b1 = 0;
+				bool has_root_score = false;
 				for (;;) {
 					char c;
 					char str[10];
 					int n = 0;
 					for (;;) {
-						if ( n>=10 ) { PRT("Err csa move str >= 10.\n"); debug(); }
+						if ( n>=10 ) { PRT("Err csa move str >= %d,w=%d,%s\n",n,pz->weight_n,sIndex); debug(); }
 						c = *p++;
 						str[n++] = c;
 						if ( c==',' || c=='\r' || c =='\n' || c==0 ) break;
@@ -989,9 +981,15 @@ int shogi::LoadCSA()
 					if ( count==0 ) {
 						if ( strstr(str,"v=") ) {
 							count--;
+							float score = atof(str+2);
+							int s = (int)(score * 10000);
+							if ( s < 0 || s > 10000 ) DEBUG_PRT("Err s=%d,v=%s\n",s,str);
+							pz->v_score_x10k.push_back((unsigned short)s);
+							has_root_score = true;
 						} else {
 							all_visit = atoi(str);
 							pz->v_playouts_sum.push_back(all_visit);
+							if ( has_root_score == false ) pz->v_score_x10k.push_back(NO_ROOT_SCORE);
 						}
 					} else {
 						if ( (count&1)== 0 ) {
@@ -1183,6 +1181,7 @@ P-00AL
 				sum += pz->vv_move_visit[i].size();
 			}
 			PRT("moves=%d,result=%d, mv_sum=%d,%.1f\n",pz->moves,pz->result,sum, (double)sum/(tesuu+0.00001f));
+			if ( pz->result_type == RT_NONE ) DEBUG_PRT("");
 #endif
 			break;		// 読み込み終了
 		}

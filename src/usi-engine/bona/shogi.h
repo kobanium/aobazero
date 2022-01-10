@@ -120,7 +120,9 @@ extern unsigned char ailast_one[512];
 //#define BNZ_VER                 "13"	// 20201023 resign 10%
 //#define BNZ_VER                 "14"	// 20201108 declare win bug fix. fAutoResign
 //#define BNZ_VER                 "15"	// 20201207 sente 1 mate bug fix
-#define BNZ_VER                 "16"	// 20200930 kldgain, visit Limit, name
+//#define BNZ_VER                 "16"	// 20210930 kldgain, visit Limit, name
+//#define BNZ_VER                 "17"	// 20220108 kldgain
+#define BNZ_VER                 "18"	// 20220110 kldgain 0.0000013, -p 3200 (autousiで指定)
 #define BNZ_NAME                "AobaZero"
 
 #define REP_MAX_PLY             32
