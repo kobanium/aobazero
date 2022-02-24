@@ -27,4 +27,6 @@ namespace Param {
 
 const int HEADER_SIZE = 64;	// version 2 byte(major,minor), resign_th(2 byte), handicap rate 14 byte (2*7), average winrate(2 byte)
 const int HANDICAP_TYPE = 7;	// hirate(0),ky(1),ka(2),hi(3),2mai(4),4mai(5),6mai(6)
+//const int FORMAT_VER = 2;	// AobaZero, AobaKomaochi
+const int FORMAT_VER = 3;	// AobaZero(Swish, NN input are same as AobaKomaochi)
 
