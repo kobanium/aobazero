@@ -39,7 +39,7 @@ static unsigned int * CONV gen_intercept( tree_t * restrict __ptree__,
 static int CONV gen_next_evasion_mate( tree_t * restrict ptree,
 				       const char *psq, int ply, int turn,
 				       int flag );
-
+/*
 static uint64_t mate3_hash_tbl[ MATE3_MASK + 1 ] = {0};
 
 static int CONV
@@ -88,25 +88,32 @@ mhash_store( const tree_t * restrict ptree, int turn, unsigned int move )
 #endif
   mate3_hash_tbl[ (unsigned int)HASH_KEY & MATE3_MASK ] = word;
 }
-
+*/
 
 unsigned int CONV
 is_mate_in3ply( tree_t * restrict ptree, int turn, int ply )
 {
   int value, flag_skip;
 
+/*
   if ( mhash_probe( ptree, turn, ply ) )
     {
       if ( MOVE_CURR == MOVE_NA ) { return 0; }
       else                        { return 1; }
     }
+*/
 
   if ( ply >= PLY_MAX-2 ) { return 0; }
 
   flag_skip = 0;
 
-  ptree->anext_move[ply].move_last = ptree->move_last[ply-1];
+#if defined(YSS_ZERO)
+  ptree->anext_move[ply].move_last = ptree->move_last[0];
+  ptree->move_last[ply] = GenCheck( turn, ptree->move_last[0] );
+#else
+  ptree->anext_move[ply].move_last = ptree->move_last[ply-1];	// only move_last[0] is set in AobaZero.
   ptree->move_last[ply] = GenCheck( turn, ptree->move_last[ply-1] );
+#endif
 
   while ( ptree->anext_move[ply].move_last != ptree->move_last[ply] )
     {
@@ -116,6 +123,7 @@ is_mate_in3ply( tree_t * restrict ptree, int turn, int ply )
       if ( flag_skip ) { continue; }
 
       assert( is_move_valid( ptree, MOVE_CURR, turn ) );
+//    PRT("%2d:%s(%d):\n",ply,str_CSA_move(MOVE_CURR),MOVE_CURR);
       MakeMove( turn, MOVE_CURR, ply );
       if ( InCheck(turn) )
 	{
@@ -129,7 +137,7 @@ is_mate_in3ply( tree_t * restrict ptree, int turn, int ply )
 
       if ( value )
 	{
-	  mhash_store( ptree, turn, MOVE_CURR );
+//	  mhash_store( ptree, turn, MOVE_CURR );
 	  return 1;
 	}
 
@@ -140,7 +148,7 @@ is_mate_in3ply( tree_t * restrict ptree, int turn, int ply )
 	}
     }
 
-  mhash_store( ptree, turn, MOVE_NA );
+//mhash_store( ptree, turn, MOVE_NA );
   return 0;
 }
 

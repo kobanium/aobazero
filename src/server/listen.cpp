@@ -351,13 +351,21 @@ void Listen::handle_send(Peer &peer) noexcept {
   if (!peer.sckt_ok()) return;
   
   if (peer.get_stat_send() == StatSend::SendHeader) {
-    char buf[8];
+    char buf[HEADER_SIZE];
+    memset(buf, 0, HEADER_SIZE);
     buf[0] = static_cast<char>(Ver::major);
     buf[1] = static_cast<char>(Ver::minor);
     int_to_bytes<ushort>(RecKeep::get().get_th16(), buf + 2);
-    buf[4] = buf[5] = buf[6] = buf[7] = 0;
+//  buf[4] = buf[5] = buf[6] = buf[7] = 0;
+    static int count;
+    count++;
+    for (int i=0; i<HANDICAP_TYPE; i++) {
+      ushort x = nHandicapRate[i];	//(i+1)*100 + count;
+      int_to_bytes<ushort>(x, buf + 4 + i*2);
+    }
+    int_to_bytes<ushort>(nAverageWinrate, buf + 4 + HANDICAP_TYPE*2);
 
-    ssize_t ret = send_wrap(peer, buf, 8, 0);
+    ssize_t ret = send_wrap(peer, buf, HEADER_SIZE, 0);
     if (ret < 0 && errno == ECONNRESET) {
       _logger->out(&peer, fmt_reset_s, "send header");
       peer.clear();

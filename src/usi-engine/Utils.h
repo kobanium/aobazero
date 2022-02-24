@@ -72,4 +72,6 @@ namespace Utils {
     float cached_t_quantile(int v);
 }
 
+int GetSystemMemoryMB();
+
 #endif

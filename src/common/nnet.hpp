@@ -23,8 +23,13 @@ namespace NNAux {
 
   constexpr uint nch_input      = 362U;
   constexpr uint nch_input_fill = 17U * 8U + 2U;
+#ifdef USE_POLICY2187
+  constexpr uint nch_out_policy =  27U;
+  constexpr uint maxn_one       = 64U * 8U * 2;
+#else
   constexpr uint nch_out_policy = 139U;
   constexpr uint maxn_one       = 64U * 8U;
+#endif
   constexpr uint maxsize_compressed_features = (size_plane * nch_input) / 16U;
   constexpr uint ceil_multi(uint u, uint mul) noexcept {
     return ((u + mul - 1U) / mul) * mul; }

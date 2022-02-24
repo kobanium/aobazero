@@ -2,6 +2,8 @@
 // This source code is in the public domain.
 #pragma once
 #include "iobase.hpp"
+#include "osi.hpp"
+#include "param.hpp"
 #include <atomic>
 #include <mutex>
 #include <thread>
@@ -43,6 +45,8 @@ class Client {
   char _buf_wght_time[256];
   FName _dwght;
   float _th_resign;
+  uint _handicap_rate[HANDICAP_TYPE];
+  uint _average_winrate;
   uint _max_retry, _retry_count, _recvTO, _recv_bufsiz, _sendTO, _send_bufsiz;
   uint _read_bufsiz, _port, _keep_wght;
   
@@ -52,6 +56,7 @@ class Client {
   Client & operator=(const Client &) = delete;
 
   void get_new_wght();
+  float receive_header(const OSI::Conn &conn, uint TO, uint bufsiz);
   void sender() noexcept;
   void reader() noexcept;
   
@@ -69,5 +74,7 @@ public:
   uint get_nsend() const noexcept { return _nsend; };
   uint get_ndiscard() const noexcept { return _ndiscard; }
   float get_th_resign() const noexcept { return _th_resign; }
+  const uint *get_handicap_rate() { return _handicap_rate; }
+  uint get_average_winrate() { return _average_winrate; }
   bool has_conn() const noexcept { return _has_conn; }
 };

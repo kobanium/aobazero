@@ -477,3 +477,27 @@ is_black_attacked( const tree_t * restrict ptree, int sq )
 
   return BBTest(bb);
 }
+
+/*
+int count_white_attacked( const tree_t * restrict ptree, int sq )
+{
+  bitboard_t bb, bb1, bb_atk;
+  int sum = 0;
+
+  BBAnd  ( bb, BB_BPAWN_ATK, abb_mask[sq] );              sum += (BBToU(bb) != 0);
+  BBAnd  ( bb, BB_BKNIGHT,   abb_w_knight_attacks[sq] );  sum += (BBToU(bb) != 0);	// åjîn2ñáìØéûÇ…åvéZÇ∆Ç©Ç≈É_ÉÅÇ≈Ç∑ÇÀ
+  BBAnd  ( bb, BB_BSILVER,   abb_w_silver_attacks[sq] );  sum += (BBToU(bb) != 0);
+  BBAnd  ( bb, BB_BTGOLD,    abb_w_gold_attacks[sq] );    sum += (BBToU(bb) != 0);
+  BBAnd  ( bb, BB_B_HDK,     abb_king_attacks[sq] );      sum += (BBToU(bb) != 0);
+
+  AttackBishop( bb_atk, sq );
+  BBAnd  ( bb, BB_B_BH, bb_atk );                         sum += (BBToU(bb) != 0);
+
+  bb1 = BB_B_RD;
+  BBAnd  ( bb1, BB_BLANCE, abb_plus_rays[sq] );           sum += (BBToU(bb) != 0);
+  BBAnd  ( bb, bb1, AttackFile( sq ) );                   sum += (BBToU(bb) != 0);
+  BBAnd  ( bb, BB_B_RD, AttackRank( sq ) );               sum += (BBToU(bb) != 0);
+
+  return sum;
+}
+*/

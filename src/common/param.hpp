@@ -2,12 +2,13 @@
 // This source code is in the public domain.
 #pragma once
 namespace Ver {
-  constexpr unsigned char major       = 1;
-  constexpr unsigned char minor       = 11;	// 10...2021/09/30, 11...2022/01/10 kldgain
-  constexpr unsigned short usi_engine = 18;
+  constexpr unsigned char major       = 3;	// 2...komaochi, 3...Swish
+  constexpr unsigned char minor       = 1;	//
+  constexpr unsigned short usi_engine = 27;	// 1...18 AobaZero, 16...26 komaochi, 27...Swish AobaZero
 }
 
-#define AOBA_UNIQUE ".jBQoNA7kEd"
+//#define AOBA_UNIQUE ".jBQoNA7kEd"
+#define AOBA_UNIQUE ".oeWK7ZhnLN"
 
 namespace Param {
   using uint = unsigned int;
@@ -23,3 +24,7 @@ namespace Param {
   constexpr char name_seq_prn[]       = "/mmap-seq-prn"  AOBA_UNIQUE;
   constexpr char name_mmap_nnet[]     = "/mmap-nnet"     AOBA_UNIQUE;
 }
+
+const int HEADER_SIZE = 64;	// version 2 byte(major,minor), resign_th(2 byte), handicap rate 14 byte (2*7), average winrate(2 byte)
+const int HANDICAP_TYPE = 7;	// hirate(0),ky(1),ka(2),hi(3),2mai(4),4mai(5),6mai(6)
+

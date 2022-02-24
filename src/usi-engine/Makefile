@@ -1,12 +1,15 @@
+include ../../Makefile.config
+
 THE_OS := $(shell uname -s)
 PROGRAM = aobaz
 
 # isnan() does not work with -ffast-math
 
+
 default:
 	@echo "Detected OS: ${THE_OS}"
 	$(MAKE) CC=gcc CXX=g++ \
-		CXXFLAGS='$(CXXFLAGS) -Wall -Wextra -pipe -O3 -g -march=native -std=c++14 -DNDEBUG'  \
+		CXXFLAGS='$(CXXFLAGS) -Wall -Wextra -Wno-implicit-fallthrough -pipe -O3 -g -march=native -std=c++14 -DNDEBUG'  \
 		LDFLAGS='$(LDFLAGS) -g' \
 		$(PROGRAM)
 
@@ -46,6 +49,11 @@ endif
 #DYNAMIC_LIBS += -lmkl_rt
 #CXXFLAGS += -I/opt/intel/mkl/include
 #LDFLAGS  += -L/opt/intel/mkl/lib/intel64/
+
+USE_POLICY2187 ?= 0
+ifeq ($(USE_POLICY2187), 1)
+	CPPFLAGS += -DUSE_POLICY2187
+endif
 
 # CPU_ONLY = 1 for cpu version.
 CPU_ONLY = 0

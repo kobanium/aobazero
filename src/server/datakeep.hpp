@@ -4,6 +4,7 @@
 #include "iobase.hpp"
 #include "hashtbl.hpp"
 #include "xzi.hpp"
+#include "param.hpp"
 #include <atomic>
 #include <fstream>
 #include <map>
@@ -13,6 +14,9 @@
 #include <thread>
 #include <cstdint>
 namespace OSI { class IAddr; }
+
+extern int nHandicapRate[HANDICAP_TYPE];
+extern int nAverageWinrate;
 
 class Wght {
   int64_t _no;

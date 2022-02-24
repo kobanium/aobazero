@@ -60,6 +60,7 @@ void Utils::create_z_table() {
         boost::math::students_t dist(i);
         auto z = boost::math::quantile(boost::math::complement(dist, cfg_ci_alpha));
         z_lookup[i - 1] = z;
+//      myprintf("%4d:z=%f\n",i,z); // 1:z=31830, 7:z=10, 30:z=5, 100:z=4.5, 1000:z=4.3
     }
 }
 
@@ -236,4 +237,25 @@ const std::string Utils::leelaz_file(std::string file) {
     boost::filesystem::create_directories(dir);
     dir /= file;
     return dir.string();
+}
+
+
+int GetSystemMemoryMB()
+{
+#ifdef _WIN32
+	MEMORYSTATUSEX mem;
+	mem.dwLength = sizeof(mem);
+	if ( GlobalMemoryStatusEx(&mem) == 0 ) return 0;
+	return (int)((double)mem.ullTotalPhys / (1024*1024));	// byte -> MB
+#else
+	FILE *fp = fopen("/proc/meminfo","r");
+	if (fp == NULL) return 0;
+	char line[256];
+	double d = 0;
+	while (fgets(line, sizeof(line), fp)) {
+		if ( sscanf(line, "MemTotal: %lf kB", &d) == 1 ) break;
+	}
+	fclose(fp);
+	return (int)(d / 1024);	// KB -> MB
+#endif
 }

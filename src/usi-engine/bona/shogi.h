@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include "bitop.h"
 #include "param.h"
+#include <string>
 
 #if defined(_WIN32)
 
@@ -122,8 +123,23 @@ extern unsigned char ailast_one[512];
 //#define BNZ_VER                 "15"	// 20201207 sente 1 mate bug fix
 //#define BNZ_VER                 "16"	// 20210930 kldgain, visit Limit, name
 //#define BNZ_VER                 "17"	// 20220108 kldgain
-#define BNZ_VER                 "18"	// 20220110 kldgain 0.0000013, -p 3200 (autousiで指定)
+//#define BNZ_VER                 "18"	// 20220110 kldgain 0.0000013, -p 3200 (autousiで指定)
+#define BNZ_VER                 "27"	// 20220224 Convert from AobaKomaochi v26. Swish, mate3 kyo promote bug fix. balanced_opening, Network V3
 #define BNZ_NAME                "AobaZero"
+
+//#define BNZ_VER                 "16"	// 20210528 komaochi, mate3
+//#define BNZ_VER                 "17"	// 20210607 bug fix. does not tend to move 1 ply mate.
+//#define BNZ_VER                 "18"	// 20210608 OpenCL selfcheck off temporarily
+//#define BNZ_VER                 "19"	// 20210622 Windows binary
+//#define BNZ_VER                 "20"	// 20210628 softmax temperature > 1.0 is adjusted, even if moves <= 30.
+//#define BNZ_VER                 "21"	// 20210919 LCB, kld_gain, reset_root_visit
+//#define BNZ_VER                 "22"	// 20210920 fDiffRootVisit
+//#define BNZ_VER                 "23"	// 20210920 no change. autousi uses kldgain.
+//#define BNZ_VER                 "24"	// 20210922 sum_games bug fix.
+//#define BNZ_VER                 "25"	// 20211102 mtemp 1.3 (autousi)
+//#define BNZ_VER                 "26"	// 20211204 final with weight w1250. -name
+//#define BNZ_NAME                "AobaKomaochi"
+
 
 #define REP_MAX_PLY             32
 #if defined(YSS_ZERO)
@@ -482,7 +498,7 @@ enum { no_rep = 0, four_fold_rep, perpetual_check, perpetual_check2,
 enum { record_misc, record_eof, record_next, record_resign, record_drawn,
        record_error };
 
-enum { black = 0, white = 1 };
+enum { black = 0, white = 1 };	// black(sente), white(gote).
 
 enum { direc_misc           = b0000,
        direc_file           = b0010, /* | */
@@ -735,7 +751,6 @@ struct tree {
   int reached_ply;
   int max_reached_ply;
   int sum_reached_ply;
-  int root_games_sum;
 #endif
   uint64_t node_searched;
   unsigned int *move_last[ PLY_MAX ];
@@ -1196,6 +1211,9 @@ bitboard_t CONV w_attacks_to_piece( const tree_t * restrict ptree, int sq );
 const char * CONV str_time( unsigned int time );
 const char * CONV str_time_symple( unsigned int time );
 const char *str_CSA_move( unsigned int move );
+#if defined(YSS_ZERO)
+std::string string_CSA_move( unsigned int move );
+#endif
 
 #if defined(MPV)
 int root_mpv;
@@ -1353,6 +1371,7 @@ int CONV usi2csa( const tree_t * restrict ptree, const char *str_usi,
 int CONV csa2usi( const tree_t * restrict ptree, const char *str_csa,
 		  char *str_usi );
 int analyze( tree_t * restrict ptree );
+int CONV usi_posi( tree_t * restrict ptree, char **lasts );
 #else
 #  define USIOut( ... )
 #endif
@@ -1469,6 +1488,8 @@ void init_yss_zero();
 void set_default_param();
 void init_state( const tree_t * restrict parent, tree_t * restrict child );
 extern int sfen_current_move_number;
+extern int nHandicap;
+extern float average_winrate;
 #endif
 
 #endif /* SHOGI_H */

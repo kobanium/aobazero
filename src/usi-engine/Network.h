@@ -96,16 +96,16 @@ public:
 
     static constexpr auto INPUT_MOVES = 8;
 //  static constexpr auto INPUT_CHANNELS = 2 * INPUT_MOVES + 2;
-    static constexpr auto INPUT_CHANNELS = 45 * INPUT_MOVES + 2;
+    static constexpr auto INPUT_CHANNELS = 45 * INPUT_MOVES + 2;	// 362
 //  static constexpr auto OUTPUTS_POLICY = 2;
-    static constexpr auto OUTPUTS_POLICY = 160;
-//  static constexpr auto OUTPUTS_VALUE = 1;
+    static constexpr auto OUTPUTS_POLICY   = 160;
+//  static constexpr auto OUTPUTS_POLICY_2 = 139;
     static constexpr auto OUTPUTS_VALUE = 4;
     static constexpr auto VALUE_LAYER = 256;
 
     static constexpr auto B_SIZE = 9;				// 19(Go)
     static constexpr auto B_AREA = B_SIZE*B_SIZE;	// 361(Go)
-    static constexpr auto POLICY_OUT_NUM = 11259;	// 362(Go)
+//  static constexpr auto POLICY_OUT_NUM = B_SIZE*B_SIZE*OUTPUTS_POLICY_2;	// 362(Go)
 //    static constexpr auto POLICY_HEAD_CONV1_SIZE = OUTPUTS_POLICY;
 //    static constexpr auto VALUE_HEAD_CONV1_SIZE  = OUTPUTS_VALUE;
 

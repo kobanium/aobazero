@@ -7,6 +7,7 @@
 #include "shogibase.hpp"
 #include "hashtbl.hpp"
 #include "param.hpp"
+#include "once.hpp"
 #include <algorithm>
 #include <chrono>
 #include <climits>
@@ -49,10 +50,46 @@ constexpr float ema_keep_max     = 0.32f;
 const PtrLen<const char> pl_CSAsepa("/\n", 2);
 
 
+const char HANDICAP_SYN[] = "./handicap/handicap.txt";
+int nHandicapRate[HANDICAP_TYPE];
+
+const char AVERAGE_WINRATE_SYN[] = "./handicap/average_winrate.txt";
+int nAverageWinrate;
+
+void load_hadicap() {
+/*
+	FILE *fp = fopen(HANDICAP_SYN,"r");
+	if ( fp==NULL ) {
+		std::cout << "fail open " << HANDICAP_SYN << std::endl;
+		return;
+	}
+	char str[256] = { 0 } ;
+	if ( fgets( str, 255, fp ) == NULL ) die(ERR_INT("HANDICAP ERROR"));
+	int *q = nHandicapRate;
+	int ret = sscanf(str,"%d %d %d %d %d %d %d",&q[0],&q[1],&q[2],&q[3],&q[4],&q[5],&q[6]);
+	if ( ret != HANDICAP_TYPE ) {
+		std::cout << "fail read handicaprate " << std::endl;
+	}
+	fclose(fp);
+*/
+	FILE *fp = fopen(AVERAGE_WINRATE_SYN,"r");
+	if ( fp==NULL ) {
+		std::cout << "fail open " << AVERAGE_WINRATE_SYN << std::endl;
+		return;
+	}
+	char str[256] = { 0 } ;
+	if ( fgets( str, 255, fp ) == NULL ) die(ERR_INT("AVERAGE_WINRATE ERROR"));
+	int ret = sscanf(str,"%d",&nAverageWinrate);
+	if ( ret != 1 ) {
+		std::cout << "fail read AVERAGE_WINRATE_SYN " << std::endl;
+	}
+	fclose(fp);
+}
+
 static bool
 examine_record(const char *rec, size_t len_rec, uint64_t &digest,
 	       uint &len_play, float &ave_child, bool &flag_no_resign,
-	       float &value_min, uint &node_type) noexcept {
+	       float &value_min, uint &node_type, int &handicap) noexcept {
   assert(rec);
   constexpr char newline[] = "\n";
   char buf[len_rec + 1U];
@@ -75,7 +112,10 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
     char *saveptr_token, *endptr, *token;
     uint64_t digest1, digest2;
     int64_t no;
-    
+
+    bool has_later = false;
+    if ( strstr(line,"later") ) has_later = true;
+
     token = strtok_r(line+ 2, " ", &saveptr_token);
     if (!token) return false;
 
@@ -92,8 +132,8 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
     if (endptr == token || *endptr != '\0' || errno == ERANGE)
       die(ERR_INT("bad crc64 %s", token));
 
-    if (!WghtKeep::get().get_crc64(no, digest2)) return false;
-    if (digest1 != digest2) return false;
+    if (!WghtKeep::get().get_crc64(no, digest2) && has_later == false ) return false;
+    if (digest1 != digest2 && has_later == false ) return false;
 
     token = strtok_r(nullptr, ",", &saveptr_token);
     if (!token) return false;
@@ -104,23 +144,33 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
     token = strtok_r(nullptr, ", ", &saveptr_token);
     if (token) {
       if (strcmp(token, "no-resign") == 0) flag_no_resign = true;
-      else return false; } }
+      else return false;
+    }
+  }
   
   line = strtok_r(nullptr, "\n", &saveptr_line);
   if (!line || line[0] != '\'') return false;
   
   line = strtok_r(nullptr, "\n", &saveptr_line);
-  if (!line || line[0] != 'P' || line[1] != 'I' || line[2] != '\0')
+  if (!line || line[0] != 'P' || line[1] != 'I' /* || line[2] != '\0'*/)
     return false;
+  handicap = -1;
+  for (int i=0;i<HANDICAP_TYPE;i++) {
+    if ( strcmp(str_init_csa[i], line)==0 ) { handicap = i; break; }
+  }
+  if ( handicap < 0 ) return false;
+  
   digest = XZAux::crc64(line, 2U, 0);
   digest = XZAux::crc64(newline, 1U, digest);
   
   line = strtok_r(nullptr, "\n", &saveptr_line);
-  if (!line || line[0] != '+' || line[1] != '\0') return false;
+  if (!line /*|| line[0] != '+'*/ || line[1] != '\0') return false;
   digest = XZAux::crc64(line, 1U, digest);
   digest = XZAux::crc64(newline, 1U, digest);
   
   Node<Param::maxlen_play_learn> node;
+  node.clear(handicap);
+
   uint tot_nchild = 0;
   bool has_result = false;
   enum Result { black_win = 0, draw, black_lose } result = draw;
@@ -430,6 +480,8 @@ void RecKeep::start(Logger *logger, const char *darch, const char *dpool,
   _thread       = thread(&RecKeep::worker, this);
   open_arch_tmp();
 
+  load_hadicap();
+
   // grab files in the pool
   grab_files(_pool, dpool, fmt_pool_scn, 0);
   if (_pool.empty()) return;
@@ -568,12 +620,26 @@ void RecKeep::transact(const JobIP *pjob) noexcept {
   // examine received message
   uint64_t digest;
   uint len_play, node_type;
+  int handicap;
   float ave_child, value_min;
   bool flag_no_resign;
   if (!examine_record(pl_out.p, pl_out.len, digest, len_play, ave_child,
-		      flag_no_resign, value_min, node_type)) {
+		      flag_no_resign, value_min, node_type, handicap)) {
     _logger->out(pjob, bad_CSA_format);
-    return; }
+    if (0) {
+      FILE *fp = fopen("log/bad_CSA.txt","a");
+      const char *p = pl_out.p;
+      if ( fp && p ) {
+        for (int i=0;;i++) {
+          char c = *(p+i);
+          if ( c==0 ) break;
+          fprintf(fp,"%c",c);
+        }
+        fclose(fp);
+      }
+    }
+    return;
+  }
   if (node_type == 99U) die(ERR_INT("INTERNAL ERROR"));
   
   if (len_play < _minlen_play) {
@@ -611,8 +677,17 @@ void RecKeep::transact(const JobIP *pjob) noexcept {
   else sprintf(buf, "resign:y");
 
   _logger->out(pjob, "record no. %" PRIi64 " arrived (crc64:%016" PRIx64
-	       ", ave:%4.1f, len:%3u, type:%u, %s)",
-	       id, digest, ave_child, len_play, node_type, buf);
+	       ", ave:%4.1f, len:%3u, type:%u, handi:%d, %s)",
+	       id, digest, ave_child, len_play, node_type, handicap, buf);
+
+  if ( (id % 10000)==0 ) {
+    FILE *fp = fopen("log/resign.log","a");
+    if ( fp ) {
+      fprintf(fp,"%" PRIi64 ":th=%.3f\n",id, _ema_keep_ptr->get_th16() * (1.0f / 65536.0f) );
+      fclose(fp);
+	}
+  }
+  if ( (id % 100)==0 ) load_hadicap();
 
   // archive a cluster if possible
   int64_t i64_start = _pool.begin()->get_id();

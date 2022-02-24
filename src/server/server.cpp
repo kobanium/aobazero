@@ -35,7 +35,7 @@ static void init() noexcept {
 			   {"DirArchives",       "./archive"},
 			   {"DirPool",           "./pool"},
 			   {"WeightPolling",     "60"},
-			   {"PortPlayer",        "20000"},
+			   {"PortPlayer",        "20001"},
 			   {"ClusterData",       "1000"},
 			   {"BackLog",           "64"},
 			   {"TimeoutSelect",     "5"},

@@ -467,7 +467,7 @@ public:
   FixLStr<512U> to_str(const Color &turn) const noexcept;
   bool ok(const Color &turn) const noexcept;
   bool action_ok_easy(const Color &turn, const Action &a) const noexcept;
-  bool is_nyugyoku(const Color &turn) const noexcept;
+  bool is_nyugyoku(const Color &turn, const uint hadicap) const noexcept;
   BMap to_attacker(const Color &c, const Sq &sq) const noexcept;
   bool is_pinned(const Color &ck, const Sq &from, const Sq &to) const noexcept;
   ZKey get_zkey() const noexcept { return _zkey; }
@@ -517,7 +517,7 @@ public:
   
   void clear() noexcept;
   void toggle_ray_penetrate(const Sq &sq) noexcept;
-  bool action_ok_full(const Color &turn, const Action &a) noexcept;
+  bool action_ok_full(const Color &turn, const Action &a, const uint handicap) noexcept;
   void place_sq(const Color &c, const Pc &pc, const Sq &sq,
 		bool do_aux = true) noexcept;
   void remove_sq(const Sq &sq, bool do_aux = true) noexcept;
@@ -572,15 +572,17 @@ class Node {
   uchar _count_repeat;
   Color _turn;
   NodeType _type;
+  uint _node_handicap;
 
 public:
   explicit Node() noexcept { clear(); }
   const NodeType &get_type() const noexcept { return _type; }
   bool is_incheck() const noexcept { return _len_incheck[_len_path + 1U]; }
-  bool is_nyugyoku() const noexcept { return _board.is_nyugyoku(_turn); }
+  bool is_nyugyoku() const noexcept { return _board.is_nyugyoku(_turn, _node_handicap); }
   uint get_len_path() const noexcept { return _len_path; }
   Color get_turn() const noexcept { return _turn; }
   uint get_count_repeat() const noexcept { return _count_repeat; }
+  uint get_node_handicap() const noexcept { return _node_handicap; }
   const Board &get_board() const noexcept { return _board; }
   FixLStr<512U> to_str() const noexcept { return _board.to_str(_turn); }
   bool ok() const noexcept;

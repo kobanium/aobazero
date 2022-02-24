@@ -426,36 +426,46 @@ const char *
 str_CSA_move( unsigned int move )
 {
   static char str[7];
+  std::string csa_str = string_CSA_move( move );
+  if ( csa_str.size() >= 7 ) { printf("str_CSA_move() err.\n"); exit(0); }
+  strncpy(str, csa_str.c_str(), 7);
+  str[7-1] = 0;
+  return str;
+}
+
+std::string string_CSA_move( unsigned int move ) {
+  const int size = 7+8;	// +8 is "-Wformat-truncation" prevention
+  char str[size];
   int ifrom, ito, ipiece_move, is_promote;
 
   is_promote  = (int)I2IsPromote(move);
   ipiece_move = (int)I2PieceMove(move);
   ifrom       = (int)I2From(move);
   ito         = (int)I2To(move);
-  
+
   if ( is_promote )
     {
-      snprintf( str, 7, "%d%d%d%d%s",
+      snprintf( str, size, "%d%d%d%d%s",
 		9-aifile[ifrom], airank[ifrom]+1,
 		9-aifile[ito],   airank[ito]  +1,
 		astr_table_piece[ ipiece_move + promote ] );
     }
   else if ( ifrom < nsquare )
     {
-      snprintf( str, 7, "%d%d%d%d%s",
+      snprintf( str, size, "%d%d%d%d%s",
 		9-aifile[ifrom], airank[ifrom]+1,
 		9-aifile[ito],   airank[ito]  +1,
 		astr_table_piece[ ipiece_move ] );
     }
   else {
-    snprintf( str, 7, "00%d%d%s",
+    snprintf( str, size, "00%d%d%s",
 	      9-aifile[ito], airank[ito]+1,
 	      astr_table_piece[ From2Drop(ifrom) ] );
   }
-  
-  return str;
-}
 
+  std::string csa_str = str;
+  return csa_str;
+}
 
 int
 read_board_rep1( const char *str_line, min_posi_t *pmin_posi )

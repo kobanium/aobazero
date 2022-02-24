@@ -11,11 +11,14 @@
 #include "param.hpp"
 #include "play.hpp"
 #include "shogibase.hpp"
+#include "client.hpp"
+#include "once.hpp"
 #include <chrono>
 #include <queue>
 #include <deque>
 #include <fstream>
 #include <memory>
+#include <random>
 #include <mutex>
 #include <utility>
 #include <cassert>
@@ -174,15 +177,18 @@ class USIEngine : public Child {
   FName _logname;
   ofstream _ofs;
   string _startpos, _record_main, _fingerprint;
-  string _record_wght, _record_version, _record_settings;
+  string _record_wght, _record_version, _record_settings, _record_handicap;
   int64_t _id_wght;
   uint64_t _crc64_wght;
   int _device_id, _nnet_id, _version;
   uint _eid, _nmove;
   bool _flag_playing, _flag_ready, _flag_thinking, _flag_do_resign;
+  int _handicap;
+  uint _silent_eng;
 
   void out_log(const char *p) noexcept {
     assert(_ofs && p);
+    if ( _silent_eng ) return;
     _ofs << p << endl;
     if (!_ofs) die(ERR_INT("cannot write to log")); }
 
@@ -207,12 +213,13 @@ class USIEngine : public Child {
 public:
   explicit USIEngine(const FName &cname, char ch, int device_id, int nnet_id,
 		     uint eid, const FNameID &wfname, uint64_t crc64,
-		     uint verbose_eng, const FName &logname) noexcept :
+		     uint verbose_eng, uint silent_eng, const FName &logname) noexcept :
   _time_average_nume(0.0), _time_average_deno(0.0), _time_average(0.0),
     _logname(logname),
     _fingerprint(to_string(nnet_id) + string("-") + to_string(eid)),
     _id_wght(wfname.get_id()), _crc64_wght(crc64),
     _device_id(device_id), _nnet_id(nnet_id), _version(-1), _eid(eid),
+    _silent_eng(silent_eng),
     _nmove(0),
     _flag_playing(false), _flag_ready(false), _flag_thinking(false),
     _flag_do_resign(false) {
@@ -259,7 +266,15 @@ public:
     argv[argc++] = opt_m;
     argv[argc++] = opt_m_value;
 
-#if 1
+#if 0	// make first random 100000 games.
+    char opt_nn_rand[] = "-nn_rand";
+    argv[argc++] = opt_nn_rand;
+    char opt_t[]       = "-t";
+    char opt_t_value[] = "1";
+    argv[argc++] = opt_t;
+    argv[argc++] = opt_t_value;
+#endif
+#if 0
     char opt_mtemp[]       = "-mtemp";
     char opt_mtemp_value[] = "1.3";
     argv[argc++] = opt_mtemp;
@@ -291,21 +306,64 @@ public:
     if (!_ofs) die(ERR_INT("cannot write to log"));
     engine_out("usi"); }
 
-  void start_newgame() noexcept {
-    _node.clear();
+  void start_newgame(const uint *phandicap_rate) noexcept {
+//  std::random_device rd;
+//  unsigned int handicap_rnd = rd();
+//  _handicap = handicap_rnd % HANDICAP_TYPE;
+    _handicap = 0;
+
+    _node.clear(_handicap);
     _flag_playing   = true;
     _flag_thinking  = false;
     if ( (resign_count++ % 10) == 0 ) _flag_do_resign = false;
     else                              _flag_do_resign = true;
-    _record_main    = string("PI\n+\n");
-    _nmove          = 0;
-    _startpos       = string("position startpos moves");
+//  _flag_do_resign = false;  // 20210610
 
+    const char *str_turn[2] = { "+", "-" };
     char buf[256];
+    sprintf(buf, "%s\n%s\n",str_init_csa[_handicap], str_turn[(_handicap!=0)]);
+//  _record_main    = string("PI\n+\n");
+    _record_main    = string(buf);
+
+	string init_pos[HANDICAP_TYPE] = {
+      "position startpos moves",
+      "position sfen lnsgkgsn1/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",// ky
+      "position sfen lnsgkgsnl/1r7/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// ka
+      "position sfen lnsgkgsnl/7b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// hi
+      "position sfen lnsgkgsnl/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// 2mai
+      "position sfen 1nsgkgsn1/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// 4mai
+      "position sfen 2sgkgs2/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL"		// 6mai
+    };
+    _startpos = init_pos[_handicap];
+    if ( _handicap > 0 ) _startpos += " w - 1 moves";
+
+    _nmove          = 0;
+
     sprintf(buf, "%16" PRIx64, _crc64_wght);
     _record_wght  = string("'w ") + to_string(_id_wght);
     _record_wght += string(" (crc64:") + string(buf) + string(")");
-    engine_out("usinewgame"); }
+/*
+    const uint *ph = Client::get().get_handicap_rate();
+    if ( ph != phandicap_rate ) die(ERR_INT("handicap_rate pointer Err."));
+    buf[0] = 0;
+    for (int i=0; i<HANDICAP_TYPE; i++) {
+      char b[10];
+      if ( i > 0 ) strcat(buf,":");
+      sprintf(b,"%d",ph[i]);
+      strcat(buf,b);
+    }
+    if (0) printf("in start_newgame->%s\n",buf);
+    _record_handicap = string(", handicapR ");
+    _record_handicap += buf;
+    engine_out("setoption name USI_HandicapRate value %s", buf);	// "30:100:150:300:700:900:1200"
+*/
+    sprintf(buf,"%.3f",(float)(Client::get().get_average_winrate())/1000.0);
+    _record_handicap = string(", average_winrate ");
+    _record_handicap += buf;
+    engine_out("setoption name USI_AverageWinrate value %s", buf);	// "0.547"
+
+    engine_out("usinewgame");
+  }
 
   void engine_go() noexcept {
     _flag_thinking = true;
@@ -319,7 +377,7 @@ public:
     _crc64_wght = crc64;
     engine_out("setoption name USI_WeightFile value %s", wfname.get_fname()); }
 
-  string update(char *line, queue<string> &moves_eid0, float th_resign)
+  string update(char *line, queue<string> &moves_eid0, float th_resign, const uint *phandicap_rate)
     noexcept {
     assert(line);
     char *token, *saveptr;
@@ -332,6 +390,9 @@ public:
       _record_version  = string("autousi ") + to_string(Ver::major);
       _record_version += string(".") + to_string(Ver::minor);
       _record_version += string(", usi-engine ") + to_string(_version);
+
+      // _record_version is used for "no-resign". do not add other info.
+
       engine_out("isready");
       return string(""); }
 
@@ -467,12 +528,13 @@ public:
     if (flag_resign && _flag_do_resign) {
       string rec;
       rec += _record_wght + string(", ") + _record_version + string("\n");
-      rec += string("'") + _record_settings + string("\n");
+      rec += string("'") + _record_settings + _record_handicap + string("\n");
       rec += _record_main;
       rec += "%TORYO" + string(",'autousi,resign-th=") + to_string(th_resign);
       rec += string(",") + new_info;
       _flag_playing = false;
-      return move(rec); }
+      return move(rec);
+    }
 
     if (! new_move.empty())
       _record_main += new_move + string(",'") + new_info;
@@ -480,15 +542,17 @@ public:
     if (_node.get_type().is_term()) {
       string rec;
       if (_flag_do_resign) {
-	rec += _record_wght + string(", ") + _record_version + string("\n"); }
-      else {
-	rec += _record_wght + string(", ");
-	rec += _record_version + string(", no-resign\n"); }
-      rec += string("'") + _record_settings + string("\n");
+        rec += _record_wght + string(", ") + _record_version + string("\n");
+      } else {
+        rec += _record_wght + string(", ");
+        rec += _record_version + string(", no-resign\n");
+      }
+      rec += string("'") + _record_settings + _record_handicap + string("\n");
       rec += _record_main;
       rec += "%" + string(_node.get_type().to_str()) + string("\n");
       _flag_playing = false;
-      return move(rec); }
+      return move(rec);
+    }
 
     return string(""); }
 
@@ -520,12 +584,13 @@ PlayManager & PlayManager::get() noexcept {
 PlayManager::PlayManager() noexcept : _ngen_records(0), _num_thinking(0) {}
 PlayManager::~PlayManager() noexcept {}
 void PlayManager::start(const char *cname, const char *dlog, const char *dtune,
-			const vector<string> &devices_str, uint verbose_eng,
+			const vector<string> &devices_str, uint verbose_eng, uint silent_eng,
 			uint sleep_opencl, const FNameID &wfname,
 			uint64_t crc64) noexcept {
   assert(cname && dlog && dtune && wfname.ok() && _engines.empty());
   if (devices_str.empty()) die(ERR_INT("bad devices"));
   _verbose_eng = verbose_eng;
+  _silent_eng  = silent_eng;
   _cname.reset_fname(cname);
   _logname.reset_fname(dlog);
   _wid = wfname.get_id();
@@ -545,8 +610,8 @@ void PlayManager::start(const char *cname, const char *dlog, const char *dtune,
     char ch       = d.get_id_option_character();
     for (uint u = 0; u < size; ++u)
       _engines.emplace_back(new USIEngine(_cname, ch, device_id, nnet_id,
-					  eid++, wfname, crc64, _verbose_eng,
-					  _logname)); } }
+					  eid++, wfname, crc64, _verbose_eng, _silent_eng,
+					  _logname )); } }
 
 void PlayManager::end() noexcept {
   for (auto &e : _engines) e->engine_quit();
@@ -574,7 +639,8 @@ void PlayManager::end() noexcept {
   seq_s.clear(); }
 
 deque<string> PlayManager::manage_play(bool has_conn, const FNameID &wfname,
-				       uint64_t crc64, float th_resign)
+				       uint64_t crc64, float th_resign, const uint *phandicap_rate,
+				       const uint average_winrate)
   noexcept {
   deque<string> recs;
 
@@ -590,13 +656,13 @@ deque<string> PlayManager::manage_play(bool has_conn, const FNameID &wfname,
       if (e->getline_in(line, sizeof(line)) == 0) flag_eof = true;
       else {
 	bool flag_thinking = e->is_thinking();
-	string s = e->update(line, _moves_eid0, th_resign);
+	string s = e->update(line, _moves_eid0, th_resign, phandicap_rate);
 	if (!s.empty()) {
 	  _ngen_records += 1U;
 	  recs.push_back(move(s)); }
 
 	if (e->is_ready() && _wid == wfname.get_id()) {
-	  if (has_conn && ! e->is_playing()) e->start_newgame();
+	  if (has_conn && ! e->is_playing()) e->start_newgame(phandicap_rate);
 	  if (e->is_playing() && ! e->is_thinking()) e->engine_go(); }
 
 	if (! flag_thinking && e->is_thinking()) _num_thinking += 1U;
@@ -618,7 +684,7 @@ deque<string> PlayManager::manage_play(bool has_conn, const FNameID &wfname,
       bool flag_thinking = e->is_thinking();
       e->engine_wght_update(wfname, crc64);
       if (e->is_ready() && _wid == wfname.get_id()) {
-	if (has_conn && ! e->is_playing()) e->start_newgame();
+	if (has_conn && ! e->is_playing()) e->start_newgame(phandicap_rate);
 	if (e->is_playing() && ! e->is_thinking()) e->engine_go(); }
 
       if (! flag_thinking && e->is_thinking()) _num_thinking += 1U;

@@ -6,20 +6,29 @@
 
 #include "lock.h"
 #include <atomic>
+#include "param.hpp"
 
 const int B_SIZE = 9;
 const int DCNN_CHANNELS = 362;
-const int LABEL_CHANNELS = 139;
+const int LABEL_CHANNELS = 139;	// 11259êÍópÇÃíl
 
 
 const int SHOGI_MOVES_MAX = 593;
 const float ILLEGAL_MOVE = -1000;
 
+#define USE_LCB
+
 typedef struct child {
-	int   move;			// position
+	int   move;			//
 	int   games;		// number of selected
 	float value;		// win rate (win=+1, loss=0)
 	float bias;			// policy
+	int   exact_value;	// WIN or LOSS or DRAW
+#ifdef USE_LCB
+	float squared_eval_diff;	// Variable used for calculating variance of evaluations. for LCB
+	int acc_virtual_loss;		// accumulate virtual loss. for LCB
+#endif
+//	std::atomic<bool> exact_value;
 } CHILD;
 
 #define CHILD_VEC
@@ -45,7 +54,7 @@ typedef struct hash_shogi {
 } HASH_SHOGI;
 
 enum {
-  WHITE, BLACK, NO_COLOR	// WHITE is Sente(man) turn, BLACK is Gote(com) turn
+  EX_NONE, EX_WIN, EX_LOSS, EX_DRAW		// exact value.
 };
 
 extern int fAddNoise;
@@ -57,6 +66,7 @@ extern int nDrawMove;
 extern int nUseHalf;
 extern int nUseWmma;
 extern std::string sDirTune;
+extern int nHandicapRate[HANDICAP_TYPE];
 
 extern std::string default_weights;
 extern std::vector<int> default_gpus;
@@ -70,8 +80,8 @@ void debug_print(const char *fmt, ... );
 void PRT(const char *fmt, ...);
 int get_clock();
 double get_spend_time(int ct1);
-void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *phg);
-double uct_tree(tree_t * restrict ptree, int sideToMove, int ply);
+void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *phg, bool fOpeningHash = false);
+double uct_tree(tree_t * restrict ptree, int sideToMove, int ply, int *pExactValue);
 int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf_move_count);
 void print_all_min_posi(tree_t * restrict ptree, int ply);
 //int check_enter_input();
@@ -81,13 +91,17 @@ void send_latest_bestmove();
 void set_latest_bestmove(char *str);
 int is_send_usi_info(int nodes);
 void send_usi_info(tree_t * restrict ptree, int sideToMove, int ply, int nodes, int nps);
-void usi_newgame();
+void usi_newgame(tree_t * restrict ptree);
 int is_declare_win(tree_t * restrict ptree, int sideToMove);
 int is_declare_win_root(tree_t * restrict ptree, int sideToMove);
 int get_thread_id(tree_t * restrict ptree);
 bool is_selfplay();
+double get_sigmoid_temperature_from_rate(int rate);
+double get_sel_rand_prob_from_rate(int rate);
 bool isKLDGainSmall(tree_t * restrict ptree, int sideToMove);
 void init_KLDGain_prev_dist_visits_total(int games_sum);
+void clear_opening_hash();
+void make_balanced_opening(tree_t * restrict ptree, int sideToMove, int ply);
 
 // yss_net.cpp
 void init_network();
@@ -113,5 +127,10 @@ inline void unpack_te(int *bz,int *az,int *tk,int *nf, int te) {
 int get_yss_packmove_from_bona_move(int move);
 float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *phg);
 void add_dirichlet_noise(float epsilon, float alpha, HASH_SHOGI *phg);
+int get_dlshogi_policy_id(int bz, int az, int tk, int nf);
+int count_square_attack(tree_t * restrict ptree, int sideToMove, int square );
+void kiki_count_indirect(tree_t * restrict ptree, int kiki_count[][81], int kiki_bit[][2][81], bool fKikiBit);
+void update_HandicapRate(const char *token);
+void update_AverageWinrate(const char *token);
 
 #endif	//]] INCLUDE__GUARD

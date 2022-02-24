@@ -244,14 +244,14 @@ std::vector<float> Network::winograd_transform_f(const std::vector<float>& f,
 std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
     // Count size of the network
     myprintf("Detecting residual layers...");
-
+/*
     // We are version 1 or 2
     if (m_value_head_not_stm) {
         myprintf("v%d...", 2);
     } else {
         myprintf("v%d...", 1);
     }
-
+*/
     // First line was the version number
     auto linecount = size_t{1};
     auto channels = 0;
@@ -329,15 +329,10 @@ std::pair<int, int> Network::load_v1_network(std::istream& wtfile) {
                          std::copy(cbegin(weights), cend(weights),
                                    begin(m_bn_pol_w2)); break;
                 case  4:
-/*
-                         if (weights.size() != OUTPUTS_POLICY
-                                               * NUM_INTERSECTIONS
-                                               * POTENTIAL_MOVES) {
-                             myprintf("The weights file is not for %dx%d boards.\n",
-                                      BOARD_SIZE, BOARD_SIZE);
+                         if (weights.size() != OUTPUTS_POLICY * OUTPUTS_POLICY_2 ) {
+                             myprintf("The weights.size()=%d Err. policy output=%d x %d\n",weights.size(),OUTPUTS_POLICY, OUTPUTS_POLICY_2);
                              return {0, 0};
                          }
-*/
 //                       std::copy(cbegin(weights), cend(weights),
 //                                 begin(m_ip_pol_w)); break;
                          m_conv2_pol_w = std::move(weights); break;
@@ -401,24 +396,26 @@ std::pair<int, int> Network::load_network_file(const std::string& filename) {
     // Read format version
     auto line = std::string{};
     auto format_version = -1;
+//  const int FORMAT_VER = 2;	// AobaZero, AobaKomaochi
+    const int FORMAT_VER = 3;	// AobaZero(Swish, NN input are same as AobaKomaochi)
     if (std::getline(buffer, line)) {
         auto iss = std::stringstream{line};
         // First line is the file format version id
         iss >> format_version;
-        if (iss.fail() || (format_version != 2)) {
+        if (iss.fail() || (format_version != FORMAT_VER)) {
             myprintf("Weights file is the wrong version.\n");
             return {0, 0};
         } else {
             // Version 2 networks are identical to v1, except
             // that they return the value for black instead of
             // the player to move. This is used by ELF Open Go.
-
+/*
             if (format_version == 2) {
                 m_value_head_not_stm = true;
             } else {
                 m_value_head_not_stm = false;
             }
-
+*/
             return load_v1_network(buffer);
         }
     }
@@ -664,8 +661,12 @@ std::vector<float> innerproduct(const std::vector<float>& input,
                                    outputs).transpose()
         * ConstEigenVectorMap<float>(input.data(), inputs);
 #endif
-    const auto lambda_ReLU = [](const auto val) { return (val > 0.0f) ?
-                                                          val : 0.0f; };
+#ifdef USE_SWISH
+    const auto lambda_ReLU = [](const auto val) { return val / (1.0f + std::exp(-val)); };
+#else
+    const auto lambda_ReLU = [](const auto val) { return (val > 0.0f) ? val : 0.0f; };
+#endif
+
     for (unsigned int o = 0; o < outputs; o++) {
         auto val = biases[o] + output[o];
         if (ReLU) {
@@ -683,8 +684,11 @@ void batchnorm(const size_t channels,
                const float* const means,
                const float* const stddivs,
                const float* const eltwise = nullptr) {
-    const auto lambda_ReLU = [](const auto val) { return (val > 0.0f) ?
-                                                          val : 0.0f; };
+#ifdef USE_SWISH
+    const auto lambda_ReLU = [](const auto val) { return val / (1.0f + std::exp(-val)); };
+#else
+    const auto lambda_ReLU = [](const auto val) { return (val > 0.0f) ? val : 0.0f; };
+#endif
     for (auto c = size_t{0}; c < channels; ++c) {
         const auto mean = means[c];
         const auto scale_stddiv = stddivs[c];
@@ -986,7 +990,7 @@ Network::Netresult_old Network::get_output_internal(
 //    const auto outputs = softmax(policy_out, cfg_softmax_temp);
 
     std::vector<float> policy_out(POLICY_OUT_NUM);
-    convolve<1>(139, policy_data, m_conv2_pol_w, m_conv2_pol_b, policy_out);	// 9*9*139 = 11259
+    convolve<1>(OUTPUTS_POLICY_2, policy_data, m_conv2_pol_w, m_conv2_pol_b, policy_out);	// 9*9*139 = 11259
     const auto outputs = softmax(policy_out, cfg_softmax_temp);
 //    softmax(policy_out, softmax_data, cfg_softmax_temp);
 //    std::vector<float>& outputs = softmax_data;
