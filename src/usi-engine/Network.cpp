@@ -75,7 +75,7 @@
 #include "Utils.h"
 
 #include "bona/process_batch.h"
-
+#include "param.hpp"
 
 namespace x3 = boost::spirit::x3;
 using namespace Utils;
@@ -396,8 +396,6 @@ std::pair<int, int> Network::load_network_file(const std::string& filename) {
     // Read format version
     auto line = std::string{};
     auto format_version = -1;
-//  const int FORMAT_VER = 2;	// AobaZero, AobaKomaochi
-    const int FORMAT_VER = 3;	// AobaZero(Swish, NN input are same as AobaKomaochi)
     if (std::getline(buffer, line)) {
         auto iss = std::stringstream{line};
         // First line is the file format version id

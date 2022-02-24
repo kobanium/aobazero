@@ -219,7 +219,9 @@ NNAux::read(const FName &fwght, uint &version, uint64_t &digest) noexcept {
   wght_t ret;
   try             { ret = read_xz (fwght, version, digest); }
   catch (NotXZ &) { ret = read_txt(fwght, version, digest); }
-  return ret; }
+  if ( version != FORMAT_VER ) die(ERR_INT("Network weight version is wrong."));
+  return ret;
+}
 
 NNAux::wght_t NNAux::read(const FName &fwght) noexcept {
   uint version;
