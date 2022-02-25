@@ -16,6 +16,7 @@ Ubuntu での手順を記します。ビルド前に、利用したいハード�
 > sudo apt install libboost-dev libboost-program-options-dev
 > sudo apt install libboost-filesystem-dev liblzma-dev zlib1g-dev
 > sudo apt install opencl-headers ocl-icd-libopencl1 ocl-icd-opencl-dev
+> sudo apt install libopenblas-base libopenblas-dev
 
 - make を実行
 

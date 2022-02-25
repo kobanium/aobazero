@@ -429,8 +429,12 @@ b_gen_checks( tree_t * restrict __ptree__, unsigned int * restrict pmove )
 	{
 	  to = LastOne( bb_chk );
 	  Xor( to, bb_chk );
-	  *pmove++ = To2Move(to) | From2Move(from) | Piece2Move(lance)
-	    | Cap2Move(-BOARD[to]) | FLAG_PROMO;
+//	  *pmove++ = To2Move(to) | From2Move(from) | Piece2Move(lance) | Cap2Move(-BOARD[to]) | FLAG_PROMO;
+      if ( to < A6 ) {
+	    *pmove++ = To2Move(to) | From2Move(from) | Piece2Move(lance) | Cap2Move(-BOARD[to]) | FLAG_PROMO;
+	  } else {
+	    *pmove++ = To2Move(to) | From2Move(from) | Piece2Move(lance) | Cap2Move(-BOARD[to]);
+	  }
 	}
     }
   
@@ -1161,8 +1165,12 @@ w_gen_checks( tree_t * restrict __ptree__, unsigned int * restrict pmove )
 	{
 	  to = FirstOne( bb_chk );
 	  Xor( to, bb_chk );
-	  *pmove++ = To2Move(to) | From2Move(from) | Piece2Move(lance)
-	    | Cap2Move(BOARD[to]) | FLAG_PROMO;
+//	  *pmove++ = To2Move(to) | From2Move(from) | Piece2Move(lance) | Cap2Move(BOARD[to]) | FLAG_PROMO;
+	  if ( to > I4 ) {
+	    *pmove++ = To2Move(to) | From2Move(from) | Piece2Move(lance) | Cap2Move(BOARD[to]) | FLAG_PROMO;
+	  } else {
+	    *pmove++ = To2Move(to) | From2Move(from) | Piece2Move(lance) | Cap2Move(BOARD[to]);
+      }
 	}
     }
   

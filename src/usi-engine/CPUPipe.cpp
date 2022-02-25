@@ -42,6 +42,7 @@
 #include <Eigen/Dense>
 #endif
 
+#include <cmath>
 #include "CPUPipe.h"
 #include "Network.h"
 #include "Im2Col.h"
@@ -357,8 +358,11 @@ void batchnorm(const size_t channels,
                const float* const means,
                const float* const stddevs,
                const float* const eltwise = nullptr) {
-    const auto lambda_ReLU = [](const auto val) { return (val > 0.0f) ?
-                                                          val : 0.0f; };
+#ifdef USE_SWISH
+    const auto lambda_ReLU = [](const auto val) { return val / (1.0f + std::exp(-val)); };
+#else
+    const auto lambda_ReLU = [](const auto val) { return (val > 0.0f) ? val : 0.0f; };
+#endif
     for (auto c = size_t{0}; c < channels; ++c) {
         const auto mean = means[c];
         const auto scale_stddev = stddevs[c];

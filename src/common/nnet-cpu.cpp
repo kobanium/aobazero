@@ -508,9 +508,11 @@ compute_matA_BNReLU_fork_matV(uint nch, uint size_batch, const float *matM,
     uint ch = chb / size_batch;
     float fout[NNAux::size_plane];
     compute_matA_child(nchxnb, chb, matM, fout);
-    for (uint u = 0; u < NNAux::size_plane; ++u)
-      fork[chb * NNAux::size_plane + u] = fout[u]
-	= max(0.0f, sd_inv[ch] * (fout[u] - mean[ch]));
+    for (uint u = 0; u < NNAux::size_plane; ++u) {
+      float c = sd_inv[ch] * (fout[u] - mean[ch]);
+//    fork[chb * NNAux::size_plane + u] = fout[u] = max(0.0f, sd_inv[ch] * (fout[u] - mean[ch]));
+      fork[chb * NNAux::size_plane + u] = fout[u] = c / (1.0 + exp(-c));	// SWISH
+    }
     compute_matV_child(nchxnb, chb, fout, matV); } }
 
 static void
@@ -527,7 +529,10 @@ compute_matA_BNReLU_join_fork_matV(uint nch, uint size_batch,
     compute_matA_child(nchxnb, chb, matM, fout);
     for (uint u = 0; u < NNAux::size_plane; ++u) {
       float &f = fork[chb * NNAux::size_plane + u];
-      f = fout[u] = max(0.0f, f + sd_inv[ch] * (fout[u] - mean[ch])); }
+      float c = f + sd_inv[ch] * (fout[u] - mean[ch]);
+//    f = fout[u] = max(0.0f, f + sd_inv[ch] * (fout[u] - mean[ch]));
+      f = fout[u] = c / (1.0 + exp(-c));	// SWISH
+    }
     compute_matV_child(nchxnb, chb, fout, matV); } }
 
 static void
@@ -541,7 +546,12 @@ compute_matA_BNReLU_join_fork(uint nch, uint size_batch, const float *matM,
     compute_matA_child(nchxnb, chb, matM, fout);
     for (uint u = 0; u < NNAux::size_plane; ++u) {
       float &f = fork[chb * NNAux::size_plane + u];
-      f = fout[u] = max(0.0f, f + sd_inv[ch] * (fout[u] - mean[ch])); } } }
+      float c = f + sd_inv[ch] * (fout[u] - mean[ch]);
+//    f = fout[u] = max(0.0f, f + sd_inv[ch] * (fout[u] - mean[ch]));
+      f = fout[u] = c / (1.0 + exp(-c));	// SWISH
+    }
+  }
+}
 
 static void
 compute_matA_BNReLU_matV(uint nch, uint size_batch, const float *matM,
@@ -554,8 +564,11 @@ compute_matA_BNReLU_matV(uint nch, uint size_batch, const float *matM,
     uint ch = chb / size_batch;
     float fout[NNAux::size_plane];
     compute_matA_child(nchxnb, chb, matM, fout);
-    for (uint u = 0; u < NNAux::size_plane; ++u)
-      fout[u] = max(0.0f, sd_inv[ch] * (fout[u] - mean[ch]));
+    for (uint u = 0; u < NNAux::size_plane; ++u) {
+      float c = sd_inv[ch] * (fout[u] - mean[ch]);
+//    fout[u] = max(0.0f, sd_inv[ch] * (fout[u] - mean[ch]));
+      fout[u] = c / (1.0 + exp(-c));	// SWISH
+    }
     compute_matV_child(nchxnb, chb, fout, matV); } }
 
 // in:     mean[nch]
@@ -567,8 +580,13 @@ static void compute_BNReLU(uint nch, uint size_batch, const float *mean,
     float x = mean[ch];
     float y = sd_inv[ch];
     float *f = fio + ch * size_batch * NNAux::size_plane;
-    for (uint u = 0; u < size_batch * NNAux::size_plane; ++u)
-      f[u] = max(0.0f, y * (f[u] - x)); } }
+    for (uint u = 0; u < size_batch * NNAux::size_plane; ++u) {
+      float c = y * (f[u] - x);
+//    f[u] = max(0.0f, y * (f[u] - x));
+      f[u] = c / (1.0 + exp(-c));	// SWISH
+    }
+  }
+}
 
 // in:  nnmoves[size_batch][NN::nmove]
 // in:  weight[nch_out_policy][nch]
@@ -680,9 +698,11 @@ uint NNetCPU::push_ff(uint size_batch, const float *input,
 	      size_batch, _value2_nout, _value2_nin,
 	      1.0f, f1, _value2_nin, _value2_weight.get(), _value2_nin,
 	      1.0f, f2, _value2_nout);
-  for (uint u = 0; u < size_batch * _value2_nout; ++u)
-    f2[u] = max(0.0f, f2[u]);
-
+  for (uint u = 0; u < size_batch * _value2_nout; ++u) {
+    float c = f2[u];
+//  f2[u] = max(0.0f, f2[u]);
+    f2[u] = c / (1.0 + exp(-c));	// SWISH
+  }
   // in:  _value3_weight[_value3_nin]
   // in:  _value3_bias[1]
   // in:  f2[size_batch][_value3_nin]

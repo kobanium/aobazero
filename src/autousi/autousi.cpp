@@ -68,6 +68,7 @@ static string str_dtune;
 static string str_cname;
 static string str_dlog;
 static uint verbose_eng;
+static uint silent_eng;
 static uint sleep_opencl;
 static vector<string> devices;
 
@@ -111,9 +112,10 @@ static void init() noexcept {
 			   {"PrintStatus",   "0"},
 			   {"PrintCSA",      "0"},
 			   {"VerboseEngine", "0"},
+			   {"SilentEngine",  "0"},
 			   {"KeepWeight",    "0"},
 			   {"Addr",          "127.0.0.1"},
-			   {"Port",          "20000"}};
+			   {"Port",          "20001"}};
   try { Config::read("autousi.cfg", m); } catch (exception &e) { die(e); }
   const char *cstr_dwght = Config::get_cstr(m, "WeightSave",    maxlen_path);
   str_cname              = Config::get_cstr(m, "CmdPath",       maxlen_path);
@@ -131,6 +133,7 @@ static void init() noexcept {
   opt_max_csa            = Config::get<uint>  (m, "MaxCSA");
   uint keep_wght         = Config::get<uint>  (m, "KeepWeight");
   verbose_eng            = Config::get<uint>  (m, "VerboseEngine");
+  silent_eng             = Config::get<uint>  (m, "SilentEngine");
   uint port              = Config::get<ushort>(m, "Port");
   devices                = Config::get_vecstr (m, "Device");
   print_status           = Config::get<uint>  (m, "PrintStatus");
@@ -205,8 +208,18 @@ static void output() noexcept {
     printf("|%s|%s|%6.0fms|%3d:%-45s|\n",
 	   spid, sdev, time_ave, PlayManager::get().get_nmove(u), buf); }
   puts("+---+---+--------+-------------------------------------------------+");
-  printf("- Send:   Sent %d, Lost %d, Waiting %d\n",
+  printf("- Send:   Sent %d, Lost %d, Wait %d, ",
 	 nsend, ndiscard, ntot - nsend - ndiscard);
+/*
+  printf("HandicapR ");
+  const uint *ph = Client::get().get_handicap_rate();
+  for (int i=0; i<HANDICAP_TYPE; i++) {
+     if ( i > 0 ) printf(",");
+     printf("%d",ph[i]);
+  }
+  printf("\n");
+*/
+  printf("AverageWinrate %.3f\n",(float)(Client::get().get_average_winrate())/1000.0f);
 
   int64_t wght_id        = Client::get().get_wght()->get_id();
   bool    is_downloading = Client::get().is_downloading();
@@ -245,7 +258,7 @@ int main() {
   init();
   std::shared_ptr<const WghtFile> wght = Client::get().get_wght();
   PlayManager::get().start(str_cname.c_str(), str_dlog.c_str(),
-			   str_dtune.c_str(), devices, verbose_eng,
+			   str_dtune.c_str(), devices, verbose_eng, silent_eng,
 			   sleep_opencl, wght->get_fname(), wght->get_crc64());
 
   cout << "self-play started" << endl;
@@ -255,10 +268,13 @@ int main() {
     output();
     wght = Client::get().get_wght();
     float th_resign  = Client::get().get_th_resign();
+    const uint *phandicap_rate = Client::get().get_handicap_rate();
+    uint  ave_wr               = Client::get().get_average_winrate();
+
     deque<string> recs
       = PlayManager::get().manage_play(Client::get().has_conn(),
 				       wght->get_fname(), wght->get_crc64(),
-				       th_resign);
+				       th_resign, phandicap_rate, ave_wr);
     
     for (const string &rec : recs) {
       Client::get().add_rec(rec.c_str(), rec.size());

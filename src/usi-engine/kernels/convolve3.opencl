@@ -310,7 +310,8 @@ void out_transform_fused_bn(__global const net_t * restrict M,
             if (residual) {
                 acc += vload_net_t(out_idx, residual);
             }
-            acc = acc > ZERO ? acc : ZERO;
+//          acc = acc > ZERO ? acc : ZERO;
+            acc = acc / (1.0 + exp(-acc));	// SWISH
 
             vstore_net_t(acc, out_idx, Y);
         }
@@ -416,7 +417,8 @@ __kernel void out_transform_fused_bn_in(
         if (residual) {
             acc += vload_net_t(kHWx + idx, residual);
         }
-        acc = acc > ZERO ? acc : ZERO;
+//      acc = acc > ZERO ? acc : ZERO;
+        acc = acc / (1.0 + exp(-acc));	// SWISH
 
         if (Y) {
             vstore_net_t(acc, kHWx + idx, Y);

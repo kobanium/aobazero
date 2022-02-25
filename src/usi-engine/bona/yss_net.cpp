@@ -413,6 +413,7 @@ void init_network()
 
 void replace_network(const char *token)
 {
+	clear_opening_hash();
 	if ( ! is_load_weight() ) return;
 	cfg_weightsfile = token;
 	GTP::s_network.reset();
@@ -467,7 +468,11 @@ void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *
  	const int t = ptree->nrep + ply - 1;	// 手数。棋譜の手数+探索深さ。ply は1から始まるので1引く。
 	int flip = sideToMove;	// 後手の時は全部ひっくり返す
 	int loop;
+#ifdef USE_POLICY2187
+	const int T_STEP = 6;
+#else
 	const int T_STEP = 8;
+#endif
 	const int STANDARDIZATION = 1;
 
 //	if ( sideToMove != (t&1) ) { PRT("sideToMove Err\n"); debug(); }
@@ -553,36 +558,178 @@ void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *
 			break;
 		}
 	}
-	
+
+
+#ifdef USE_POLICY2187
+/* nnet.cpp で入力特徴がfillとそれ以外で最適化されてるので、それに合わせる。最初の28が通常、残り17がfill。合計45。28+10=38が通常。1+6=7 がfill
+   45では足りないのでT=6で。
+  0  - 13 black position
+  14 - 27 white position
+  28 - 34 black hand (fill)
+  35 - 41 white hand (fill)
+  42 - 44 rep        (fill)
+*/
+//	int prev_base = base;
+
+	int kiki_bit[14][2][81] = { 0 };
+	kiki_count_indirect(ptree, NULL, kiki_bit, true);
+	for (int i=0;i<14;i++) {
+		add_base = 2;
+		for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+			int z = y*B_SIZE + x;
+			int n0 = kiki_bit[i][0][z];	// sente
+			int n1 = kiki_bit[i][1][z];
+
+			int yy = y, xx = x;
+			if  ( flip ) {
+				int tmp = n0;
+				n0 = n1;
+				n1 = tmp;
+				yy = B_SIZE - y -1;
+				xx = B_SIZE - x -1;
+			}
+
+			if ( n0 ) set_dcnn_data( data, base+0, yy,xx);
+			if ( n1 ) set_dcnn_data( data, base+1, yy,xx);
+		}
+		base += add_base;
+	}
+
 	add_base = 1;
+	if ( InCheck(sideToMove) ) for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+		set_dcnn_data( data, base, y,x);
+	}
+	if ( InCheck(Flip(sideToMove)) ) DEBUG_PRT("");
+	base += add_base;
+
+	// 駒落ち
+	add_base = 7;
+	if ( nHandicap < 0 || nHandicap >= HANDICAP_TYPE ) DEBUG_PRT("");
+	for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+		set_dcnn_data( data, base + nHandicap, y,x);
+	}
+	base += add_base;
+
+/*
+	add_base = 6;
+	// 宣言勝ちの点数を計算
+	int in_num[2]   = { 0 };	// 敵陣内にある王以外の枚数
+	int decl_in[2]  = { 0 };	// 点数(敵陣内の駒＋持駒) ... 宣言に有効
+	int decl_sum[2] = { 0 };	// 点数(盤上の駒  ＋持駒)
+
+	int np = ptree->nrep + ply - 0 - 1;
+	min_posi_t *p = &ptree->record_plus_ply_min_posi[np];
+
+	for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+		int z = y*9 + x;
+		int k = BOARD[z];
+		int k_abs = abs(k);
+		if ( k==0 || k_abs==king ) continue;	// 空白と王
+		int a = 1;
+		if ( (k_abs&0x07) >= 0x06 ) a = 5;	// 大駒は5点
+		int c = (k < 0);
+		decl_sum[c] += a;
+		if ( c==0 && y <= 2 ) { decl_in[c] += a; in_num[c]++; }
+		if ( c==1 && y >= 6 ) { decl_in[c] += a; in_num[c]++; }
+	}
+
+	int s0 = 0, s1 = 0;
+	for (int i=1;i<8;i++) {
+		int n0 = get_motigoma(i, p->hand_black);
+		int n1 = get_motigoma(i, p->hand_white);
+		if ( i>=6 ) {
+			n0 *= 5;
+			n1 *= 5;
+		}
+		s0 += n0;
+		s1 += n1;
+	}
+	decl_in[0] += s0;
+	decl_in[1] += s1;
+	decl_sum[0] += s0;
+	decl_sum[1] += s1;
+	if  ( flip ) {
+		int tmp;
+		tmp = in_num[0];   in_num[0]   = in_num[1];   in_num[1]   = tmp;
+		tmp = decl_in[0];  decl_in[0]  = decl_in[1];  decl_in[1]  = tmp;
+		tmp = decl_sum[0]; decl_sum[0] = decl_sum[1]; decl_sum[1] = tmp;
+	}
+	for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+		set_dcnn_data( data, base+0, y,x, (float)in_num[0]  /10.0f);
+		set_dcnn_data( data, base+1, y,x, (float)in_num[1]  /10.0f);
+		set_dcnn_data( data, base+2, y,x, (float)decl_in[0] /27.0f);
+		set_dcnn_data( data, base+3, y,x, (float)decl_in[1] /27.0f);
+		set_dcnn_data( data, base+4, y,x, (float)decl_sum[0]/27.0f);
+		set_dcnn_data( data, base+5, y,x, (float)decl_sum[1]/27.0f);
+	}
+	base += add_base;
+*/
+
+	add_base = 9;	// 17 - (1+7+0);
+	base += add_base;
+
+
+	add_base = 10;
+	int kiki_count[2][81] = { 0 };
+	kiki_count_indirect(ptree, kiki_count, NULL, false);
+	for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+		int z = y*B_SIZE + x;
+		int n0 = kiki_count[0][z];	// sente
+		int n1 = kiki_count[1][z];
+
+		int yy = y, xx = x;
+		if  ( flip ) {
+			int tmp = n0;
+			n0 = n1;
+			n1 = tmp;
+			yy = B_SIZE - y -1;
+			xx = B_SIZE - x -1;
+		}
+
+		const int M = 4;
+		if ( n0>M ) n0=M;
+		if ( n1>M ) n1=M;
+		int i;
+		if ( n0==0 )       set_dcnn_data( data, base+0      , yy,xx);
+		for (i=0;i<n0;i++) set_dcnn_data( data, base+i+1    , yy,xx);
+		if ( n1==0 )       set_dcnn_data( data, base+0  +M+1, yy,xx);
+		for (i=0;i<n1;i++) set_dcnn_data( data, base+i+1+M+1, yy,xx);
+	}
+	base += add_base;
+
+	add_base = 18+17;	// 45 - (10)
+	base += add_base;
+
+//	int left = (28 + 14 + 3)*(8-T_STEP) - (base - prev_base);	// 45*X - add
+//	base += left;
+//	if ( left < 0 ) DEBUG_PRT("");
+#endif
+
+	add_base = 2;
 	if ( sideToMove == 1 ) for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
 		set_dcnn_data( data, base, y,x);
 	}
-	if ( DCNN_CHANNELS == 362 ) {
-		float div = 1.0f;
-		if ( STANDARDIZATION ) div = 512.0f;
-		// 513手目が指せれば引き分け。floodgateは256手目が指せれば引き分け。選手権は321手目が指せれば引き分け。
-		int tt = t + sfen_current_move_number;
-		if ( nDrawMove ) {
-			int draw = nDrawMove;	// 256, 321
-			int w = 160;	// 何手前から増加させるか。256手引き分けでw=60なら196手から増加
-			if ( draw - w < 0 ) w = draw;
-			int d = draw - w;
-//			if ( tt > d ) tt += 513 - draw;				// 突然増加
-//			if ( tt > d ) tt = (tt-d)*(513-d)/w + d;	// 線形に増加
-			if ( tt > d ) tt = (int)(1.0 / (1.0 + exp(-5.0*((tt-d)*2.0/w - 1.0))) * (513 - d) + d);	// sigmoidで半分で急激に増加, a = 5
-//			PRT("tt=%d -> %d\n",t + sfen_current_move_number,tt);
-		}
-		for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
-//			set_dcnn_data( data, base+1, y,x, t);
-			set_dcnn_data( data, base+1, y,x, (float)tt/div);
-		}
-		add_base = 2;
+	float div = 1.0f;
+	if ( STANDARDIZATION ) div = 512.0f;
+	// 513手目が指せれば引き分け。floodgateは256手目が指せれば引き分け。選手権は321手目が指せれば引き分け。
+	int tt = t + sfen_current_move_number;
+	if ( nDrawMove ) {
+		int draw = nDrawMove;	// 256, 321
+		int w = 160;	// 何手前から増加させるか。256手引き分けでw=60なら196手から増加
+		if ( draw - w < 0 ) w = draw;
+		int d = draw - w;
+//		if ( tt > d ) tt += 513 - draw;				// 突然増加
+//		if ( tt > d ) tt = (tt-d)*(513-d)/w + d;	// 線形に増加
+		if ( tt > d ) tt = (int)(1.0 / (1.0 + exp(-5.0*((tt-d)*2.0/w - 1.0))) * (513 - d) + d);	// sigmoidで半分で急激に増加, a = 5
+//		PRT("tt=%d -> %d\n",t + sfen_current_move_number,tt);
+	}
+	for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+		set_dcnn_data( data, base+1, y,x, (float)tt/div);
 	}
 	base += add_base;
 
 //	PRT("base=%d,net_type=%d\n",base,net_type);
-//	if ( t==8 ) { hyouji(); int i; for (i=0;i<base;i++) prt_dcnn_data(data,i,-1); DEBUG_PRT("t=%d,tesuu=%d\n",t,tesuu); }
+	if ( 0 ) { print_board(ptree); int i; for (i=0;i<base;i++) prt_dcnn_data(data,i,-1); DEBUG_PRT("t=%d,ply=%d\n",t,ply); }
 	if ( DCNN_CHANNELS != base ) { PRT("Err. DCNN_CHANNELS != base %d\n",base); debug(); }
 }
 
@@ -590,7 +737,7 @@ void prt_dcnn_data(float (*data)[B_SIZE][B_SIZE],int c,int turn_n)
 {
 	int x,y;
 	for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
-		PRT("%.0f ",data[c][y][x] );
+		PRT("%.3f ",data[c][y][x] );
 		if ( y==B_SIZE-2 && x==B_SIZE-1 ) PRT(" %3d",c);
 		if ( y==B_SIZE-1 && x==B_SIZE-1 ) PRT(" %3d\n",turn_n);
 		if ( x==B_SIZE-1 ) PRT("\n");
@@ -698,8 +845,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 		const float  nn_value = p_nnet->get_value();
 
 		std::vector<std::pair<float, int>> policy_result;
-		const int POLICY_OUT_SIZE = 11259;
-		for (int idx = size_t{0}; idx < POLICY_OUT_SIZE; idx++) {
+		for (int idx = size_t{0}; idx < POLICY_OUT_NUM; idx++) {
 			policy_result.emplace_back(0.0f, idx);
 		}
 
@@ -722,7 +868,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 				available_sum += cpu[id].first;
 			}
 			std::vector<std::pair<float, int>> cpu_result;
-			for (int idx = size_t{0}; idx < POLICY_OUT_SIZE; idx++) {
+			for (int idx = size_t{0}; idx < POLICY_OUT_NUM; idx++) {
 				cpu_result.emplace_back(0.0f, idx);
 			}
 			float mul = 1.0f;
@@ -740,7 +886,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 			count++;
 			int per_bigs = 0;
 			float r0_sum=0,r1_sum=0;
-			for (i = 0; i < POLICY_OUT_SIZE; i++) {
+			for (i = 0; i < POLICY_OUT_NUM; i++) {
 				auto bat = result.first, cpu = cpu_result; //result_ref.first;
 				float r0 = bat[i].first, r1 = cpu[i].first;
 				float diff = fabs(r0 - r1);
@@ -775,7 +921,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
     float raw_v = result.second;
 	if ( is_nan_inf(raw_v) ) raw_v = 0;
 	float v_fix = raw_v;	// (raw_v + 1) / 2;
-	if ( sideToMove==BLACK ) v_fix = -v_fix;	// 手番関係なく先手勝ちが+1
+	if ( sideToMove==white ) v_fix = -v_fix;	// 手番関係なく先手勝ちが+1
 
 
 //	PRT("result.first.size()=%d\n",result.first.size());
@@ -788,7 +934,15 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
     for (const auto& node : result.first) {
         auto id = node.second;
         all_sum += node.first;
+
+#ifdef USE_POLICY2187
+//		int yss_m = get_packmove_from_2187_policy(ptree, int sideToMove, id);
+		int yss_m = 0;
+		continue;
+#else
 		int yss_m = get_move_from_c_y_x_id(id);
+#endif
+
 		int bz,az,tk,nf;
 		unpack_te(&bz,&az,&tk,&nf, yss_m);
 		int bz_x = bz & 0x0f;
@@ -883,7 +1037,7 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 	if ( all_sum > legal_sum && legal_sum > 0 ) mul = 1.0f / legal_sum;
 	for ( i = 0; i < phg->child_num; i++ ) {
 		CHILD *pc = &phg->child[i];
-		if ( 0 && ply==1 && i < 200 ) {
+		if ( 0 && ply==1 && i < 30 ) {
 			PRT("%3d:%s(%08x), bias=%8f->(%8f)\n",i,str_CSA_move(pc->move), get_yss_packmove_from_bona_move(pc->move), pc->bias, pc->bias*mul);
 		}
 		pc->bias *= mul;
@@ -1090,9 +1244,15 @@ int get_move_from_c_y_x_id(int id)
 }
 int get_id_from_move(int pack_move)
 {
+#ifdef USE_POLICY2187
+	int bz,az,tk,nf;
+	unpack_te(&bz,&az,&tk,&nf, pack_move);
+	return get_dlshogi_policy_id(bz, az, tk, nf);
+#else
 	int c,x,y;
 	get_c_y_x_from_move(&c, &y, &x, pack_move);
 	return get_move_id_from_c_y_x(c, y, x);
+#endif
 }
 void flip_dccn_move( int *bz, int *az, int * /* tk */, int *nf )
 {
@@ -1141,11 +1301,12 @@ int get_yss_packmove_from_bona_move(int move)
 	return pack_te(bz,az,tk,nf);
 }
 
-/*
-// 着手不可能な手は0を返す。
-int shogi::get_packmove_from_2187_policy(int z2187, bool fGoteTurn)
+// 着手不可能な手は0を返す
+int get_packmove_from_2187_policy(tree_t * restrict ptree, int sideToMove, int z2187)
 {
 	int bz = 0,az = 0,tk = 0,nf = 0;
+//	int z_org = z2187;
+	bool fGoteTurn = (sideToMove==white);
 	if ( z2187 >= 81*20 ) {	// drop
 		bz = 0xff;
 		z2187 -= 81*20;
@@ -1180,26 +1341,37 @@ int shogi::get_packmove_from_2187_policy(int z2187, bool fGoteTurn)
 		bz = az + 0x1f;
 		if ( fGoteTurn ) bz = az - 0x1f;
 	} else {
-		// z8[8] = { +0x01, +0x11, +0x10, +0x0f, -0x01, -0x11, -0x10, -0x0f };
+		const int z8[8] = { +0x01, +0x11, +0x10, +0x0f, -0x01, -0x11, -0x10, -0x0f };
+//		const int z8[8] = { +1, +10, +9, +8, -1, -10, -9, -8 };
+		const int dxy8[8][2] = { {+1,0}, {+1,+1}, {0,+1}, {-1,+1}, {-1,0}, {-1,-1}, {0,-1}, {+1,-1} };
 		int dz = z8[dir];
-		if ( fGoteTurn ) dz = -dz;
+		int dx = dxy8[dir][0];
+		int dy = dxy8[dir][1];
+		if ( fGoteTurn ) {
+			dz = -dz;
+			dx = -dx;
+			dy = -dy;
+		}
+		int xx = x, yy = y;
 		for (bz = az+dz; ;bz += dz) {
-			if ( init_ban[bz] ) break;
+			xx += dx;
+			yy += dy;
+			if ( xx < 0 || xx > 8 || yy < 0 || yy > 8 ) return 0;
+			if ( BOARD[yy*9+x] != empty ) break;
 		}
 //		PRT("z_org=%4d,dir=%d,az=%02x,bz=%02x(%02x):",z_org,dir,az,bz, init_ban[bz]	);
-
-		if ( init_ban[bz] == 0xff ) return 0;
-//		if ( init_ban[bz] == 0xff || (bz&0xf0) > 0x90 || (bz&0x0f)==0 || (bz&0x0f)==0 ) DEBUG_PRT("z_org=%4d,az=%02x,dir=%d\n",z_org,az,dir);
+//		if ( BOARD[bz] == 0xff ) return 0;
+//		if ( BOARD[bz] == 0xff || (bz&0xf0) > 0x90 || (bz&0x0f)==0 || (bz&0x0f)==0 ) DEBUG_PRT("z_org=%4d,az=%02x,dir=%d\n",z_org,az,dir);
 	
 	}
 	return pack_te(bz,az,tk,nf);
 }
-*/
 
 // 移動先、とその位置に来る方向(8+2)、成(8+2)、駒打ち、で 9x9 * (10 + 10 + 7) = 81*27 = 2187 通りで一意に決まる
 // https://tadaoyamaoka.hatenablog.com/entry/2017/05/07/155418
 // 盤外からの移動や、打てない駒、4段目以上での下から以外の移動での成、を削除すると 1600? 通り。指し手の最大が593だから半分近い！
-int get_dlshogi_policy(int bz, int az, int tk, int nf) {
+// 1496通り、らしいです。https://tokumini.hatenablog.com/entry/2021/09/19/160000
+int get_dlshogi_policy_id(int bz, int az, int tk, int nf) {
 	int fDrop = 0;
 	int fNari = (nf!=0);
 	int dir = -1;
@@ -1236,10 +1408,6 @@ int get_dlshogi_policy(int bz, int az, int tk, int nf) {
 }
 
 
-
-
-
-
 // alpha ... Chess = 0.3, Shogi = 0.15, Go = 0.03
 // epsilon = 0.25
 void add_dirichlet_noise(float epsilon, float alpha, HASH_SHOGI *phg)
@@ -1271,8 +1439,128 @@ void add_dirichlet_noise(float epsilon, float alpha, HASH_SHOGI *phg)
 		CHILD *pc = &phg->child[i];
         float score = pc->bias;
         score = score * (1 - epsilon) + epsilon * eta_a;
-        PRT("%3d:%8s,noise=%.9f, bias=%.9f -> %.9f\n",i,str_CSA_move(pc->move),eta_a,pc->bias,score);
+        { static int count; if ( count++<100 ) PRT("%3d:%8s,noise=%.9f, bias=%.9f -> %.9f\n",i,str_CSA_move(pc->move),eta_a,pc->bias,score); }
         pc->bias = score;
     }
+}
+
+int sign(int x) {
+	return (x > 0) - (x < 0);
+}
+int movable[16][9] = {
+	{ 0 },
+	{ 9 },		// 歩は前方に動けるので
+	{ 9+50 },	// 香
+	{ 19,17 }, 	// 桂
+	{ 8,9,10,-8,-10 }, 	// 銀
+	{ 8,9,10,1,-1,-9 },	// 金
+	{ 8+50,10+50,-8+50,-10+50 },// 角
+	{ 9+50, 1+50,-1+50, -9+50 },// 飛
+	{ 8,9,10,1,-1,-8,-9,-10 },	// 王
+	{ 8,9,10,1,-1,-9 }, // と
+	{ 8,9,10,1,-1,-9 }, // 成香
+	{ 8,9,10,1,-1,-9 }, // 成桂
+	{ 8,9,10,1,-1,-9 }, // 成銀
+	{ 0 },
+	{ 8+50,10+50,-8+50,-10+50, 9, 1,-1, -9 }, // 馬
+	{ 9+50, 1+50,-1+50, -9+50,10, 8,-8,-10 }, // 龍
+};
+int kt[4][16] = {
+//      fu ky ke gi ki ka hi ou to ny nk ng -- um ry
+	{ 0, 1, 2, 0, 1, 1, 0, 2, 0, 1, 1, 1, 1, 0, 1, 2 },// +9       ... 前     19
+	{ 0, 0, 0, 0, 0, 1, 0, 2, 0, 1, 1, 1, 1, 0, 1, 2 },// +1 -1 -9 ... 横 後  11  9,1
+	{ 0, 0, 0, 0, 1, 1, 2, 0, 0, 1, 1, 1, 1, 0, 2, 1 },// +8 +10   ... 斜め前 18 20
+	{ 0, 0, 0, 0, 1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2, 1 } // -8 -10   ... 斜め後  2  0
+};
+int kt_m[21] = {	// 移動量に+10
+// 0 1 2 3 4 5 6 7 8 91011121314151617181920
+   3,1,3,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,2,0,2
+};
+
+void kiki_count_indirect(tree_t * restrict ptree, int kiki_count[][81], int kiki_bit[][2][81], bool fKikiBit)
+{
+	int b;
+	for (b=0;b<81;b++) {
+		int k = BOARD[b];
+		if ( k==0 ) continue;
+		int c = black;
+		if ( k < 0 ) c = white;
+		int c_sign = sign(k);
+		int opponent_king = king;
+		if ( c_sign > 0 ) opponent_king = -king;
+		k = abs(k);
+		int k_index = k - (k>=14) - 1;	// -> 0...13
+		if ( k_index < 0 || k_index > 13 ) DEBUG_PRT("");
+		for (int i=0;i<8;i++) {
+			int dz = movable[k][i];
+			if ( dz == 0 ) break;
+			int one;
+			if ( dz < 30 ) one = 1;					// 単純な移動
+			else         { one = 0; dz = dz - 50; }	// 長い利き
+			int ktm = kt_m[dz + 10];
+			if ( c == black ) dz = -dz;
+			if ( dz > +19 || dz < -19 ) DEBUG_PRT("");
+			for (int a = b;;) {
+				int by = a / 9;
+				int bx = a - by*9;
+				a += dz;
+				int ay = a / 9;
+				int ax = a - ay*9;
+//				PRT("b=%2d:k=%3d,bx,by=%d,%d,ax,ay=%d,%d,a=%2d,dz=%3d,one=%d,c_sign=%3d\n",b,k,bx,by,ax,ay,a,dz,one,c_sign);
+				if ( abs(bx - ax) >= 2 ) break;
+				if ( a < 0 || a >= 81 ) break;
+
+				if ( fKikiBit ) {
+					kiki_bit[k_index][c][a] |= 1;
+				} else {
+					kiki_count[c][a]++;
+				}
+				if ( one ) break;
+				int tk = BOARD[a];
+				if ( tk == 0 ) continue;
+				if ( tk == opponent_king ) continue;	// 敵王は通過
+				if ( fKikiBit ) break;
+				if ( sign(tk) != c_sign ) break;
+				// 味方の駒は、間接の利きで通過を判定
+				int abs_tk = abs(tk);
+				if ( kt[ktm][abs_tk] == 0 ) break;
+				if ( kt[ktm][abs_tk] == 1 ) one = 1;
+			}
+		}
+	}
+}
+
+int count_square_attack(tree_t * restrict ptree, int sideToMove, int square ) {
+	if ( sideToMove == black ) {
+		return PopuCount( b_attacks_to_piece( ptree, square ) );
+	} else {
+		return PopuCount( w_attacks_to_piece( ptree, square ) );
+	}
+	DEBUG_PRT(""); return 0;
+}
+
+void update_HandicapRate(const char *str)
+{
+	// "30:100:150:300:700:900:1200"
+	char *lasts;
+	char *token = strtok_r( (char *)str, ":", &lasts );
+	int i;
+	for (i=0; i<HANDICAP_TYPE; i++) {
+		if ( token == NULL ) break;
+		int x = atoi(token);
+		if ( x < 0 || x >= 3000 ) DEBUG_PRT("");
+		nHandicapRate[i] = x;
+//		PRT("HR:%d=%d\n",i,x);
+    	token = strtok_r( NULL, ":", &lasts );
+	}
+	if ( i!=HANDICAP_TYPE ) DEBUG_PRT("");
+}
+
+void update_AverageWinrate(const char *str)
+{
+	// "0.547"
+	average_winrate = atof(str);
+	if ( average_winrate <= 0 || average_winrate >= 1 ) DEBUG_PRT("aw=%f\n",average_winrate);
+	PRT("average_winrate=%f\n",average_winrate);
 }
 

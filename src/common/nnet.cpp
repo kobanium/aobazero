@@ -170,6 +170,7 @@ void NNInBatchCompressed::add(uint n_one, const void *compressed_features,
 
   uint base = get_ub()*NNAux::nch_input*NNAux::size_plane;
   const uint *pindex  = static_cast<const uint *>(compressed_features);
+  assert(_n_one + n_one <= NNAux::maxn_one);
   for (uint u = 0; u < n_one; ++u)
     _ones[_n_one + u] = pindex[NNAux::nch_input_fill + u] + base;
 
@@ -218,7 +219,9 @@ NNAux::read(const FName &fwght, uint &version, uint64_t &digest) noexcept {
   wght_t ret;
   try             { ret = read_xz (fwght, version, digest); }
   catch (NotXZ &) { ret = read_txt(fwght, version, digest); }
-  return ret; }
+  if ( version != FORMAT_VER ) die(ERR_INT("Network weight version is wrong."));
+  return ret;
+}
 
 NNAux::wght_t NNAux::read(const FName &fwght) noexcept {
   uint version;

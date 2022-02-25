@@ -281,7 +281,7 @@ bool Board::ok(const Color &turn) const noexcept {
   if (turn.ok() && is_incheck(turn.to_opp())) return false;
   return true; }
 
-bool Board::is_nyugyoku(const Color &turn) const noexcept {
+bool Board::is_nyugyoku(const Color &turn, const uint handicap) const noexcept {
   assert(turn.ok() && _sq_kings[turn.to_u()].ok());
   if (sq94 <= _sq_kings[turn.to_u()].rel(turn)) return false;
 
@@ -297,7 +297,18 @@ bool Board::is_nyugyoku(const Color &turn) const noexcept {
   uint nbig = count_popu(bits_big);
   nbig += _hand[turn.to_u()][bishop.to_u()] + _hand[turn.to_u()][rook.to_u()];
   nall += _hand_color[turn.to_u()];
-  if (nall + 4U * nbig + bonus[turn.to_u()] < 29U) return false;
+  // sente 28 ok, gote(uwate) 27 ok.
+  // the removed pieces are counted towards uwate(White's) total. https://www.shogi.or.jp/faq/rules/
+  int add = 0;
+  if ( turn.to_u() == 1 ) {
+    if ( handicap == 1 ) { add =  1; }	// ky
+    if ( handicap == 2 ) { add =  5; }	// ka
+    if ( handicap == 3 ) { add =  5; }	// hi
+    if ( handicap == 4 ) { add = 10; }	// 2mai
+    if ( handicap == 5 ) { add = 12; }	// 4mai
+    if ( handicap == 6 ) { add = 14; }	// 6mai
+  }
+  if (nall + 4U * nbig + bonus[turn.to_u()] + add < 29U) return false;	// nall includes king.
   if (is_incheck(turn)) return false;
   return true; }
 
@@ -333,10 +344,10 @@ bool Board::action_ok_easy(const Color &turn, const Action &a) const noexcept {
       return false; }
   return true; }
 
-bool Board::action_ok_full(const Color &turn, const Action &a) noexcept {
+bool Board::action_ok_full(const Color &turn, const Action &a, const uint handicap) noexcept {
   if (!action_ok_easy(turn, a)) return false;
   if (a.is_resign()) return true;
-  if (a.is_windecl()) return is_nyugyoku(turn);
+  if (a.is_windecl()) return is_nyugyoku(turn, handicap);
 
 
   assert(a.is_move());
@@ -576,6 +587,8 @@ void Node<N>::clear(int num_d) noexcept {
   _board.clear();
   _count_repeat = 0;
   _turn         = black;
+  _node_handicap = num_d;
+  assert(0 <= num_d && num_d < HANDICAP_TYPE);
   if ( num_d > 0 ) _turn = white;
   auto place = [&](const Color &c, const Pc &pc,
 		   const Sq &sq){ _board.place_sq(c, pc,  sq.rel(c)); };
@@ -620,7 +633,7 @@ void Node<N>::clear(int num_d) noexcept {
 template<uint N>
 void Node<N>::take_action(const Action &a) noexcept {
   assert(a.ok() && _len_path < N && _type == interior);
-  assert(_board.action_ok_full(_turn, a));
+  assert(_board.action_ok_full(_turn, a, _node_handicap));
   if (a.is_resign())  { _type = resigned; return; }
   if (a.is_windecl()) { _type = windclrd; return; }
   if (_len_path + 1U == N) { _type = maxlen_term; return; }
@@ -705,7 +718,7 @@ Action Node<N>::action_interpret(const char *cstr, SAux::Mode mode) noexcept {
 	  action = Action(from, to, pc, cap, Action::promotion);
 	else return Action(); } } }
 
-  if (!_board.action_ok_full(_turn, action)) return Action();
+  if (!_board.action_ok_full(_turn, action, _node_handicap)) return Action();
   return action; }
 
 template class Node<Param::maxlen_play_learn>;

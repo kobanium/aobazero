@@ -13,6 +13,7 @@
 
 #include "yss_var.h"
 #include "yss_dcnn.h"
+#include "param.hpp"
 
 
 /* unacceptable when the program is thinking, or quit pondering */
@@ -57,7 +58,7 @@ static int CONV cmd_mnjmove( tree_t * restrict ptree, char **lasts,
 
 #if defined(USI)
 static int CONV proce_usi( tree_t * restrict ptree );
-static int CONV usi_posi( tree_t * restrict ptree, char **lasts );
+//     int CONV usi_posi( tree_t * restrict ptree, char **lasts );
 static int CONV usi_go( tree_t * restrict ptree, char **lasts );
 static int CONV usi_ignore( tree_t * restrict ptree, char **lasts );
 static int CONV usi_option( tree_t * restrict ptree, char **lasts );
@@ -476,7 +477,7 @@ static int CONV proce_usi( tree_t * restrict ptree )
   if ( ! strcmp( token,"usinewgame") ) {
     usi_go_count       = 0;
     usi_bestmove_count = 0;
-    usi_newgame();
+    usi_newgame( ptree );
     return 1;
   }
   if ( ! strcmp( token,"setoption") ) {
@@ -625,6 +626,33 @@ usi_go( tree_t * restrict ptree, char **lasts )
 
 #if defined(YSS_ZERO)
 int sfen_current_move_number = 0;
+int nHandicap = 0;
+
+const char *init_pos[HANDICAP_TYPE] = {
+	"",
+	"lnsgkgsn1/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",// ky
+	"lnsgkgsnl/1r7/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// ka
+	"lnsgkgsnl/7b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// hi
+	"lnsgkgsnl/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// 2mai
+	"1nsgkgsn1/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// 4mai
+	"2sgkgs2/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL"		// 6mai
+};
+/*
+// ky çÅóéÇø
+position sfen lnsgkgsn1/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1
+// ka äpóéÇø
+position sfen lnsgkgsnl/1r7/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1
+// hi îÚé‘óéÇø
+position sfen lnsgkgsnl/7b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1
+// 2mai 2ñáóé
+position sfen lnsgkgsnl/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1
+position sfen lnsgkgsnl/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1 moves 7a6b 7g7f 5c5d 2g2f 6b5c 2f2e 4a3b
+// 4mai 4ñáóé
+position sfen 1nsgkgsn1/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1
+// 6mai 6ñáóé
+position sfen 2sgkgs2/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1
+*/
+
 
 // shogiGUI uses sfen in analyze
 // position sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1             ... initial position
@@ -653,6 +681,12 @@ usi_posi_sfen( tree_t * restrict ptree, char **lasts )
 	const char *token = strtok_r( NULL, str_delimiters, lasts );
     if ( token == NULL ) { PRT("sfen no board\n"); return -1; }
 	const char *str = token;
+
+	for (int i=1;i<HANDICAP_TYPE;i++) {
+		if ( strstr(str,init_pos[i]) ) {
+			nHandicap = i;
+		}
+	}
 
 	int x = 1;
 	int y = 1;
@@ -710,7 +744,8 @@ usi_posi_sfen( tree_t * restrict ptree, char **lasts )
 	}
 	if ( turn < 0 ) { PRT("sfen turn Err. %s\n",str); debug(); }
 	p->turn_to_move = turn;
-	
+
+	int sum_hands = 0;
 	token = strtok_r( NULL, str_delimiters, lasts );
 	str = token;
 	for (;;) {
@@ -736,10 +771,12 @@ usi_posi_sfen( tree_t * restrict ptree, char **lasts )
 		for (i=1;i<=7;i++) {
 			if ( c == usi_koma[i] ) {
 				const unsigned int handv = hand_tbl[i];
+				sum_hands++;
 				p->hand_black += handv*n;
 				break;
 			} else if ( c == usi_koma[i]+32 ) {
 				const unsigned int handv = hand_tbl[i];
+				sum_hands++;
 				p->hand_white += handv*n;
 				break;
 			}
@@ -751,11 +788,14 @@ usi_posi_sfen( tree_t * restrict ptree, char **lasts )
 	sfen_current_move_number = atoi(token) - 1;
 	if ( sfen_current_move_number < 0 ) { PRT("sfen_current_move_number Err. %s\n",token); debug(); }
 
+	// èâä˙îzíuà»äOÇÃãÓóéÇøîªíËÇÕìÔÇµÇ¢ÇÃÇ≈ñ≥éã
+	if ( sum_hands > 0 || p->turn_to_move == black ) nHandicap = 0;
+
 	return ini_game( ptree, &min_posi, flag_history, NULL, NULL );
 }
 #endif
 
-static int CONV
+int CONV
 usi_posi( tree_t * restrict ptree, char **lasts )
 {
   const char *token;
@@ -766,6 +806,7 @@ usi_posi( tree_t * restrict ptree, char **lasts )
     
   moves_ignore[0] = MOVE_NA;
   sfen_current_move_number = 0;
+  nHandicap = 0;
 
   bool sfen = false;
   token = strtok_r( NULL, str_delimiters, lasts );
@@ -819,17 +860,31 @@ usi_option( tree_t *restrict ptree, char **lasts )
   (void)ptree;
 
   // "setoption name USI_WeightFile value weight/w000000001144.txt"
+  // "setoption name USI_HandicapRate value 30:100:150:300:700:900:1200"
+  // "setoption name USI_AverageWinrate value 0.547"
+
+  const char *name[] = {
+    "USI_WeightFile","USI_HandicapRate","USI_AverageWinrate",NULL
+  };
   do {
     token = strtok_r( NULL, str_delimiters, lasts );
     if ( token==NULL || strcmp( token, "name" ) !=0 ) { PRT("option needs 'name'\n"); break; }
     token = strtok_r( NULL, str_delimiters, lasts );
-    if ( token==NULL || strcmp( token, "USI_WeightFile" ) !=0 ) { PRT("unknown option\n"); break; }
+    int index = -1;
+    if ( token != NULL ) for (int i=0;;i++) {
+      const char *p = name[i];
+      if ( p==NULL ) break;
+      if ( strcmp( token, p ) == 0 ) index = i;
+    }
+    if ( index < 0 ) { PRT("unknown option\n"); break; }
     token = strtok_r( NULL, str_delimiters, lasts );
-    if ( token==NULL || strcmp( token, "value" ) !=0 ) { PRT("unknown option\n"); break; }
+    if ( token==NULL || strcmp( token, "value" ) !=0 ) { PRT("unknown value\n"); break; }
     token = strtok_r( NULL, str_delimiters, lasts );
-    if ( token==NULL ) { PRT("no path\n"); break; }
+    if ( token==NULL ) { PRT("no value\n"); break; }
 
-    replace_network(token);
+    if ( index == 0 ) replace_network(token);
+    if ( index == 1 ) update_HandicapRate(token);
+    if ( index == 2 ) update_AverageWinrate(token);
   } while(0);
 
   return 1;

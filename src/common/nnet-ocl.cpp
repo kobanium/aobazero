@@ -188,8 +188,11 @@ void compute_BNReLU(__global const float *mean, __global const float *sd_inv,
   uint ch = get_global_id(2);
   float a = sd_inv[ch];
   float b = mean[ch];
+  float c = a*(fin[ch*NN_IN + ub*SIZE_PLANE + sq] - b);
   fout[ch*NB*128U + ub*128U + sq]
-    = max(0.0f, a*(fin[ch*NN_IN + ub*SIZE_PLANE + sq] - b)); }
+    = c / (1.0 + exp(-c));	// SWISH
+//  = max(0.0f, a*(fin[ch*NN_IN + ub*SIZE_PLANE + sq] - b));
+}
 )";
 
 const string code_common =
@@ -354,11 +357,17 @@ float load(uint off, __global const float *p) { return p[off]; }
 #ifdef DO_JOIN
 void func_BNReLU(__local float *f, uint off, float sd_inv, float mean,
                  float x) {
-  f[off] = max(0.0f, sd_inv * (x - mean) + f[off]); }
+  float c = sd_inv * (x - mean) + f[off];
+//f[off] = max(0.0f, sd_inv * (x - mean) + f[off]);
+  f[off] = c / (1.0 + exp(-c));	// SWISH
+}
 #else
 void func_BNReLU(__local float *f, uint off, float sd_inv, float mean,
                  float x) {
-  f[off] = max(0.0f, sd_inv * (x - mean)); }
+  float c = sd_inv * (x - mean);
+//f[off] = max(0.0f, sd_inv * (x - mean));
+  f[off] = c / (1.0 + exp(-c));	// SWISH
+}
 #endif
 
 void compute_matA_child(uint utile, uint dim_n_offset, float mean,
@@ -854,7 +863,10 @@ void resize_bias_ReLU(__global const float *bias, __global const float *fin,
                       __global float *fout) {
   uint nn = get_global_id(0);
   uint nm = get_global_id(1);
-  fout[nm*LD_OUT + nn] = fmax(0.0f, fin[nm*LD_IN + nn] + bias[nm]); }
+  float c = fin[nm*LD_IN + nn] + bias[nm];
+//fout[nm*LD_OUT + nn] = fmax(0.0f, fin[nm*LD_IN + nn] + bias[nm]);
+  fout[nm*LD_OUT + nn] = c / (1.0 + exp(-c));	// SWISH
+}
 )";
 
 static uint ceil_power2(uint u) noexcept {
@@ -2057,6 +2069,7 @@ string NNetOCL::reset(uint maxsize_batch,
   // index + 4: weight
   // index + 5: bias
   uint policy2_nin = policy1_nout;
+  cout << "wght[index + 4U].first=" << wght[index + 4U].first << ",policy2_nin=" << policy2_nin << ",wght[index + 5U].first=" << wght[index + 5U].first << ",nch_out_policy=" << NNAux::nch_out_policy << std::endl;
   if (wght[index + 4U].first != NNAux::nch_out_policy * policy2_nin
       || wght[index + 5U].first != NNAux::nch_out_policy)
     die(ERR_INT(msg_bad_wght_dim));

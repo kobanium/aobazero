@@ -12,36 +12,33 @@ is_move_valid( tree_t * restrict __ptree__, unsigned int move, int turn )
   tree_t * restrict ptree = __ptree__;
   int from = (int)I2From(move);
   int to   = (int)I2To(move);
+//int pro  = (int)I2IsPromote(move);	// this func is called too many. changing is dangerous...
   int piece_move;
   unsigned int u;
   bitboard_t bb;
 
-  if ( from < nsquare )
-    {
-      piece_move = (int)I2PieceMove(move);
-      if ( turn )
-	{
-	  if ( BOARD[from] != -piece_move )       { return 0; }
-	  if ( BOARD[to]   != (int)UToCap(move) ) { return 0; }
-	}
-      else {
-	if ( BOARD[from] !=  piece_move )        { return 0; }
-	if ( BOARD[to]   != -(int)UToCap(move) ) { return 0; }
-      }
-      
-      switch ( piece_move )
-	{
-	case 0:  return 0;
-
-	case lance:  case bishop:  case horse:  case rook:  case dragon:
-	  BBOr( bb, BB_BOCCUPY, BB_WOCCUPY );
-	  BBAnd( bb, bb, abb_obstacle[from][to] );
-	  if ( BBTest( bb ) ) { return 0; }
-	  break;
-	}
-
-      return 1;
+  if ( from < nsquare ) {
+    piece_move = (int)I2PieceMove(move);
+    if ( turn ) {
+      if ( BOARD[from] != -piece_move )        { return 0; }
+      if ( BOARD[to]   !=  (int)UToCap(move) ) { return 0; }
+//    if ( pro && piece_move == -lance && to <= I4 ) return 0;
+    } else {
+      if ( BOARD[from] !=  piece_move )        { return 0; }
+      if ( BOARD[to]   != -(int)UToCap(move) ) { return 0; }
+//    if ( pro && piece_move ==  lance && to >= A6 ) return 0;
     }
+
+    switch ( piece_move ) {
+    case 0:  return 0;
+    case lance:  case bishop:  case horse:  case rook:  case dragon:
+      BBOr( bb, BB_BOCCUPY, BB_WOCCUPY );
+      BBAnd( bb, bb, abb_obstacle[from][to] );
+      if ( BBTest( bb ) ) { return 0; }
+      break;
+    }
+    return 1;
+  }
 
   if ( BOARD[to] ) { return 0; }
   else {

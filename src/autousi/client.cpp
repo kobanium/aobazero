@@ -105,14 +105,22 @@ WghtFile::~WghtFile() noexcept {
   remove(_fname.get_fname());
   _all.erase(_fname); }
 
-static float receive_header(const OSI::Conn &conn, uint TO, uint bufsiz) {
-  char buf[8];
-  conn.recv(buf, 8, TO, bufsiz);
+float Client::receive_header(const OSI::Conn &conn, uint TO, uint bufsiz) {
+  char buf[HEADER_SIZE];
+  conn.recv(buf, HEADER_SIZE, TO, bufsiz);
   
   uint Major = static_cast<uchar>(buf[0]);
   uint Minor = static_cast<uchar>(buf[1]);
   if (Major != Ver::major || Ver::minor < Minor)
     die(ERR_INT("Please update autousi!"));
+
+  assert(HEADER_SIZE >= 1+1+2+HANDICAP_TYPE*2+2);
+  for (int i=0; i<HANDICAP_TYPE; i++) {
+    uint16_t x = bytes_to_int<uint16_t>(buf + 4 + i*2);
+    _handicap_rate[i] = x;
+//  cout << "handi rate " << i << " = " << x << endl;
+  }
+  _average_winrate = bytes_to_int<uint16_t>(buf + 4 + HANDICAP_TYPE*2);
 
   return (static_cast<float>(bytes_to_int<uint16_t>(buf + 2))
 	  * (1.0f / 65536.0f)); }

@@ -55,6 +55,13 @@ static_assert(BOARD_SIZE % 2 == 1,
 static constexpr auto NUM_INTERSECTIONS = BOARD_SIZE * BOARD_SIZE;
 static constexpr auto POTENTIAL_MOVES = NUM_INTERSECTIONS + 1; // including pass
 
+#ifdef USE_POLICY2187
+static constexpr auto OUTPUTS_POLICY_2 =  27;
+#else
+static constexpr auto OUTPUTS_POLICY_2 = 139;
+#endif
+static constexpr auto POLICY_OUT_NUM = BOARD_SIZE * BOARD_SIZE * OUTPUTS_POLICY_2;
+
 /*
  * KOMI: Define the default komi to use when training.
  */
@@ -137,7 +144,7 @@ static constexpr auto MAX_CPUS = 256;
 #ifdef USE_OPENCL
 // If OpenCL are fully usable, then check the OpenCL against CPU
 // implementation with some probability.
-#define USE_OPENCL_SELFCHECK
+//#define USE_OPENCL_SELFCHECK
 static constexpr auto SELFCHECK_PROBABILITY = 2000;
 #endif
 
@@ -155,5 +162,7 @@ using net_t = half_float::half;
 #else
 using net_t = float;
 #endif
+
+#define USE_SWISH
 
 #endif

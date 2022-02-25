@@ -10,6 +10,9 @@ rem set USE_CPUBLAS_AOBA=IntelMKL
 @rem uncomment if you want to use OpenBLAS
 set USE_CPUBLAS_AOBA=OpenBLAS
 
+@rem uncomment if you want to use POLICY2187
+set USE_POLICY2187=1
+
 @cd /d %~dp0
 @del /q *~ bin\*.dll bin\*.exe src\common\tbl_*.inc 2> nul
 @rmdir /s /q objs 2> nul
@@ -46,6 +49,9 @@ set USE_CPUBLAS_AOBA=OpenBLAS
     copy win\lib64\libgfortran-3.dll bin\
     copy win\lib64\libquadmath-0.dll bin\
     @if %ERRORLEVEL% neq 0 (exit /b %ERRORLEVEL%)
+)
+@if "%USE_POLICY2187%"=="1" (
+    set CPPFLAGS=%CPPFLAGS% /DUSE_POLICY2187
 )
 
 cl %CPPFLAGS% %CXXFLAGS% src\gencode\gencode.cpp
