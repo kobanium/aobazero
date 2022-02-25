@@ -259,7 +259,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);MINIMUM;TLP;CSA_LAN;USI;YSS_ZERO;NO_LOGGING;_WINSOCK_DEPRECATED_NO_WARNINGS;USE_WINAPI;USE_OPENBLAS;USE_OPENCL_AOBA</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);MINIMUM;TLP;CSA_LAN;USI;YSS_ZERO;NO_LOGGING;_WINSOCK_DEPRECATED_NO_WARNINGS;USE_WINAPI;USE_OPENBLAS;USE_POLICY2187;USE_OPENCL_AOBA</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <AdditionalIncludeDirectories>
       </AdditionalIncludeDirectories>

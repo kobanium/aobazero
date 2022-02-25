@@ -2475,9 +2475,9 @@ int balanced_opening(tree_t * restrict ptree, int sideToMove, int ply, int fPoli
 	}
 
 	int fHashFull = 0;
-	int stop_ply = nVisitCount+1;	
+	int stop_ply = nVisitCount+1;
 	const int VALUE_N = 2;	// 0ですべてノードでValueを調べる。1で1回以上なら調べる
-	if ( phg->games_sum >= VALUE_N && phg->child_num > 0 && phg->child[0].value == 0 && ply != stop_ply ) {
+	if ( (phg->games_sum >= VALUE_N || ply <= 2) && phg->child_num > 0 && phg->child[0].value == 0 && ply != stop_ply ) {
 		int i;
 		for (i = 0; i < phg->child_num; i++) {
 			CHILD *pc = &phg->child[i];
