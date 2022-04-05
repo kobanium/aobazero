@@ -410,7 +410,8 @@ static void procedure_io(USIEngine &myself, USIEngine &opponent,
 static void node_update(USIEngine &myself, USIEngine &opponent,
 			Node<Param::maxlen_play_learn> &node, string &startpos,
 			string &record, char *line) noexcept {
-  assert(myself.ok() && opponent.ok() && node.ok() && line);  
+  assert(myself.ok() && opponent.ok() && node.ok() && line);
+  bool has_visit = (strstr(line,"v=") != NULL);
   char *token = strtok(line, " ");
   if (token == nullptr) return;
   if (strcmp(token, "bestmove")) return;
@@ -431,9 +432,9 @@ static void node_update(USIEngine &myself, USIEngine &opponent,
     }
     record += node.get_turn().to_str();
     record += action.to_str(SAux::csa);
- }
+  }
 
-  if ( action.is_move() && go_visit ) {
+  if ( action.is_move() && go_visit && has_visit ) {
     string new_info;
     const char *str_value = strtok(nullptr, " ,");
     if (!str_value || str_value[0] != 'v' || str_value[1] != '=') die(ERR_INT("cannot read value (engine)"));

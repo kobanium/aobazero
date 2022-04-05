@@ -23,17 +23,25 @@
 
 using namespace std;
 
+#ifdef F2187	// yss.h
+const int f2187 = 1;
+#else
+const int f2187 = 0;
+#endif
+
+const int HANDICAP_TYPE = 7;
 
 #define USE_CAFFE 1
 
 #define YSS_TRAIN 0		// 0でtest, 1でtrain DB作成
 const int DCNN_CHANNELS = 362;
+//const int DCNN_CHANNELS = 85;	// 45+2 + 14*2 + 10
 
 #define FILE_HEADER "i361_11259_1600self_leveldb"
 
 const int fMAKE_LEVELDB = 0;
 
-#if (YSS_TRAIN==0) 
+#if (YSS_TRAIN==0)
 const char CONVERT_DB_FILE[] = "test_"  FILE_HEADER;
 #else
 const char CONVERT_DB_FILE[] = "train_" FILE_HEADER;
@@ -378,7 +386,7 @@ char *find_next_file(char *sDir, const char *sExt)
 
 	if ( dir == NULL ) {
 		dir = opendir(sDir);
-		if ( dir == NULL ) { PRT("fail opendir() %s\n",sDir); debug(); }
+		if ( dir == NULL ) { DEBUG_PRT("fail opendir() %s\n",sDir); }
 		strcpy(dir_name, sDir);
 	}
 
@@ -455,7 +463,7 @@ int get_one_v_file(char *filename, const char *dir_list[])
 			const char *sDir = dir_v_sgf_list[dir_v_sgf_n];
 			if ( sDir == NULL ) { PRT("done...sum_dir=%d,all_files=%d\n",sum_dir,all_files); return -1; }
 			dir_num = scandir(sDir, &namelist, NULL, NULL);
-			if ( dir_num < 0 || namelist==NULL ) { PRT("Err scandir\n"); debug(); }
+			if ( dir_num < 0 || namelist==NULL ) { DEBUG_PRT("Err scandir\n"); }
 		}
 		if ( dir_i >= dir_num ) {
 			dir_num = 0;
@@ -502,11 +510,11 @@ void shuffle_prt(int *p_stock_num)
 		const char sLabel[] = "/home/yss/yssfish/value/label_tmp.txt";
 		static int fFirst = 1;
 		if ( fFirst ) {
-			if ( fopen(sLabel,"r")!=NULL ) { PRT("Err %s exist!!!\n",sLabel); debug(); }
+			if ( fopen(sLabel,"r")!=NULL ) { DEBUG_PRT("Err %s exist!!!\n",sLabel); }
 			fFirst = 0;
 		}
 		FILE *fp = fopen(sLabel,"a");
-		if ( fp==NULL ) { PRT("fail fopen()\n"); debug(); }
+		if ( fp==NULL ) { DEBUG_PRT("fail fopen()\n"); }
 //		fprintf(fp,"%.0f\n", dcnn_label_data[r]);
 		fprintf(fp,"%u\n",(unsigned int)(dcnn_labels[r][0]));
 		fprintf(fp,"%d\n",dcnn_labels[r][1]);
@@ -566,19 +574,19 @@ void shogi::make_policy_leveldb()
 	}; 
 
 //	if ( FV_LEARNING==0 ) { PRT("\n\nset FV_LEARNING=1 for ignoring make_mm3_10_pattern_root()\n\n\n"); debug(); }
-	if ( fMAKE_LEVELDB == 0 ) { PRT("set fMAKE_LEVELDB=1\n"); debug(); }
+	if ( fMAKE_LEVELDB == 0 ) { DEBUG_PRT("set fMAKE_LEVELDB=1\n"); }
 
 
 	create_convert_db();
 	dcnn_data = (unsigned char(*)[DCNN_CHANNELS][B_SIZE][B_SIZE])malloc( DCNN_DATA_SIZE );
-	if ( dcnn_data == NULL ) { PRT("fail malloc()\n"); debug(); }
+	if ( dcnn_data == NULL ) { DEBUG_PRT("fail malloc()\n"); }
 	clear_dcnn_data();
 
 //	dcnn_label_data = (float *)malloc( STOCK_MAX * sizeof(float) );
 //	if ( dcnn_label_data == NULL ) { PRT("fail malloc()\n"); debug(); }
 //	memset(dcnn_label_data, 0, STOCK_MAX * sizeof(float) );
 	dcnn_labels = (int(*)[2])malloc( DCNN_LABELS_SIZE );
-	if ( dcnn_labels == NULL ) { PRT("fail malloc()\n"); debug(); }
+	if ( dcnn_labels == NULL ) { DEBUG_PRT("fail malloc()\n"); }
 	memset(dcnn_labels, 0, DCNN_LABELS_SIZE );
 
 	// i362_pro_flood, 6254 棋譜(Test), 448365 棋譜 (20279263局面) 217545-716-230104 先手勝率0.514
@@ -695,8 +703,7 @@ void shogi::make_policy_leveldb()
 //					dcnn_labels[stock_num][0] = u;
 					dcnn_labels[stock_num][0] = get_move_id_c_y_x(pack_te(bz,az,tk,nf));	//pack_te(bz,az,tk,nf);
 					dcnn_labels[stock_num][1] = win_r;
-					set_dcnn_channels(c, i, NULL, stock_num, NET_361);
-//					set_dcnn_channels(c, i, NULL, stock_num, NET_362);
+					set_dcnn_channels(c, i, NULL, stock_num, 0);
 					if ( j==1 ) flip_horizontal_channels(stock_num);
 //					PRT("%3d,%02x,%02x,%02x,%02x,%5d,%08x\n",i,bz,az,tk,nf,dcnn_labels[stock_num][0], get_move_from_c_y_x_id(dcnn_labels[stock_num][0]));
 //					PRT("%3d,%02x,%02x,%02x,%02x,%5d,%08x\n",i,bz,az,tk,nf,dcnn_labels[stock_num][0], get_te_from_unique(dcnn_labels[stock_num][0]));
@@ -804,11 +811,11 @@ void get_c_y_x_from_move(int *pc, int *py, int *px, int pack_move)
 void make_label_leveldb()
 {			
 	int ct1 = get_clock();
-	if ( DCNN_CHANNELS != LABEL_CHANNELS ) { PRT("DCNN_CHANNELS err.\n"); debug(); }
+	if ( DCNN_CHANNELS != LABEL_CHANNELS ) { DEBUG_PRT("DCNN_CHANNELS err.\n"); }
 
 	create_convert_db();
 	dcnn_data = (unsigned char(*)[DCNN_CHANNELS][B_SIZE][B_SIZE])malloc( DCNN_DATA_SIZE );
-	if ( dcnn_data == NULL ) { PRT("fail malloc()\n"); debug(); }
+	if ( dcnn_data == NULL ) { DEBUG_PRT("fail malloc()\n"); }
 	clear_dcnn_data();
 
 	FILE *fp = fopen("test_i362_pro_flood_leveldb.txt","r");
@@ -958,6 +965,44 @@ int get_move_id_c_y_x(int pack)
 	return id;
 }
 
+const int MOVE_2187_MAX = 2187;
+
+int get_dlshogi_policy(int bz, int az, int tk, int nf) {
+	int fDrop = 0;
+	int fNari = (nf!=0);
+	int dir = -1;
+	if ( bz==0xff ) {
+		fDrop = 1;
+		dir = (tk & 0x0f) - 1;
+	} else for (;;) {
+		// bz と az から方向を決定
+		if ( az == bz - 0x21 ) { dir = 8; break; }	// 桂馬
+		if ( az == bz - 0x1f ) { dir = 9; break; }
+		int dx =  (bz & 0x0f)     -  (az & 0x0f);
+		int dy = ((bz & 0xf0)>>4) - ((az & 0xf0)>>4);
+		if ( dx==0 ) {
+			if ( dy > 0 ) dir = 2;
+			if ( dy < 0 ) dir = 6;
+		} else if ( dy==0 ) {
+			if ( dx > 0 ) dir = 0;
+			if ( dx < 0 ) dir = 4;
+		} else {
+			if ( abs(dx) != abs(dy) ) DEBUG_PRT("");
+			if ( dx > 0 && dy > 0 ) dir = 1;
+			if ( dx < 0 && dy > 0 ) dir = 3;
+			if ( dx < 0 && dy < 0 ) dir = 5;
+			if ( dx > 0 && dy < 0 ) dir = 7;
+		}
+		break;
+	}
+	int ax = (az & 0x0f);
+	int ay = (az & 0xf0) >> 4;
+	int z81 = (ay-1)*9 + (ax-1);
+	int index = z81 + 81*dir + fNari*(81*10) + fDrop*(81*20);
+	if ( index < 0 || index >= 2187 || dir < 0 ) DEBUG_PRT("");
+	return index;
+}
+
 void prt_dcnn_data(int stock_num,int c,int turn_n)
 {
 	int x,y;
@@ -1048,7 +1093,7 @@ void shogi::setYssChannels(Color sideToMove, int moves, float *p_data, int net_t
 	for (int i=0;i<input_num;i++) for (int y=0;y<B_SIZE;y++) for (int x=0;x<B_SIZE;x++) {
 		data[i][y][x]=0;
 	}
-	set_dcnn_channels(sideToMove, moves, p_data, -1, net_type);
+	set_dcnn_channels(sideToMove, moves, p_data, -1, 0);
 //	{ for (int i=0;i<input_num;i++) for (int y=0;y<B_SIZE;y++) for (int x=0;x<B_SIZE;x++) PRT("%.0f,",data[i][y][x]); } PRT("\n");
 }
 
@@ -1065,20 +1110,20 @@ inline void set_dcnn_data(int stock_num, float data[][B_SIZE][B_SIZE], int n, in
 		data[n][y][x] = v;
 	}
 }
-void shogi::set_dcnn_channels(Color sideToMove, const int ply, float *p_data, int stock_num, int net_type)
+void shogi::set_dcnn_channels(Color sideToMove, const int ply, float *p_data, int stock_num, int nHandicap)
 {
 	float (*data)[B_SIZE][B_SIZE] = (float(*)[B_SIZE][B_SIZE])p_data;
 	int base = 0;
 	int add_base = 0;
 	int x,y;
-	int flip = (ply&1);		// 後手の時は全部ひっくり返す
+	int flip = (ply + (nHandicap!=0)) & 1;	// 後手の時は全部ひっくり返す
 	int current_t = ply;	// 現局面の手数。棋譜＋探索深さ
 
+	if ( flip && sideToMove != BLACK ) DEBUG_PRT("");
 	// move_hit_kif[], move_hit_hashcode[] に棋譜+探索深さの棋譜とハッシュ値を入れること 
-	
-//if ( net_type==NET_361 || net_type==NET_362 ) {
+
 	int loop,back_num=0;
-	const int T_STEP = 8;
+	const int T_STEP = 6;
 	for (loop=0; loop<T_STEP; loop++) {
 		add_base = 28;
 		for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
@@ -1165,21 +1210,7 @@ void shogi::set_dcnn_channels(Color sideToMove, const int ply, float *p_data, in
 
 		back_num++;
 	}
-	
-	add_base = 1;
-	if ( sideToMove == BLACK ) for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
-		set_dcnn_data(stock_num, data, base, y,x);
-	}
-	if ( net_type==NET_362 ) {
-		for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
-			set_dcnn_data(stock_num, data, base+1, y,x, (float)ply/512.0f);
-//			set_dcnn_data(stock_num, data, base+1, y,x, ply);
-//			set_dcnn_data(stock_num, data, base+1, y,x, 0);
-		}
-		add_base = 2;
-	}
-	base += add_base;
-	
+
 	if ( fSelectZeroDB == 0 ) {
 		int i;
 		for (i=0;i<back_num;i++) forth_move();
@@ -1194,10 +1225,262 @@ void shogi::set_dcnn_channels(Color sideToMove, const int ply, float *p_data, in
 		}
 	}
 
-//	PRT("base=%d,net_type=%d\n",base,net_type);
+#if 1
+//	int prev_base = base;
+/*
+	add_base = 28*2;
+	int i;
+	for (i=1;i<8;i++) {
+		int n0 = mo_m[i];
+		int n1 = mo_c[i];
+		if  ( flip ) {
+			int tmp = n0;
+			n0 = n1;
+			n1 = tmp;
+		}
+		// 持ち駒の最大数
+		int mo_max[8] = { 0, 8, 4, 4, 4, 4, 2, 2 }; 	// 9+5*4+3*2 = 35
+//		int mo_add[8] = { 0, 0, 9,14,19,24,29,32 }; 	// 9+5*4+3*2 = 35
+		int mo_add[8] = { 0, 0, 8,12,16,20,24,26 }; 	// 8+4*4+2*2 = 28
+		if ( n0 > mo_max[i] ) n0 = mo_max[i];
+		if ( n1 > mo_max[i] ) n1 = mo_max[i];
+		for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+			for (int j=0;j<n0;j++) set_dcnn_data(stock_num, data, base+mo_add[i]+j   , y,x);
+			for (int j=0;j<n1;j++) set_dcnn_data(stock_num, data, base+mo_add[i]+j+28, y,x);
+		}
+	}
+	base += add_base;
+*/
+
+/*
+	add_base = 81*2;
+	for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+		int z = make_z(x+1,y+1);
+		int n = y*9 + x;
+		if ( flip ) n = (B_SIZE - y -1)*9 + (B_SIZE - x -1);
+		for (loop=0; loop<8; loop+=2) {
+			int dz = z8[loop];
+			for ( int az = z+dz; ; az += dz ) {
+				int tk = init_ban[az];
+				if ( tk == 0xff ) break;
+				int yy = (az & 0xf0) >> 4;
+				int xx = (az & 0x0f);
+				yy -= 1;
+				xx -= 1;
+				if ( xx < 0 || yy < 0 ) DEBUG_PRT("");
+				if  ( flip ) {
+					yy = B_SIZE - y -1;
+					xx = B_SIZE - x -1;
+				}
+				set_dcnn_data(stock_num, data, base+ n+ (loop&1)*81, yy,xx);
+				if ( tk ) break;
+			}
+		}
+	}
+	base += add_base;
+*/
+
+	for (int loop_k=1; loop_k<=15; loop_k++) {
+		if ( loop_k == 13 ) continue;	// 14枚
+		add_base = 2;
+		clear_kb_kiki_kn();
+		init();
+		for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+			int z = make_z(x+1,y+1);
+			if ( (init_ban[z] & 0x0f) == loop_k ) kiki_write(z);
+		}
+		for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+			int z = make_z(x+1,y+1);
+			int n0 = kiki_m[z];	// sente
+			int n1 = kiki_c[z];
+
+			int kage;
+			kage = 0;
+			for (int i=0; i<kiki_m[z]; i++) if ( kb_m[z][i] & 0x80 ) kage++;
+//			if ( n0 && n0==kage ) { print_kiki(); print_kb(); DEBUG_PRT("m:z=%02x,kage=%d\n",z,kage); }
+			n0 -= kage;
+			kage = 0;
+			for (int i=0; i<kiki_c[z]; i++) if ( kb_c[z][i] & 0x80 ) kage++;
+//			if ( n1 && n1==kage ) { print_kiki(); print_kb(); DEBUG_PRT("c:z=%02x,kage=%d\n",z,kage); }
+			n1 -= kage;
+
+			int yy = y, xx = x;
+			if  ( flip ) {
+				int tmp = n0;
+				n0 = n1;
+				n1 = tmp;
+				yy = B_SIZE - y -1;
+				xx = B_SIZE - x -1;
+			}
+//			const int ZERO_ON = 0;
+//			const int M = 2;
+//			if ( n0>M ) n0=M;
+//			if ( n1>M ) n1=M;
+//			if ( ZERO_ON==0 ) { n0--; n1--; }
+//			if ( n0 >= 0 ) set_dcnn_data(stock_num, data, base+          n0, yy,xx);
+//			if ( n1 >= 0 ) set_dcnn_data(stock_num, data, base+M+ZERO_ON+n1, yy,xx);
+			if ( n0 ) set_dcnn_data(stock_num, data, base+0, yy,xx);	// 利きの数無視
+			if ( n1 ) set_dcnn_data(stock_num, data, base+1, yy,xx);
+		}
+		base += add_base;
+	}
+
+	add_base = 1;
+	clear_kb_kiki_kn();
+	init();
+	allkaku();
+	int check = kiki_c[kn[1][1]];
+	if  ( flip ) {
+		if ( check ) DEBUG_PRT("");
+		check = kiki_m[kn[2][1]];
+	} else {
+		if ( kiki_m[kn[2][1]] ) DEBUG_PRT("");
+	}
+	if ( check ) for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+		set_dcnn_data(stock_num, data, base, y,x);
+	}
+	base += add_base;
+
+	// 手合い割
+	add_base = 7;
+	if ( nHandicap < 0 || nHandicap >= HANDICAP_TYPE ) DEBUG_PRT("");
+	for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+		set_dcnn_data(stock_num, data, base + nHandicap, y,x);
+	}
+//	if ( nHandicap!=0 ) DEBUG_PRT("");
+	base += add_base;
+
+/*
+	add_base = 6;
+	// 宣言勝ちの点数を計算
+	int in_num[2]   = { 0 };	// 敵陣内にある王以外の枚数
+	int decl_in[2]  = { 0 };	// 点数(敵陣内の駒＋持駒) ... 宣言に有効
+	int decl_sum[2] = { 0 };	// 点数(盤上の駒  ＋持駒)
+
+	for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+		int z = make_z(x+1,y+1);
+		int k = init_ban[z];
+		if ( k==0 || (k&0x0f)==0x08 ) continue;	// 空白と王
+		int a = 1;
+		if ( (k&0x07) >= 0x06 ) a = 5;	// 大駒は5点
+		int c = (k&0x80) >> 7;
+		decl_sum[c] += a;
+		if ( c==0 && y <= 2 ) { decl_in[c] += a; in_num[c]++; }
+		if ( c==1 && y >= 6 ) { decl_in[c] += a; in_num[c]++; }
+	}
+
+	int s0 = mo_m[1] + mo_m[2] + mo_m[3] + mo_m[4] + mo_m[5] + mo_m[6]*5 + mo_m[7]*5;
+	int s1 = mo_c[1] + mo_c[2] + mo_c[3] + mo_c[4] + mo_c[5] + mo_c[6]*5 + mo_c[7]*5;
+	decl_in[0] += s0;
+	decl_in[1] += s1;
+	decl_sum[0] += s0;
+	decl_sum[1] += s1;
+	if  ( flip ) {
+		int tmp;
+		tmp = in_num[0];   in_num[0]   = in_num[1];   in_num[1]   = tmp;
+		tmp = decl_in[0];  decl_in[0]  = decl_in[1];  decl_in[1]  = tmp;
+		tmp = decl_sum[0]; decl_sum[0] = decl_sum[1]; decl_sum[1] = tmp;
+	}
+	for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+		set_dcnn_data(stock_num, data, base+0, y,x, (float)in_num[0]  /10.0f);
+		set_dcnn_data(stock_num, data, base+1, y,x, (float)in_num[1]  /10.0f);
+		set_dcnn_data(stock_num, data, base+2, y,x, (float)decl_in[0] /27.0f);
+		set_dcnn_data(stock_num, data, base+3, y,x, (float)decl_in[1] /27.0f);
+		set_dcnn_data(stock_num, data, base+4, y,x, (float)decl_sum[0]/27.0f);
+		set_dcnn_data(stock_num, data, base+5, y,x, (float)decl_sum[1]/27.0f);
+	}
+	base += add_base;
+*/
+
+	add_base = 9;	// 17 - (1+7+0);
+	base += add_base;
+
+	add_base = 10;
+//	clear_kb_kiki_kn();	// 王手チェックで生成済み
+//	init();
+//	allkaku();
+
+	for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+		int z = make_z(x+1,y+1);
+		int n0 = kiki_m[z];	// sente
+		int n1 = kiki_c[z];
+/*
+		int kage;
+		kage = 0;
+		for (int i=0; i<kiki_m[z]; i++) if ( kb_m[z][i] & 0x80 ) kage++;
+		if ( n0 && n0==kage ) DEBUG_PRT("m:z=%02x,kage=%d\n",z,kage);
+		n0 -= kage;
+		kage = 0;
+		for (int i=0; i<kiki_c[z]; i++) if ( kb_c[z][i] & 0x80 ) kage++;
+		if ( n1 && n1==kage ) DEBUG_PRT("c:z=%02x,kage=%d\n",z,kage);
+		n1 -= kage;
+*/
+		int yy = y, xx = x;
+		if  ( flip ) {
+			int tmp = n0;
+			n0 = n1;
+			n1 = tmp;
+			yy = B_SIZE - y -1;
+			xx = B_SIZE - x -1;
+		}
+/*
+		float f0 = (float)n0 / 18;
+		float f1 = (float)n1 / 18;
+		set_dcnn_data(stock_num, data, base+0, yy,xx, f0);
+		set_dcnn_data(stock_num, data, base+1, yy,xx, f1);
+*/
+//		const int ZERO_ON = 1;
+		const int M = 4;
+		if ( n0>M ) n0=M;
+		if ( n1>M ) n1=M;
+		int i;
+		if ( n0==0 )       set_dcnn_data(stock_num, data, base+0      , yy,xx);
+		for (i=0;i<n0;i++) set_dcnn_data(stock_num, data, base+i+1    , yy,xx);
+		if ( n1==0 )       set_dcnn_data(stock_num, data, base+0  +M+1, yy,xx);
+		for (i=0;i<n1;i++) set_dcnn_data(stock_num, data, base+i+1+M+1, yy,xx);
+//		if ( ZERO_ON==0 ) { n0--; n1--; }
+//		if ( n0 >= 0 ) set_dcnn_data(stock_num, data, base+          n0, yy,xx);
+//		if ( n1 >= 0 ) set_dcnn_data(stock_num, data, base+M+ZERO_ON+n1, yy,xx);
+	}
+	base += add_base;
+
+
+	add_base = 0+18 + 17;
+	base += add_base;
+
+
+//	int left = (28 + 14 + 3)*(8-T_STEP) - (base - prev_base);	// 45*X - add
+//	base += left;
+//	if ( left < 0 ) DEBUG_PRT("");
+#endif
+
+
+	add_base = 2;
+	if ( sideToMove == BLACK ) for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+		set_dcnn_data(stock_num, data, base, y,x);
+	}
+	for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
+		set_dcnn_data(stock_num, data, base+1, y,x, (float)ply/512.0f);
+	}
+	base += add_base;
+
 //	if ( t==215 ) { hyouji(); int i; for (i=0;i<base;i++) prt_dcnn_data(stock_num,i,-1); DEBUG_PRT("t=%d,tesuu=%d\n",t,tesuu); }
 //	if ( t==8 ) { hyouji(); int i; for (i=0;i<base;i++) prt_dcnn_data(data,i,-1); DEBUG_PRT("t=%d,tesuu=%d\n",t,tesuu); }
 	if ( DCNN_CHANNELS != base ) { DEBUG_PRT("Err. DCNN_CHANNELS != base %d\n",base); }
+}
+
+// 左右反転
+void symmetry_dcnn_channels(float *p_data)
+{
+	float (*data)[B_SIZE][B_SIZE] = (float(*)[B_SIZE][B_SIZE])p_data;
+	int n,x,y;
+	for (n=0; n<DCNN_CHANNELS; n++) {
+		for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE/2;x++) {
+			int tmp                  = data[n][y][B_SIZE-1 - x];
+			data[n][y][B_SIZE-1 - x] = data[n][y][           x];
+			data[n][y][           x] = tmp;
+		}
+	}
 }
 
 void setModeDevice(int gpu_id)
@@ -1210,7 +1493,6 @@ void setModeDevice(int gpu_id)
 	Caffe::SetDevice(gpu_id);
 #endif
 }
-
 
 #if 0
 #if (USE_CAFFE==1)
@@ -1270,7 +1552,7 @@ int getNetChannels(int net_type)
 	if ( net_type == NET_128 ) return 128;
 	if ( net_type == NET_361 ) return 361;
 	if ( net_type == NET_362 ) return 362;
-	PRT("unknown nModel\n"); debug();
+	DEBUG_PRT("unknown nModel\n");
 	return 0;
 }
 
@@ -1575,7 +1857,7 @@ void hash_shogi_table_clear()
 	Hash_Shogi_Mask       = Hash_Shogi_Table_Size - 1;
 	HASH_ALLOC_SIZE size = sizeof(HASH_SHOGI) * Hash_Shogi_Table_Size;
 	if ( hash_shogi_table == NULL ) hash_shogi_table = (HASH_SHOGI*)malloc( size );
-	if ( hash_shogi_table == NULL ) { PRT("Fail malloc hash_shogi\n"); debug(); }
+	if ( hash_shogi_table == NULL ) { DEBUG_PRT("Fail malloc hash_shogi\n"); }
 	PRT("HashShogi=%7d(%3dMB),sizeof(HASH_SHOGI)=%d,Hash_SHOGI_Mask=%d\n",Hash_Shogi_Table_Size,(int)(size/(1024*1024)),sizeof(HASH_SHOGI),Hash_Shogi_Mask);
 	hash_shogi_table_reset();
 }
@@ -1620,7 +1902,7 @@ void hash_half_del()
 		double occupy = hash_shogi_use*100.0/Hash_Shogi_Table_Size;
 		PRT("hash del=%d,age=%d,minus=%d, %.0f%%(%d/%d)\n",del,thinking_age,age_minus,occupy,hash_shogi_use,Hash_Shogi_Table_Size);
 		if ( hash_shogi_use < limit_use ) break;
-		if ( age_minus==0 ) { PRT("age_minus=0\n"); debug(); }
+		if ( age_minus==0 ) { DEBUG_PRT("age_minus=0\n"); }
 	}
 }
 
@@ -1674,7 +1956,7 @@ research_empty_block:
 	}
 	int sum = 0;
 	for (int i=0;i<Hash_Shogi_Table_Size;i++) { sum = hash_shogi_table[i].deleted; PRT("%d",hash_shogi_table[i].deleted); }
-	PRT("\nno child hash Err loop=%d,hash_shogi_use=%d,first_n=%d,del_sum=%d(%.1f%%)\n",loop,hash_shogi_use,first_n,sum, 100.0*sum/Hash_Shogi_Table_Size); debug(); return NULL;
+	DEBUG_PRT("\nno child hash Err loop=%d,hash_shogi_use=%d,first_n=%d,del_sum=%d(%.1f%%)\n",loop,hash_shogi_use,first_n,sum, 100.0*sum/Hash_Shogi_Table_Size); return NULL;
 }
 
 float f_rnd()
@@ -1925,12 +2207,11 @@ double shogi::uct_tree(Color sideToMove)
 	HASH_SHOGI *phg = HashShogiReadLock();	// phgに触る場合は必ずロック！
 
 	if ( phg->used == 0 ) {	// 1手目に対して2手目がすべての同じ(絶対手)の場合
-		PRT("not created? 深=%d,col=%d,c_num=%d\n",fukasa,phg->col,phg->child_num);
-		debug();
+		DEBUG_PRT("not created? 深=%d,col=%d,c_num=%d\n",fukasa,phg->col,phg->child_num);
 //		create_node(sideToMove, phg);
 	}
 
-	if ( phg->col != sideToMove ) { PRT("hash col Err. phg->col=%d,col=%d,age=%d(%d),child_num=%d,games_sum=%d,sort=%d,phg->hash=%" PRIx64 "\n",phg->col,sideToMove,phg->age,thinking_age,phg->child_num,phg->games_sum,phg->sort_done,phg->hashcode64); debug(); }
+	if ( phg->col != sideToMove ) { DEBUG_PRT("hash col Err. phg->col=%d,col=%d,age=%d(%d),child_num=%d,games_sum=%d,sort=%d,phg->hash=%" PRIx64 "\n",phg->col,sideToMove,phg->age,thinking_age,phg->child_num,phg->games_sum,phg->sort_done,phg->hashcode64); }
 
 	int child_num = phg->child_num;
 
@@ -1999,7 +2280,7 @@ select_again:
 	path[fukasa] = pc->move;	// 手順を（位置を）記憶
 	hash_path[fukasa] = get_hashcode64();
 	fukasa++;
-	if ( fukasa >= D_MAX ) { PRT("depth over=%d\n",fukasa); debug(); }
+	if ( fukasa >= D_MAX ) { DEBUG_PRT("depth over=%d\n",fukasa); }
 
 	double win = 0;
 
@@ -2039,7 +2320,7 @@ select_again:
 		if ( fVirtualLoss ) {
 			phg->games_sum -= VL_N;
 			pc->games      -= VL_N;		// gamesを減らすのは非常に危険！ あちこちで games==0 で判定してるので
-			if ( pc->games < 0 ) { PRT("Err pc->games=%d\n",pc->games); debug(); }
+			if ( pc->games < 0 ) { DEBUG_PRT("Err pc->games=%d\n",pc->games); }
 			if ( pc->games == 0 ) pc->value = 0;
 			else                  pc->value = (float)((((double)pc->games+VL_N) * pc->value - one_win*VL_N) / pc->games);
 		}
@@ -2128,7 +2409,7 @@ float shogi::get_network_policy_value(Color sideToMove, int ply, HASH_SHOGI *phg
 		float *data = new float[size];
 		memset(data, 0, sizeof(float)*size);
 
-		set_dcnn_channels( sideToMove, ply, data, 0, NET_362);
+		set_dcnn_channels( sideToMove, ply, data, 0, 0);
 //		if ( ply==1 ) { prt_dcnn_data_table((float(*)[B_SIZE][B_SIZE])data); debug(); }
 		{ int sum=0; int i; for (i=0;i<size;i++) sum = 37*sum + (int)(data[i]+0.1f); PRT("mul sum=%d\n",sum); }
 		delete[] data;
@@ -2241,7 +2522,7 @@ float shogi::get_network_policy_value(Color sideToMove, int ply, HASH_SHOGI *phg
 void self_mcts_loop()
 {
 #ifdef SELFPLAY_COM	// YSS同士のシリアル対戦の場合、すぐに終わる。
-	PRT("SELFPLAY_COM Err\n"); debug();
+	DEBUG_PRT("SELFPLAY_COM Err\n");
 #endif
     { extern int fNowPlaying; fNowPlaying = 0; }	// 定跡無視
 	int save_games = 0;
@@ -2272,12 +2553,12 @@ void self_mcts_loop()
 		char fs[TMP_BUF_LEN];
 		sprintf(fs,"%04d%02d%02d_%02d%02d%02d_%05d.csa",year,month,day,hour,minute,second,save_games);
 		FILE *fp = fopen(fs, "wb");
-		if ( !fp ) debug();
+		if ( !fp ) DEBUG_PRT("");
 		fprintf(fp,"%s",KifBuf);
 		fclose(fp);
 		
 		fp = fopen("abc.txt","a");
-		if ( fp == NULL ) { PRT("fail fopen\n"); debug(); }
+		if ( fp == NULL ) { DEBUG_PRT("fail fopen\n"); }
 		if ( loop==max_loop ) draw++;
 		if ( loop!=max_loop && (loop&1) ) swin++;
 		fprintf(fp,"%5d,uct_loop=%4d, %5d/%5d/%5d(%.4f), %3d:%s\n",save_games,UCT_LOOP_FIX,swin,draw,save_games,(double)(swin+draw/2)/save_games,loop,sr);
@@ -2329,7 +2610,6 @@ u8700(32GB), i7(14GB), メモリに載ることは乗るか。i7だと厳しい。
 // from tcp/src/common
 #include "common/err.hpp"
 #include "common/iobase.hpp"
-//#include "shogibase.hpp"
 #include "common/xzi.hpp"
 #include <iostream>
 #include <memory>
@@ -2422,20 +2702,28 @@ void free_zero_db_struct(ZERO_DB *p)
 	p->result = 0;
 	p->result_type = 0;
 	p->moves = 0;
+	p->handicap = 0;
 	std::vector<unsigned short>().swap(p->v_kif);			// memory free hack for vector. 
 	std::vector<unsigned short>().swap(p->v_playouts_sum);
 	vector< vector<unsigned int> >().swap(p->vv_move_visit); 
 	std::vector<unsigned short>().swap(p->v_score_x10k);
 }
 
-const int ZERO_DB_SIZE = 1000000;	//500000;	// 100000,  500000
+//const int ZERO_DB_SIZE = 500000;	// 100000,  500000
+const int ZERO_DB_SIZE = 1000000;	// 100000,  500000
 const int MAX_ZERO_MOVES = 513;	// 512手目を後手が指して詰んでなければ。513手目を先手が指せば無条件で引き分け。
 ZERO_DB zdb_one;
 
 ZERO_DB zdb[ZERO_DB_SIZE];
 int *pZDBsum = NULL;
+unsigned char *pZDBmove;
+unsigned char *pZDBmaxmove;
+unsigned short *pZDBplayouts_sum;
+unsigned short *pZDBscore_x10k;
+const int ZDB_POS_MAX = ZERO_DB_SIZE * 256;	// 128 = average moves.
+
 int zdb_count = 0;
-int zdb_count_start = 48000000; //38700000; //33900000;//27300000; //26100000; //23400000; //20300000; //18800000; //16400000;	//10300000; //5200000;	// 400万棋譜から読み込む場合は4000000
+int zdb_count_start = 51420000;//51370000;//1000000;//48300000;//18000000;// 10000000;//11600000; //10300000; //9500000;//8500000; //7400000; //5220000; //3200000; //2100000; //390000;//130000;//460000;//29700000; //18200000;//23400000; //20300000; //18800000; //16400000;	//10300000; //5200000;	// 400万棋譜から読み込む場合は4000000
 int zero_kif_pos_num = 0;
 int zero_kif_games = 0;
 const int MINI_BATCH = 128;	// aoba_zero.prototxt の cross_entroy_scale も同時に変更すること！layerのnameも要変更
@@ -2448,7 +2736,11 @@ const int fWwwSample = 0;		// fReplayLearning も同時に1
 void init_zero_kif_db()
 {
 	if ( pZDBsum == NULL ) pZDBsum = (int*)malloc( ZERO_DB_SIZE * sizeof(int) );
-	if ( pZDBsum == NULL ) { PRT("Fail malloc\n"); debug(); }
+	if ( pZDBsum == NULL ) { DEBUG_PRT("Fail malloc\n"); }
+	pZDBmove         = (unsigned char*) malloc( ZDB_POS_MAX * sizeof(char) );
+	pZDBmaxmove      = (unsigned char*) malloc( ZDB_POS_MAX * sizeof(char) );
+	pZDBplayouts_sum = (unsigned short*)malloc( ZDB_POS_MAX * sizeof(short) );
+	pZDBscore_x10k   = (unsigned short*)malloc( ZDB_POS_MAX * sizeof(short) );
 
 	memset(pZDBsum,0,ZERO_DB_SIZE * sizeof(int));
 	int i;
@@ -2468,7 +2760,7 @@ const int USE_XZ_NONE      = 0;
 const int USE_XZ_POOL_ONLY = 1;
 const int USE_XZ_BOTH      = 2;
 
-const int USE_XZ = USE_XZ_POOL_ONLY;	//  1...poolのみ xz で。2...poolもarchiveも xz で
+const int USE_XZ = USE_XZ_BOTH;	//  1...poolのみ xz で。2...poolもarchiveも xz で
 
 // archiveから棋譜番号=n の棋譜を取り出す。KifBuf[] に入る。速度無視。fpでは100番目以降が遅すぎて無理。
 int find_kif_from_archive(int search_n)
@@ -2478,7 +2770,13 @@ int find_kif_from_archive(int search_n)
 //	char dir_arch[] = "/home/aobaz/kifu/archive/";
 //	char dir_arch[] = "/home/yss/tcp_backup/archive20190304/unpack/";
 //	char dir_arch[] = "/home/yss/tcp_backup/archive20190325/unpack/";
-	char dir_arch[] = "/home/yss/tcp_backup/archive20190421/unpack/";
+//	char dir_arch[] = "/home/yss/tcp_backup/archive20190421/unpack/";
+//	char dir_arch[] = "/home/yss/tcp_backup/archive20201207/";
+//	char dir_arch[] = "/home/yss/prg/komaochi/archive/";
+//	char dir_arch[] = "/home/yss/koma_syn/archive/";
+//	char dir_arch[] = "/home/yss/tcp_backup/archive20201207/";
+	char dir_arch[] = "/home/yss/tcp_backup/archive/";
+
 	int arch_n = (search_n/10000) * 10000;	// 20001 -> 20000
 
 	char filename[TMP_BUF_LEN];
@@ -2538,7 +2836,7 @@ int find_kif_from_archive(int search_n)
 		strcpy(recent_arch_file, filename);
 		recent_arch_size = size;
 		if ( g != 10000 - 1 ) PRT("Err g=%d\n",g);
-		PRT("lines=%d,g=%d,%.3f\n",lines,g,get_spend_time(ct1));	// 100で36秒。1回0.36秒
+		PRT("lines=%d,g=%d,%.3f sec\n",lines,g,get_spend_time(ct1));	// 100で36秒。1回0.36秒
 //		for (i=0;i<10;i++) PRT("%d:%d\n",i,recent_arch_table[i]); exit(0);
 	}
 
@@ -2568,9 +2866,9 @@ int find_kif_from_archive(int search_n)
 
 int find_kif_from_pool(int search_n)
 {
-//	char dir_pool[] = "pool";
-//	char dir_pool[] = "/home/yss/tcp_backup/pool_unpack";
+//	char dir_pool[] = "/home/yss/koma_syn/pool";
 	char dir_pool[] = "/home/yss/tcp_backup/pool";
+
 	char filename[TMP_BUF_LEN];
 	if ( USE_XZ ) {
 		sprintf(filename,"%s/no%012d.csa.xz",dir_pool,search_n);
@@ -2634,14 +2932,6 @@ int get_guess_resign_moves(int moves)
 
 void shogi::add_one_kif_to_db()
 {
-#if 1	// 40bのデータを使わない
-	if ( 39825686 <= zdb_count && zdb_count <= 47075521 ) {
-		static int count;
-		if ( (count++ % 10000)==0 ) PRT("skip 40b = %d\n",zdb_count);
-		zdb_count++;
-		return;
-	}
-#endif
 	ZERO_DB *pdb = &zdb[zdb_count % ZERO_DB_SIZE];	// 古いのは上書き
 	ZERO_DB *p   = &zdb_one;
 	free_zero_db_struct(pdb);
@@ -2663,6 +2953,7 @@ void shogi::add_one_kif_to_db()
 	pdb->moves          = p->moves;
 	pdb->result         = p->result;
 	pdb->result_type    = p->result_type;
+	pdb->handicap       = p->handicap;
 //	copy(p->v_kif.begin(), p->v_kif.end(), back_inserter(pdb->v_kif));
 //	copy(p->v_playouts_sum.begin(), p->v_playouts_sum.end(), back_inserter(pdb->v_playouts_sum));
 	pdb->v_kif          = p->v_kif;
@@ -2684,70 +2975,281 @@ int is_exist_kif_file(int search_n)
 	return 1;
 }
 
+/*
+前回の調整から
+過去1000棋譜の勝率が0.60を超えてたら、調整(+70の半分、+35を引く)
+過去2000棋譜の勝率が0.58を超えてたら、調整
+過去4000棋譜の勝率が0.56を超えてたら、調整
+過去8000棋譜の勝率で無条件で        、調整
+
+保存するのは
+最後に調整した棋譜番号、現在の調整レート
+サーバに渡すのは現在の調整レート、7種類のみ。
+*/
+int nHandicapLastID[HANDICAP_TYPE];
+int nHandicapRate[HANDICAP_TYPE];
+const char HANDICAP_ID_FILE[] = "handicap_rate.txt";
+//const char HANDICAP_SYN[] = "/home/yss/koma_syn/handicap/handicap.txt";
+const char HANDICAP_SYN[] = "/home/yss/tcp_backup/handicap/handicap.txt";
+
+void load_handicap_rate()
+{
+	static bool bDone = false;
+	if ( bDone ) return;
+	bDone = true;
+	FILE *fp = fopen(HANDICAP_ID_FILE,"r");
+	if ( fp==NULL ) DEBUG_PRT("fail open.\n");
+	char str[TMP_BUF_LEN];
+	if ( fgets( str, TMP_BUF_LEN, fp ) == NULL ) DEBUG_PRT("");
+	int *p = nHandicapLastID;
+	int ret = sscanf(str,"%d %d %d %d %d %d %d",&p[0],&p[1],&p[2],&p[3],&p[4],&p[5],&p[6]);
+	if ( ret != HANDICAP_TYPE ) DEBUG_PRT("ret=%d\n",ret);
+	if ( fgets( str, TMP_BUF_LEN, fp ) == NULL ) DEBUG_PRT("");
+	int *q = nHandicapRate;
+	ret = sscanf(str,"%d %d %d %d %d %d %d",&q[0],&q[1],&q[2],&q[3],&q[4],&q[5],&q[6]);
+	if ( ret != HANDICAP_TYPE ) DEBUG_PRT("ret=%d\n",ret);
+	fclose(fp);
+	int i;
+	PRT("nHandicapLastID=");
+	for (i=0;i<HANDICAP_TYPE;i++) PRT("%d ",nHandicapLastID[i]);
+	PRT("\nnHandicapRate  =");
+	for (i=0;i<HANDICAP_TYPE;i++) PRT("%d ",nHandicapRate[i]);
+	PRT("\n");
+}
+
+void save_handicap_rate()
+{
+	FILE *fp = fopen(HANDICAP_ID_FILE,"w");
+	if ( fp==NULL ) DEBUG_PRT("fail open.\n");
+	char str[TMP_BUF_LEN] = { 0 };
+	int i;
+	for (i=0;i<HANDICAP_TYPE;i++) {
+		if ( i>0 ) strcat(str," ");
+		char buf[TMP_BUF_LEN];
+		sprintf(buf,"%d",nHandicapLastID[i]);
+		strcat(str,buf);
+	}
+	strcat(str,"\n");
+	fprintf(fp,"%s",str);
+
+	str[0]  = 0;
+	for (i=0;i<HANDICAP_TYPE;i++) {
+		if ( i>0 ) strcat(str," ");
+		char buf[TMP_BUF_LEN];
+		sprintf(buf,"%d",nHandicapRate[i]);
+		strcat(str,buf);
+	}
+	strcat(str,"\n");
+	fprintf(fp,"%s",str);
+	fclose(fp);
+
+	fp = fopen(HANDICAP_SYN,"w");
+	if ( fp==NULL ) {
+		PRT("fail open %s\n",HANDICAP_SYN);
+	} else {
+		fprintf(fp,"%s",str);
+		fclose(fp);
+	}
+
+	fp = fopen("handicap_history.txt","a");
+	if ( fp==NULL ) DEBUG_PRT("fail open.\n");
+	for (i=0;i<HANDICAP_TYPE;i++) {
+		if ( i>0 ) fprintf(fp,",");
+		fprintf(fp,"%9d(%4d)",nHandicapLastID[i],nHandicapRate[i]);
+	}
+	fprintf(fp,"\n");
+	fclose(fp);
+}
+
+const char AVERAGE_WINRATE_SYN[] = "/home/yss/tcp_backup/handicap/average_winrate.txt";
+
+void save_average_winrate(float ave_wr) {
+	if ( ave_wr <= 0 || ave_wr >= 1.0 ) DEBUG_PRT("");
+	FILE *fp = fopen(AVERAGE_WINRATE_SYN,"w");
+	if ( fp==NULL ) DEBUG_PRT("fail open.\n");
+	fprintf(fp,"%d\n",(int)(ave_wr*1000.0));
+	fclose(fp);
+
+	fp = fopen("average_winrate_history.txt","a");
+	if ( fp==NULL ) DEBUG_PRT("fail open.\n");
+	fprintf(fp,"%9d(%.3f)\n",zdb_count,ave_wr);
+	fclose(fp);
+}
+
+void count_recent_handicap_result(int h, int width, int result[])
+{
+	result[0] = result[1] = result[2] = 0;
+	int w = width * HANDICAP_TYPE;
+	int loop = zdb_count;
+	if ( loop > ZERO_DB_SIZE ) loop = ZERO_DB_SIZE;
+	for (int i=0;i<loop;i++) {
+		ZERO_DB *p = &zdb[i];
+		if ( h != p->handicap ) continue;
+		if ( p->index > zdb_count - w ) {
+			result[p->result]++;
+		}
+	}
+}
+
 void update_pZDBsum()
 {
-	int res_total_sum[4] = { 0,0,0,0 };
-	int res_recent_sum[4] = { 0,0,0,0 };
-	uint64 moves_total_sum = 0;
-	int    moves_recent_sum = 0;
-	uint64 mv_total_sum = 0;
-	int    mv_recent_sum = 0;
-	int    mv_total_inc = 0;
-	int    mv_recent_inc = 0;
-	int res_kind[4] = { 0,0,0,0 };
-	int res_type[7] = { 0,0,0,0,0,0,0 };
-	
+	const int H = HANDICAP_TYPE;
+	int res_total_sum[H][4]    = { 0 };	// [3] は合計で利用
+	int res_recent_sum[H][4]   = { 0 };
+	uint64 moves_total_sum[H]  = { 0 };
+	int    moves_recent_sum[H] = { 0 };
+	uint64 mv_total_sum[H]  = { 0 };
+	int    mv_recent_sum[H] = { 0 };
+	int    mv_total_inc[H]  = { 0 };
+	int    mv_recent_inc[H] = { 0 };
+	int res_kind[H][4]      = { 0 };
+	int res_type[H][RT_MAX] = { 0 };
+	int kachi[H][4]         = { 0 };
+	int result_hadicap_sum[H][3] = { 0 };
+	int games_sum[H] = {0};
+	const int G1000 = 1000*H;
+	const int WR_OK_GAMES = 8000;	// 直近のこの対局数の勝率でレートを変動
+
+	load_handicap_rate();
+	const int MAX_GAMES = (WR_OK_GAMES*12/10)*H;
+	int i;
+	for (i=0;i<H;i++) {
+		if ( zdb_count - nHandicapLastID[i] > MAX_GAMES ) nHandicapLastID[i] = zdb_count - MAX_GAMES;
+	}
+
 	zero_kif_pos_num = 0;
 	zero_kif_games   = 0;
-	int i;
 	int loop = zdb_count;
 	if ( loop > ZERO_DB_SIZE ) loop = ZERO_DB_SIZE;
 	for (i=0;i<loop;i++) {
 		ZERO_DB *p = &zdb[i];
+		int h = p->handicap;
+		if ( h < 0 || h >= H ) DEBUG_PRT("");
 		if ( p->result_type < 0 || p->result_type >= RT_MAX ) DEBUG_PRT("");
+		if ( p->moves == 0 ) { PRT("Err. p->moves=0\n"); exit(0); }
+		if ( p->result < 0 || p->result > 2 ) DEBUG_PRT("");
+
+		if ( zero_kif_pos_num + p->moves >= ZDB_POS_MAX ) DEBUG_PRT("ZDB_POS_MAX!");
+		for (int j=0;j<p->moves;j++) {
+			int n = zero_kif_pos_num + j;
+			int m0 = j;
+			if ( m0 > 255 ) m0 = 255;
+			int m1 = p->moves;
+			if ( m1 > 255 ) m1 = 255;
+			pZDBmove[n]    = m0;
+			pZDBmaxmove[n] = m1;
+			pZDBplayouts_sum[n] = p->v_playouts_sum[j];
+			pZDBscore_x10k[n]   = p->v_score_x10k[j];
+		}
+
 		zero_kif_pos_num += p->moves;
 		pZDBsum[i] = zero_kif_pos_num;
 		zero_kif_games += (p->moves != 0);
-		if ( p->moves == 0 ) { PRT("Err. p->moves=0\n"); exit(0); }
-		if ( p->result < 0 || p->result >=4 ) DEBUG_PRT("");
-		if ( p->index >= zdb_count - 1000) {
-			res_recent_sum[p->result]++;
-			moves_recent_sum += p->moves;
-		}
-		res_total_sum[p->result]++;
-		moves_total_sum += p->moves;
 
-		if ( p->index >= zdb_count - 10000) {
-			if ( p->result_type == RT_KACHI ) {
-				res_kind[p->result]++;
-				res_kind[3]++;
-			}
-	    	res_type[p->result_type]++;
+		if ( p->index >= zdb_count - G1000) {
+			res_recent_sum[h][p->result]++;
+			moves_recent_sum[h] += p->moves;
 		}
-		
+		if ( p->index > nHandicapLastID[h] ) {
+			result_hadicap_sum[h][p->result]++;
+		}
+
+		games_sum[h]++;
+		res_total_sum[h][p->result]++;
+		moves_total_sum[h] += p->moves;
+
+		if ( p->index >= zdb_count - G1000) {
+			if ( p->result_type == RT_KACHI ) {
+				res_kind[h][p->result]++;
+				res_kind[h][3]++;
+			}
+	    	res_type[h][p->result_type]++;
+		}
+		if ( p->result_type == RT_KACHI ) {
+			kachi[h][p->result]++;
+		}
+
 		int j;
 		for (j=0;j<p->moves;j++) {
 			int n = p->vv_move_visit[j].size();
-			if ( p->index >= zdb_count - 1000) {
-				mv_recent_sum += n;
-				mv_recent_inc++;
+			if ( p->index >= zdb_count - G1000) {
+				mv_recent_sum[h] += n;
+				mv_recent_inc[h]++;
 			}
-			mv_total_sum += n;
-			mv_total_inc++;
+			mv_total_sum[h] += n;
+			mv_total_inc[h]++;
 		}
 	}
-	if ( loop > 0 ) {
-		if ( mv_recent_inc == 0 ) mv_recent_inc = 1;
-		if ( mv_total_inc  == 0 ) mv_total_inc  = 1;
+	if ( loop > 0 ) for (i=0;i<H;i++) {
+		if ( mv_recent_inc[i] == 0 ) mv_recent_inc[i] = 1;
+		if ( mv_total_inc[i]  == 0 ) mv_total_inc[i]  = 1;
+		int s = 0;
+		for (int j=0;j<4;j++) s += res_recent_sum[i][j];
+		if ( s==0 ) s = 1;
+//		if ( games_sum[i] == 0 ) games_sum[i] = 1;
 //		PRT("%7d:move_ave=%5.1f(%5.1f) mv_ave=%.1f(%.1f), recent D=%3d,S=%3d,G=%3d(%5.3f) total %3d,%3d,%3d(%5.3f), %d,%d,%d,%d,rt=%d,%d,%d,%d,%d,%d,%d\n",
-		PRT("%7d:%5.1f(%5.1f) %.1f(%.1f),D=%3d,S=%3d,G=%3d(%5.3f)t=%3d,%3d,%3d(%5.3f),%d,%3d,%3d,%3d,rt=%d,%d,%d,%d,%d,%d,%d\n",
-			zdb_count,(float)moves_total_sum/loop, (float)moves_recent_sum/1000,
-			(float)mv_total_sum/mv_total_inc, (float)mv_recent_sum/mv_recent_inc,
-			res_recent_sum[0],res_recent_sum[1],res_recent_sum[2], (float)(res_recent_sum[1] + res_recent_sum[0]/2.0)/(res_recent_sum[0]+res_recent_sum[1]+res_recent_sum[2]),
- 			res_total_sum[0],res_total_sum[1],res_total_sum[2], (float)(res_total_sum[1] + res_total_sum[0]/2.0)/(res_total_sum[0]+res_total_sum[1]+res_total_sum[2]),
- 			res_kind[0],res_kind[1],res_kind[2],res_kind[3],
-			res_type[0],res_type[1],res_type[2],res_type[3],res_type[4],res_type[5],res_type[6] );
+		//      手合 対局数  平均手数(最近) 候補数(最近)                                   先宣 後宣(最近)    投 千 GI SI 中断
+		if ( games_sum[i] ) PRT("%7d:%d:%4d,%5.1f(%5.1f) %.1f(%.1f)D=%3d,S=%3d,G=%3d(%5.3f)t=%4d,%5d,%5d(%5.3f)%4d,%4d(%3d,%3d)rt=%3d,%2d,%d,%d,%d\n",
+			zdb_count,i,games_sum[i],(float)moves_total_sum[i]/games_sum[i], (float)moves_recent_sum[i]/s,
+			(float)mv_total_sum[i]/mv_total_inc[i], (float)mv_recent_sum[i]/mv_recent_inc[i],
+			res_recent_sum[i][0],res_recent_sum[i][1],res_recent_sum[i][2], (float)(res_recent_sum[i][1] + res_recent_sum[i][0]/2.0)/(res_recent_sum[i][0]+res_recent_sum[i][1]+res_recent_sum[i][2]),
+ 			res_total_sum[i][0],res_total_sum[i][1],res_total_sum[i][2], (float)(res_total_sum[i][1] + res_total_sum[i][0]/2.0)/(res_total_sum[i][0]+res_total_sum[i][1]+res_total_sum[i][2]),
+ 			kachi[i][1],kachi[i][2],res_kind[i][1],res_kind[i][2],
+			res_type[i][1],res_type[i][3],res_type[i][4],res_type[i][5],res_type[i][6] );
 	}
+
+	bool fUpdate = false;
+	(void)fUpdate;
+	int hand_diff[H] = { 0 };
+	for (i=0;i<H;i++) {
+		hand_diff[i] = 0;
+		bool fOK = false;
+		double wr = 0;
+		double sum = 0;
+
+		int k_width[4] = { 1000,2000,4000,WR_OK_GAMES };
+		for (int k=0; k<4; k++) {
+			int w = k_width[k];
+			if ( zdb_count - w*H < nHandicapLastID[i] ) continue;
+			int h_res[3];
+			count_recent_handicap_result(i, w, h_res);
+			sum = 0;
+			for (int j=0;j<3;j++) sum += h_res[j];
+			if ( sum == 0 ) sum = 1;
+			double wins = (double)h_res[1] + (double)h_res[0]/2.0f;
+			wr = wins / sum;	// 先手(下手)勝率
+			if ( k==0 && (wr > 0.60 || wr < 0.40) ) fOK = true;
+			if ( k==1 && (wr > 0.58 || wr < 0.42) ) fOK = true;
+			if ( k==2 && (wr > 0.56 || wr < 0.44) ) fOK = true;
+			if ( k==3                             ) fOK = true;
+			if ( fOK ) break;
+		}
+
+		if ( wr <= 0.01 ) wr = 0.01;
+		if ( wr >= 0.99 ) wr = 0.99;
+		double d = -400.0 * log10(1.0 / wr - 1.0);
+		int d2 = (int)(d / 2.0f);	// 半分の値で動かす
+
+//		PRT("%d:%.0f,%.3f(%d),",i,sum,wr,d2); if ( i==H-1 ) PRT("\n");
+		if ( fOK == false ) continue;
+
+		int prev = nHandicapRate[i];
+		nHandicapRate[i] += d2;
+		const int RMAX = 1400+1157 - 100;
+		if ( nHandicapRate[i] <    0 ) nHandicapRate[i] = 0;
+		if ( nHandicapRate[i] > RMAX ) nHandicapRate[i] = RMAX;
+		hand_diff[i] = nHandicapRate[i] - prev;
+		if ( hand_diff[i] ) {
+			fUpdate = true;
+			nHandicapLastID[i] = zdb_count;
+		}
+	}
+//	if ( fUpdate ) save_handicap_rate();
+
+	float ave_winrate = (float)(res_total_sum[0][1] + res_total_sum[0][0]/2.0)/(res_total_sum[0][0]+res_total_sum[0][1]+res_total_sum[0][2]);
+	save_average_winrate(ave_winrate);
+
+//	PRT("H:"); for (i=0;i<H;i++) { PRT("%8d %4d(%3d)",nHandicapLastID[i], nHandicapRate[i], hand_diff[i]); } PRT("\n");
 }
 
 void shogi::load_exist_all_kif()
@@ -2778,7 +3280,7 @@ void shogi::load_exist_all_kif()
 	update_pZDBsum();
 
 	PRT("zdb_count=%d(count=%d),games=%d,pos_num=%d, %.3f sec\n",zdb_count,count,zero_kif_games,zero_kif_pos_num,get_spend_time(ct1));
-	if ( zdb_count_start != 0 && count < ZERO_DB_SIZE ) { PRT("Err. replay buf is not filled.\n"); debug(); }
+	if ( zdb_count_start != 0 && count < ZERO_DB_SIZE ) { DEBUG_PRT("Err. replay buf is not filled.\n"); }
 }
 
 int shogi::wait_and_get_new_kif(int next_weight_n)
@@ -2936,69 +3438,78 @@ int shogi::make_www_samples()
     return 0;
 }
 
-
 // move_hash() で変更されるのは ban, init_ban, mo_c, kn, kn_stn, tume_hyouka, nifu_table_com, hash_code1
-void shogi::copy_restore_dccn_init_board(int fCopy)
+typedef struct INIT_BOARD_DATA {
+	int cp_init_ban[BAN_SIZE];
+	int cp_mo_m[8];
+	int cp_mo_c[8];
+	int cp_ban[BAN_SIZE];
+	int cp_kn[41][2];
+	int  cp_kn_stoc[8][32];
+	int *cp_kn_stn[8];
+
+	char cp_nifu_table_com[16][10];
+	char cp_nifu_table_man[16][10];
+
+	int cp_tume_hyouka;
+	unsigned int cp_hash_code1;
+	unsigned int cp_hash_code2;
+	unsigned int cp_hash_motigoma;
+} INIT_BOARD_DATA;
+
+INIT_BOARD_DATA init_board_data[HANDICAP_TYPE];
+
+void shogi::copy_restore_dccn_init_board(int handicap, bool fCopy)
 {
-	static int cp_init_ban[BAN_SIZE];
-	static int cp_mo_m[8];
-	static int cp_mo_c[8];
-	static int cp_ban[BAN_SIZE];
-	static int cp_kn[41][2];
-	static int  cp_kn_stoc[8][32];
-	static int *cp_kn_stn[8];
+	if ( handicap < 0 || handicap >= HANDICAP_TYPE ) DEBUG_PRT("");
+	INIT_BOARD_DATA *p = &init_board_data[handicap];
 
-	static char cp_nifu_table_com[16][10];
-	static char cp_nifu_table_man[16][10];
-
-	static int cp_tume_hyouka;
-	static unsigned int cp_hash_code1;
-	static unsigned int cp_hash_code2;
-	static unsigned int cp_hash_motigoma;
 	if ( fCopy ) {
-		memcpy(cp_init_ban,       init_ban,       sizeof(init_ban));
-		memcpy(cp_mo_m,           mo_m,           sizeof(mo_m));
-		memcpy(cp_mo_c,           mo_c,           sizeof(mo_c));
-		memcpy(cp_ban,            ban,            sizeof(ban));
-		memcpy(cp_kn,             kn,             sizeof(kn));
-		memcpy(cp_kn_stoc,        kn_stoc,        sizeof(kn_stoc));
-		memcpy(cp_kn_stn,         kn_stn,         sizeof(kn_stn));
-		memcpy(cp_nifu_table_com, nifu_table_com, sizeof(nifu_table_com));
-		memcpy(cp_nifu_table_man, nifu_table_man, sizeof(nifu_table_man));
+		memcpy(p->cp_init_ban,       init_ban,       sizeof(init_ban));
+		memcpy(p->cp_mo_m,           mo_m,           sizeof(mo_m));
+		memcpy(p->cp_mo_c,           mo_c,           sizeof(mo_c));
+		memcpy(p->cp_ban,            ban,            sizeof(ban));
+		memcpy(p->cp_kn,             kn,             sizeof(kn));
+		memcpy(p->cp_kn_stoc,        kn_stoc,        sizeof(kn_stoc));
+		memcpy(p->cp_kn_stn,         kn_stn,         sizeof(kn_stn));
+		memcpy(p->cp_nifu_table_com, nifu_table_com, sizeof(nifu_table_com));
+		memcpy(p->cp_nifu_table_man, nifu_table_man, sizeof(nifu_table_man));
 
-		cp_tume_hyouka   = tume_hyouka;
-		cp_hash_code1    = hash_code1;
-		cp_hash_code2    = hash_code2;
-		cp_hash_motigoma = hash_motigoma;
-	} else {
-		memcpy(init_ban,       cp_init_ban,       sizeof(init_ban));
-		memcpy(mo_m,           cp_mo_m,           sizeof(mo_m));
-		memcpy(mo_c,           cp_mo_c,           sizeof(mo_c));
-		memcpy(ban,            cp_ban,            sizeof(ban));
-		memcpy(kn,             cp_kn,             sizeof(kn));
-		memcpy(kn_stoc,        cp_kn_stoc,        sizeof(kn_stoc));
-		memcpy(kn_stn,         cp_kn_stn,         sizeof(kn_stn));
-		memcpy(nifu_table_com, cp_nifu_table_com, sizeof(nifu_table_com));
-		memcpy(nifu_table_man, cp_nifu_table_man, sizeof(nifu_table_man));
+		p->cp_tume_hyouka   = tume_hyouka;
+		p->cp_hash_code1    = hash_code1;
+		p->cp_hash_code2    = hash_code2;
+		p->cp_hash_motigoma = hash_motigoma;
+	} else {	// restore
+		memcpy(init_ban,       p->cp_init_ban,       sizeof(init_ban));
+		memcpy(mo_m,           p->cp_mo_m,           sizeof(mo_m));
+		memcpy(mo_c,           p->cp_mo_c,           sizeof(mo_c));
+		memcpy(ban,            p->cp_ban,            sizeof(ban));
+		memcpy(kn,             p->cp_kn,             sizeof(kn));
+		memcpy(kn_stoc,        p->cp_kn_stoc,        sizeof(kn_stoc));
+		memcpy(kn_stn,         p->cp_kn_stn,         sizeof(kn_stn));
+		memcpy(nifu_table_com, p->cp_nifu_table_com, sizeof(nifu_table_com));
+		memcpy(nifu_table_man, p->cp_nifu_table_man, sizeof(nifu_table_man));
 
-		tume_hyouka   = cp_tume_hyouka;
-		hash_code1    = cp_hash_code1;
-		hash_code2    = cp_hash_code2;
-		hash_motigoma = cp_hash_motigoma;
+		tume_hyouka   = p->cp_tume_hyouka;
+		hash_code1    = p->cp_hash_code1;
+		hash_code2    = p->cp_hash_code2;
+		hash_motigoma = p->cp_hash_motigoma;
 	}
 }
 
 void shogi::init_prepare_kif_db()
 {
 //	fSelectZeroDB = 1;
-	if ( fMAKE_LEVELDB ) { PRT("fMAKE_LEVELDB=1 ! Err\n"); debug(); }
+	if ( fMAKE_LEVELDB ) { DEBUG_PRT("fMAKE_LEVELDB=1 ! Err\n"); }
 	init_rnd521( (int)time(NULL)+getpid_YSS() );		// 起動ごとに異なる乱数列を生成
 
 	init_zero_kif_db();
 	load_exist_all_kif();
 
-	hirate_ban_init(0);
-	copy_restore_dccn_init_board(1);
+	for (int i=0; i<HANDICAP_TYPE; i++) {
+		hirate_ban_init(i);
+		copy_restore_dccn_init_board(i, true);
+	}
 }
 
 int binary_search_kif_db(int r)
@@ -3025,7 +3536,7 @@ int binary_search_kif_db(int r)
 		if ( prev_mid == mid ) break;
 		prev_mid = mid;
 	}
-	if ( mid < 0 ) { PRT("mid < 0 Err\n"); debug(); }
+	if ( mid < 0 ) { DEBUG_PRT("mid < 0 Err\n"); }
     if ( pZDBsum[min] > r ) return min;
     if ( pZDBsum[mid] > r ) return mid;
     return max;
@@ -3074,16 +3585,39 @@ void rand_check_test()
 	// loop=  58850000,dsum=0.999956,sqrt()=0.999978
 }
 */
+#ifdef F2187
+void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_policy, float *label_value, float label_policy_visit[][MOVE_2187_MAX])
+#else
 void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_policy, float *label_value, float label_policy_visit[][MOVE_C_Y_X_ID_MAX])
+#endif
 {
 //	int ct1 = get_clock();
-//	float *data = new float[DCNN_CHANNELS*B_SIZE*B_SIZE];
+	int sum_handicap[HANDICAP_TYPE] = { 0 };
+	int sum_result[3] = { 0 };
+	int sum_turn[2] = { 0 };
+	double sum_t = 0;
+	double sum_diff_win_r = 0;
 
 	// pos_sum の中から64個ランダムで選ぶ
 	int *ri = new int[mini_batch];
 	int i;
 	for (i=0;i<mini_batch;i++) {
 		int r = rand_m521() % zero_kif_pos_num;	// 0 <= r < zero_kif_pos_num, 最初に右辺がunsigned longで評価されるようで、マイナスにはならない。gccでも
+
+		// 40手までで投了してる棋譜は10分の1
+		// 0手目から30手目は 0手目は10分の1、30手目で1,  n * 9/300 + 30/300
+		if ( 0 ) {
+			int m = pZDBmaxmove[r];
+			int n = pZDBmove[r];
+			if ( m <= 40 && (rand_m521() % 10) != 0 ) { i--; continue; }
+			if ( n < 30 && (int)(rand_m521() % 300) > (n*9+30) ) { i--; continue; }
+		}
+		if ( 1 ) {
+			int s = pZDBplayouts_sum[r];
+			int x = pZDBscore_x10k[r];
+			if ( s < 50 && (x==0 || x==10000) ) { i--; continue; }
+		}
+
 		int j;
 		for (j=0;j<i;j++) {
 			if ( ri[j] == r ) break;
@@ -3101,26 +3635,28 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 			sum += p->moves;
 			if ( sum > r ) {
 				t = r - (sum - p->moves);
-				if ( t >= p->moves || t < 0 ) { PRT("t over %d err.i=%d,j=%d,r=%d,sum=%d\n",t,i,j,r,sum); debug(); }
+				if ( t >= p->moves || t < 0 ) { DEBUG_PRT("t over %d err.i=%d,j=%d,r=%d,sum=%d\n",t,i,j,r,sum); }
 				break;
 			}
 		}
 		int bi = binary_search_kif_db(r);	// 16秒が1秒に
 		ZERO_DB *p = &zdb[bi];
 		t = r - (pZDBsum[bi] - zdb[bi].moves);
-		if ( t < 0 || t >= MAX_ZERO_MOVES ) { PRT("t=%d(%d) err.j=%d,r=%d\n",t,p->moves,j,r); debug(); }
+		if ( t < 0 || t >= MAX_ZERO_MOVES ) { DEBUG_PRT("t=%d(%d) err.j=%d,r=%d,bi=%d\n",t,p->moves,j,r,bi); }
 //		PRT("%3d:%7d,j=%4d:bi=%3d,t=%3d,moves=%3d,res=%d\n",i,r,j,bi,t,p->moves,p->result);
 //		if ( bi != j ) debug();
 //		if ( r - (pZDBsum[bi] - pZDB[bi].moves) != t ) debug();
 //		mb_count[bi]++;
 
-		copy_restore_dccn_init_board(0);
+		copy_restore_dccn_init_board(p->handicap, false);
+
+		int fSymmetry = rand_m521() % 2;	// 乱数で左右反転
+		fSymmetry = 0;	// 左右反転なし
 
 		for (j=0;j<t;j++) {
 			int bz,az,tk,nf;
 			// 棋泉形式の2バイトを4バイトに変換。numは現在の手数。num=0から始まる。
-//			trans_4_to_2_KDB( p->kif[j*2+0], p->kif[j*2+1], j, &bz, &az, &tk, &nf);
-			trans_4_to_2_KDB( p->v_kif[j]>>8, p->v_kif[j]&0xff, j, &bz, &az, &tk, &nf);
+			trans_4_to_2_KDB( p->v_kif[j]>>8, p->v_kif[j]&0xff, (j+(p->handicap!=0))&1, &bz, &az, &tk, &nf);
 
 			move_hit_hash(bz,az,tk,nf);
 			move_hit_kif[j] = pack_te( bz,az,tk,nf );
@@ -3128,11 +3664,16 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 			move_hit_hashcode[j][1] = hash_code2;
 			move_hit_hashcode[j][2] = hash_motigoma;
 		}
-		
-		if ( j >= p->moves ) { PRT("no next move? t=%d(%d) err.j=%d,r=%d\n",t,p->moves,j,r); debug(); }
+		if ( j >= p->moves || j!=t ) { DEBUG_PRT("no next move? t=%d(%d) err.j=%d,r=%d\n",t,p->moves,j,r); }
+		if ( 1 ) {
+			int s = p->v_playouts_sum[t];
+            int x = p->v_score_x10k[t];
+            if ( s < 50 && (x==0 || x==10000) ) DEBUG_PRT("r=%8d,t=%3d,s=%5d,x=%d\n",r,t,s,x);
+		}
+
 		int bz,az,tk,nf;
-//		trans_4_to_2_KDB( p->kif[j*2+0], p->kif[j*2+1], j, &bz, &az, &tk, &nf);
-		trans_4_to_2_KDB( p->v_kif[j]>>8, p->v_kif[j]&0xff, j, &bz, &az, &tk, &nf);
+		bool bGoteTurn = (t+(p->handicap!=0)) & 1;
+		trans_4_to_2_KDB( p->v_kif[j]>>8, p->v_kif[j]&0xff, bGoteTurn, &bz, &az, &tk, &nf);
 		
 		int win_r = 0;
 		if ( p->result == ZD_S_WIN ) win_r = +1;
@@ -3143,24 +3684,40 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 		float score_div = (float)score_x10k / 10000.0f;
 		float score     = score_div * 2.0f - 1.0f;	// +1.0 >= x >= -1.0,   自分から見た勝率
 
-		if ( (t&1)==1 ) {
+		if ( bGoteTurn ) {
 			hanten_sasite(&bz,&az,&tk,&nf);	// 指し手を先後反転
 			win_r = -win_r;	// 勝敗まで反転はしなくてよい？ 反転した方が学習が簡単なはず。出てきた結果を反転
+		}
+
+		if ( fSymmetry ) {
+			hanten_sasite_sayuu(&bz,&az,&tk,&nf);
 		}
 
 		// 実際の勝敗と探索値の平均を学習。https://tadaoyamaoka.hatenablog.com/entry/2018/07/01/121411
 		float ave_r = ((float)win_r + score) / 2.0;
 		if ( score_x10k == NO_ROOT_SCORE ) ave_r = win_r;
-//		ave_r = win_r;	// not use average
+		ave_r = win_r;	// not use average
 //		PRT("(%.3f,%.3f)",(float)win_r,score);
 
-		int playmove_id = get_move_id_c_y_x(pack_te(bz,az,tk,nf));
+		int playmove_id = 0;
+		if ( f2187 ) {
+			playmove_id = get_dlshogi_policy(bz,az,tk,nf);
+		} else {
+			playmove_id = get_move_id_c_y_x(pack_te(bz,az,tk,nf));
+		}
 		label_policy[i] = (float)playmove_id;
 		label_value[i]  = (float)ave_r;
 
 		if ( POLICY_VISIT ) {
 			int k;
-				for (k=0; k<MOVE_C_Y_X_ID_MAX; k++) {
+			int move_max = 0;
+			if ( f2187 ) {
+				move_max = MOVE_2187_MAX;
+			} else {
+				move_max = MOVE_C_Y_X_ID_MAX;
+			}
+
+			for (k=0; k<move_max; k++) {
 				label_policy_visit[i][k] = 0.0f;
 			}
 			int playout_sum = p->v_playouts_sum[j];
@@ -3174,32 +3731,55 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 				int b1 =(x>>16)&0xff;
 				int visit = x&0xffff;
 				int bz,az,tk,nf;
-				trans_4_to_2_KDB( b0, b1, j, &bz, &az, &tk, &nf);
-				if ( (t&1)==1 ) hanten_sasite(&bz,&az,&tk,&nf);	// 指し手を先後反転
+				trans_4_to_2_KDB( b0, b1, bGoteTurn, &bz, &az, &tk, &nf);
+				if ( bGoteTurn ) hanten_sasite(&bz,&az,&tk,&nf);	// 指し手を先後反転
 //				PRT("r=%5d:b0=%3d,b1=%3d,[%3d][%3d] (%02x,%02x,%02x,%02x)v=%3d\n",r,b0,b1,j,k,bz,az,tk,nf,visit);
+				if ( fSymmetry ) {
+					hanten_sasite_sayuu(&bz,&az,&tk,&nf);
+				}
+#ifdef F2187
+				int id = get_dlshogi_policy(bz,az,tk,nf);
+#else
 				int id = get_move_id_c_y_x(pack_te(bz,az,tk,nf));
+#endif
 				label_policy_visit[i][id] = (float)visit / playout_sum;
 //				PRT("r=%5d:b0=%3d,b1=%3d,[%3d][%3d] (%02x,%02x,%02x,%02x)id=%5d,v=%3d,%6.4f\n",r,b0,b1,j,k,bz,az,tk,nf,id,visit,label_policy_visit[i][id]);
 				if ( id==playmove_id ) found = 1;
 			}
-			if ( found==0 ) PRT("no best move visit. id=%d\n",playmove_id);
+			if ( found==0 ) { static int count=0; if ( count++==0 ) PRT("no best move visit. id=%d\n",playmove_id); }
 		}
 
 		float *pd = (float *)data + ONE_SIZE * i;
 		memset(pd, 0, sizeof(float)*ONE_SIZE);
 //		PRT("%2d:t=%d,win_r=%d,policy=%.0f\n",i,t,win_r,label_policy[i]); hyouji();
-		set_dcnn_channels((Color)(t&1), t, pd, -1, NET_362);
+		set_dcnn_channels((Color)bGoteTurn, t, pd, -1, p->handicap);
 //		prt_dcnn_data_table((float(*)[B_SIZE][B_SIZE])pd);
+		if ( fSymmetry ) {
+			symmetry_dcnn_channels(pd);
+		}
+
+		sum_handicap[p->handicap]++;
+		sum_result[p->result]++;
+		sum_turn[bGoteTurn]++;
+		sum_t +=t;
+		sum_diff_win_r +=fabs(win_r - ave_r);
 
 		if ( fPW ) PRT("%3d ",p->weight_n);
 //		if ( fPW ) PRT("%d(%3d) ",bi,p->weight_n);
+		static int tc[MAX_ZERO_MOVES],tc_all;
+		int tt = t;
+		if ( tt>199 ) tt=199;
+		tc[tt]++;
+		tc_all++;
+//		if ( (tc_all % 1000000)==0 ) { PRT("tc="); for (int k=0;k<200;k++) PRT("%f,",(float)tc[k]/tc_all); PRT("\n"); }
 	}
-	if ( fPW ) PRT("\n");
+	if ( fPW ) PRT("\nhandicap=%d,%d,%d,%d,%d,%d,%d,result=%d,%d,%d,turn=%d,%d,ave_t=%.2f,ave_diff_win_r=%.5f\n"
+		,sum_handicap[0],sum_handicap[1],sum_handicap[2],sum_handicap[3],sum_handicap[4],sum_handicap[5],sum_handicap[6]
+		,sum_result[0],sum_result[1],sum_result[2], sum_turn[0],sum_turn[1], sum_t/mini_batch, sum_diff_win_r/mini_batch	);
 //	PRT("%.2f sec, mini_batch=%d,%8d,%8.1f,%6.3f\n",get_spend_time(ct1), mini_batch, ri[0], label_policy[0], label_value[0]);
 
 	delete [] ri;
 }
-
 
 void convert_caffemodel(int iteration, int weight_number)
 {
@@ -3330,7 +3910,7 @@ int load_network(std::string filename)
         linecount++;
     }
 	PRT("num=%d...linecount=%d\n",num,linecount);
-	if ( num != WT_NUM ) debug();
+	if ( num != WT_NUM ) DEBUG_PRT("");
 //	for (int i=0; i<100; i++) PRT("%f,",wt_keep[i]);
 
     return num;
@@ -3360,8 +3940,13 @@ const int ITER_SIZE = 1;
 
 constexpr auto kDataSize = MINI_BATCH * ITER_SIZE;	// ITER_SIZE=1 で 7MB
 
+#ifdef F2187
+float policy_visit[kDataSize][MOVE_2187_MAX];
+array<float, kDataSize * MOVE_2187_MAX> dummy_policy_visit;
+#else
 float policy_visit[kDataSize][MOVE_C_Y_X_ID_MAX];
 array<float, kDataSize * MOVE_C_Y_X_ID_MAX> dummy_policy_visit;
+#endif
 
 string get_short_float(float f)
 {
@@ -3422,7 +4007,7 @@ void load_aoba_txt_weight( const caffe::shared_ptr<caffe::Net<float>> &net, std:
 		PRT(", %d\n",sum_layer);
 	}
 	PRT("sum=%d,param_num=%d,set_num=%d\n",sum,param_num,set_num);
-	if ( sum != set_num || sum != param_num ) { PRT("weight param Err.\n"); debug(); }
+	if ( sum != set_num || sum != param_num ) { DEBUG_PRT("weight param Err.\n"); }
 }
 
 void start_zero_train(int *p_argc, char ***p_argv )
@@ -3431,7 +4016,6 @@ void start_zero_train(int *p_argc, char ***p_argv )
 	GlobalInit(p_argc, p_argv);
 
 	PS->init_prepare_kif_db();
-
 //exit(0);
 	if ( fWwwSample ) { PS->make_www_samples(); return; }
 
@@ -3460,16 +4044,6 @@ void start_zero_train(int *p_argc, char ***p_argv )
 	std::shared_ptr<Solver<float>> solver;
 	solver.reset(SolverRegistry<float>::CreateSolver(solver_param));
 
-/*
-	solver_param.set_base_lr(0.01);
-	solver_param.set_display(100);
-	solver_param.set_max_iter(10000000);
-	solver_param.set_lr_policy("step");
-	solver_param.set_gamma(0.5);
-	solver_param.set_power(0.75);
-	solver_param.set_momentum(0.9);
-	solver_param.set_weight_decay(0.0002);
-*/
 	//評価用のデータを取得
 	const auto net      = solver->net();
 //	const char sNet[] = "20190419replay_lr001_wd00002_100000_1018000/_iter_36000.caffemodel";	// w449
@@ -3496,10 +4070,11 @@ void start_zero_train(int *p_argc, char ***p_argv )
 //	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210311/_iter_4832000.caffemodel";	// w3298
 //	const char sNet[] = "/home/yss/shogi/learn/40b_8x_39770000_games_iter_3870190.caffemodel";	// 40b,  next = w3460
 //	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210426/_iter_5152000.caffemodel";	// w3459 = w3703
-	const char sNet[] = "/home/yss/shogi/learn/snapshots/20211225/_iter_2112000.caffemodel";	// w3769
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20211225/_iter_2112000.caffemodel";	// w3769
+//	const char sNet[] = "/home/yss/shogi/learn/20220222_125600_256x20b_swish_no_ave_no_30_from_20220218_071436_iter_600000.caffemodel";
+	const char sNet[] = "/home/yss/shogi/learn/snapshots/20220226/_iter_64000.caffemodel";		// w3883
 
-
-	int next_weight_number = 3770;	// 現在の最新の番号 +1
+	int next_weight_number = 3884;	// 現在の最新の番号 +1
 
 	net->CopyTrainedLayersFrom(sNet);	// caffemodelを読み込んで学習を再開する場合
 //	load_aoba_txt_weight( net, "/home/yss/w000000000689.txt" );	// 既存のw*.txtを読み込む。*.caffemodelを何か読み込んだ後に
@@ -3508,37 +4083,31 @@ void start_zero_train(int *p_argc, char ***p_argv )
 
 	int iteration = 0;	// 学習回数
 	int add = 0;		// 追加された棋譜数
-//	int remainder = 0;
+	int remainder = 0;
 	int iter_weight = 0;
-	float remain = 0;
-	
+
 wait_again:
 	if ( fReplayLearning ) {
 		add = PS->add_a_little_from_archive();
 		if ( add < 0 ) { PRT("done..\n"); solver->Snapshot(); return; }
-//		if ( zdb_count <=  120000 ) goto wait_again;	// no000000121031.csa まではrandom 棋譜なので
-//		if ( zdb_count <= 2520000 ) goto wait_again;
-//		if ( zdb_count >  2948000 ) { PRT("done..w648.\n"); solver->Snapshot(); return; }
+		if ( zdb_count <=  ZERO_DB_SIZE ) goto wait_again;
+//		if ( zdb_count <= 18850000 ) goto wait_again;
+//		if ( zdb_count >  13000000 ) { PRT("done...\n"); solver->Snapshot(); return; }
+//		if ( iteration >= 100000*1 ) { PRT("done...\n"); solver->Snapshot(); return; }
+//		if ( iteration > 1000 ) solver_param.set_base_lr(0.01);
+
 	} else {
-		if ( 1 && iteration==0 && next_weight_number==3770 ) {
-			add = 800;	// 初回のみダミーで2000棋譜追加したことにする(途中再開は 0 && に)
+		if ( 1 && iteration==0 && next_weight_number==3884 ) {
+			add = 200;	// 初回のみダミーで10000棋譜追加したことにする
 		} else {
 			add = PS->wait_and_get_new_kif(next_weight_number);
 		}
 	}
 
-	// AlphaZeroは2400万棋譜、70万回学習、mini-batch=4096、1000回学習ごとに重み更新、なので34285棋譜(=2400/(700000/1000))
-	// mini-batch=128 だと32000回学習((4096/128)*1000)ごとに重み更新、なので34285棋譜で32000回学習。1棋譜で1.0714回学習。
 	const float ADJUST = 1.07142857;
 	const int AVE_MOVES = 128;	// 1局の平均手数
 	float add_mul = ADJUST * (float)AVE_MOVES / MINI_BATCH;
 	int nLoop = (int)((float)add*add_mul); // MB=64でadd*2, MB=128でadd*1, MB=180でadd*0.711
-	remain += add*add_mul - nLoop;
-	if ( remain > 1 ) {
-		nLoop += 1;
-		remain -= 1;
-	}
-/*	
 	// (ITER_SIZE*MINI_BATCH)=4096 なら最低でも32棋譜必要(32*128=4096)
 	int min_n = ITER_SIZE*MINI_BATCH / AVE_MOVES;
 	if ( min_n > 1 ) {
@@ -3546,9 +4115,8 @@ wait_again:
 		nLoop = add / min_n;
 		remainder = add - nLoop * min_n;
 	}
-*/
-//	const int ITER_WEIGHT_BASE = 10000*AVE_MOVES / (ITER_SIZE*MINI_BATCH);	// 10000棋譜(平均128手)ごとにweightを作成
-	const int ITER_WEIGHT_BASE = 32000*AVE_MOVES / (ITER_SIZE*MINI_BATCH);	// 32000回             ごとにweightを作成
+
+	const int ITER_WEIGHT_BASE = 32000*AVE_MOVES / (ITER_SIZE*MINI_BATCH);	// 10000棋譜(平均128手)ごとにweightを作成
 	int iter_weight_limit = ITER_WEIGHT_BASE;
 	float reduce = 1.0;	// weightは10000棋譜ごとで学習回数を10000から8000などに減らす。棋譜生成速度が速すぎるため
 	FILE *fp = fopen("reduce.txt","r");
@@ -3566,7 +4134,9 @@ wait_again:
 		fclose(fp);
 	}
 
-	PRT("nLoop=%d,add=%d,add_mul=%.3f,MINI_BATCH=%d,kDataSize=%d,remain=%.3f,iteration=%d(%d/%d)\n",nLoop,add,add_mul,MINI_BATCH,kDataSize,remain,iteration,iter_weight,iter_weight_limit);
+//nLoop /= 2;
+
+	PRT("nLoop=%d,add=%d,add_mul=%.3f,MINI_BATCH=%d,kDataSize=%d,remainder=%d,iteration=%d(%d/%d)\n",nLoop,add,add_mul,MINI_BATCH,kDataSize,remainder,iteration,iter_weight,iter_weight_limit);
 	int loop;
 	for (loop=0;loop<nLoop;loop++) {
 		static array<float, kDataSize * ONE_SIZE> input_data;	// 大きいのでstaticで
@@ -3604,7 +4174,7 @@ wait_again:
 //		solver->Snapshot();	// prototxt の設定で保存される
 		iteration++;
 		iter_weight++;
-		
+
 		if ( fReplayLearning==0 && iter_weight >= iter_weight_limit ) {
 			iter_weight = 0;
 			solver->Snapshot();

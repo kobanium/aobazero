@@ -2,6 +2,12 @@
 // This source code is in the public domain.
 /* yss.h  classの定義 */
 
+
+
+#define F2187
+
+
+
 #define SMP	// 並列探索する場合には定義する
 
 #ifdef SMP
@@ -211,6 +217,8 @@ public:
 
 	void allkaku(void);	// 全部利きを書く
 	void allkesu(void);
+	void kiki_write(int z);
+	void kiki_delete(int z);
 
 	// yss_ki2.cpp
 	void init(void);	// kn[]を初期化して再設定。hash_code と tume_hyouka を再設定
@@ -376,6 +384,7 @@ public:
 	void clear_mo();
 	void clear_init_ban();
 	void hirate_ban_init(int n);/*** 盤面を初期状態に戻す（駒落ち付き） ***/
+	int get_handicap_from_board();
 	void ban_saikousei(void);	// 現在の持ち駒、盤面の状態(ban_init)を元に盤面状態を再構成する。
 	int is_hirate_ban();	// 平手の盤面か判定する
 	void hanten_with_hash_kifu();
@@ -402,11 +411,11 @@ public:
 	}
 
 	// yss_bwh1.cpp
-	void trans_4_to_2_KDB(int b0,int b1, int num, int *bz,int *az, int *tk, int *nf);	// 棋泉形式の2バイトを4バイトに変換。
+	void trans_4_to_2_KDB(int b0,int b1, bool bGoteTurn, int *bz,int *az, int *tk, int *nf);	// 棋泉形式の2バイトを4バイトに変換。
 
 	// yss_dcnn.cpp
 	void make_policy_leveldb();
-	void set_dcnn_channels(Color sideToMove, const int ply, float *p_data, int stock_num, int net_type);
+	void set_dcnn_channels(Color sideToMove, const int ply, float *p_data, int stock_num, int nHandicap);
 	void setYssChannels(Color sideToMove, int moves, float *p_data, int net_kind, int input_num);
 	int get_cnn_next_move();
 	HASH_SHOGI* HashShogiReadLock();
@@ -417,8 +426,12 @@ public:
 	int uct_search_start(Color sideToMove);
 	int think_kifuset();
 	void update_zero_kif_db();
-	void copy_restore_dccn_init_board(int fCopy);
+	void copy_restore_dccn_init_board(int handicap, bool fCopy);
+#ifdef F2187
+	void prepare_kif_db(int fPW, int mini_batch, float *data, float *label_policy, float *label_value, float label_policy_visit[][2187]);
+#else
 	void prepare_kif_db(int fPW, int mini_batch, float *data, float *label_policy, float *label_value, float label_policy_visit[][MOVE_C_Y_X_ID_MAX]);
+#endif
 	void init_prepare_kif_db();
 	float get_network_policy_value(Color sideToMove, int ply, HASH_SHOGI *phg);
 	char *prt_pv_from_hash(int ply);

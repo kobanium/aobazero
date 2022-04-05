@@ -37,6 +37,7 @@ void make_move_is_tobi_check_table();
 
 /* YSS_HISI.C */
 void hanten_sasite( int *bz, int *az, int *tk, int *nf );
+void hanten_sasite_sayuu( int *bz, int *az, int *tk, int *nf );
 
 
 

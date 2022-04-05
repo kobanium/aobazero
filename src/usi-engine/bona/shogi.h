@@ -125,7 +125,8 @@ extern unsigned char ailast_one[512];
 //#define BNZ_VER                 "17"	// 20220108 kldgain
 //#define BNZ_VER                 "18"	// 20220110 kldgain 0.0000013, -p 3200 (autousiで指定)
 //#define BNZ_VER                 "27"	// 20220224 Convert from AobaKomaochi v26. Swish, mate3 kyo promote bug fix. balanced_opening, Network V3
-#define BNZ_VER                 "28"	// 20220225 balanced_opening ply<=2 always use value
+//#define BNZ_VER                 "28"	// 20220225 balanced_opening ply<=2 always use value
+#define BNZ_VER                 "29"	// 20220406 policy softmax temperature 1.0 -> 1.8
 #define BNZ_NAME                "AobaZero"
 
 //#define BNZ_VER                 "16"	// 20210528 komaochi, mate3

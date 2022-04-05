@@ -44,7 +44,7 @@ void shogi::check_kn(void)
 			PRT("check_kn(%x) Error !!! tesuu=%d fukasa=%d\n",i,tesuu,fukasa);
 			PRT("ban[%x]=%02x, init_b[%x]=%x\n",z,ban[z],z,init_ban[z]);
 			print_kb();
-			debug();
+			DEBUG_PRT("");
 		}
 	}
 	for (i=1;i<8;i++) {
@@ -52,7 +52,7 @@ void shogi::check_kn(void)
 		if ( mo_c[i]<0 || mo_m[i]<0 || k < 0 || (i==1 && k>18) ||
 		 ( (i==2||i==3||i==4||i==5) && k>4 ) || ( (i==6||i==7) && k>2 ) ) {
 			PRT("mo_ Error !\n");
-			debug();
+			DEBUG_PRT("");
 		}
 	}
 }
@@ -168,7 +168,7 @@ void shogi::hanten_sayuu(void)
 
 static int hirate_ban[BAN_SIZE]= {
  0xff,   0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,   0xff,0,0,0,0,0,
-					 
+
  0xff,   0x82,0x83,0x84,0x85,0x88,0x85,0x84,0x83,0x82,   0xff,0,0,0,0,0,
  0xff,   0x00,0x87,0x00,0x00,0x00,0x00,0x00,0x86,0x00,   0xff,0,0,0,0,0,
  0xff,   0x81,0x81,0x81,0x81,0x81,0x81,0x81,0x81,0x81,   0xff,0,0,0,0,0,
@@ -197,21 +197,50 @@ void shogi::hirate_ban_init(int n)
 			init_ban[z] = hirate_ban[z];
 		}
 	}
-
+/*
 //	PRT("n=%d\n",n);
 	if ( n == 7           )   init_ban[0x99] = 0;						// 右香を消す
 	if ( n == 6           ) { init_ban[0x92] = 0; init_ban[0x98] = 0; }	// 桂馬を消す
-	if ( n >= 5 && n <= 6 ) { init_ban[0x91] = 0; init_ban[0x99] = 0; }	// 香車を消す	
+	if ( n >= 5 && n <= 6 ) { init_ban[0x91] = 0; init_ban[0x99] = 0; }	// 香車を消す
 	if ( n >= 4 && n <= 6 ) { init_ban[0x82] = 0; init_ban[0x88] = 0; }	// 飛角を消す
 	if ( n == 3           )   init_ban[0x88] = 0;						// 飛車を消す
 	if ( n == 2           )   init_ban[0x82] = 0;						// 角　を消す
 	if ( n == 1           )   init_ban[0x91] = 0;						// 左香を消す
+*/
+	if ( n == 6           ) { init_ban[0x12] = 0; init_ban[0x18] = 0; }	// 桂馬を消す
+	if ( n >= 5 && n <= 6 ) { init_ban[0x11] = 0; init_ban[0x19] = 0; }	// 香車を消す
+	if ( n >= 4 && n <= 6 ) { init_ban[0x22] = 0; init_ban[0x28] = 0; }	// 飛角を消す
+	if ( n == 3           )   init_ban[0x22] = 0;						// 飛車を消す
+	if ( n == 2           )   init_ban[0x28] = 0;						// 角　を消す
+	if ( n == 1           )   init_ban[0x19] = 0;						// 左香を消す
 
 	init();			/** kn[] ni kakikomu **/
 	allkaku();
 	tesuu = all_tesuu = 0;
 }
 
+int shogi::get_handicap_from_board()
+{
+	int m[256];
+	int sum = 0, mo_sum = 0;
+	for (int i=1;i<8;i++) {
+		mo_sum += mo_m[i] + mo_c[i];
+	}
+	if ( mo_sum ) return 0;
+	int x,y;
+	for (y=1;y<10;y++) for (x=1;x<10;x++) {
+		int z = y*16+x;
+		if ( init_ban[z] == hirate_ban[z] ) continue;
+		m[sum++] = z;
+	}
+	if ( sum==1 && m[0]==0x19 ) return 1;	// ky
+	if ( sum==1 && m[0]==0x28 ) return 2;	// ka
+	if ( sum==1 && m[0]==0x22 ) return 3;	// hi
+	if ( sum==2 && m[0]==0x22 && m[1]==0x28 ) return 4;	// 2mai
+	if ( sum==4 && m[0]==0x11 && m[1]==0x19 && m[2]==0x22 && m[3]==0x28 ) return 5;	// 4mai
+	if ( sum==6 && m[0]==0x11 && m[1]==0x12 && m[2]==0x18 && m[3]==0x19 && m[4]==0x22 && m[5]==0x28 ) return 6;	// 6mai
+	return 0;
+}
 
 // 現在の持ち駒、盤面の状態(ban_init)を元に盤面状態を再構成する。
 void shogi::ban_saikousei()
@@ -266,6 +295,19 @@ void hanten_sasite( int *bz, int *az, int *tk, int *nf )
 	*nf = *nf;
 }
 
+void hanten_sasite_sayuu( int *bz, int *az, int *tk, int *nf )
+{
+	if ( *bz == 0 ) return;
+
+	int y = *bz & 0xf0;
+	int x = *bz & 0x0f;
+	if ( *bz != 0xff ) *bz = y | (10 - x);
+
+	y = *az & 0xf0;
+	x = *az & 0x0f;
+	*az = y | (10 - x);
+}
+
 int get_localtime(int *year, int *month, int *day, int *week, int *hour, int *minute, int *second)
 {
 	time_t timer = time(NULL);				/* 時刻の取得 */
@@ -288,13 +330,13 @@ int get_localtime(int *year, int *month, int *day, int *week, int *hour, int *mi
 int get_clock()
 {
 #if defined(_MSC_VER)
-	if ( CLOCKS_PER_SEC_MS != CLOCKS_PER_SEC ) { PRT("CLOCKS_PER_SEC=%d Err. not Windows OS?\n"); debug(); }
+	if ( CLOCKS_PER_SEC_MS != CLOCKS_PER_SEC ) { PRT("CLOCKS_PER_SEC=%d Err. not Windows OS?\n"); DEBUG_PRT(""); }
 	return clock();
 //	return GetTickCount();
 #else
 	struct timeval  val;
 	struct timezone zone;
-	if ( gettimeofday( &val, &zone ) == -1 ) { PRT("time err\n"); debug(); }
+	if ( gettimeofday( &val, &zone ) == -1 ) { PRT("time err\n"); DEBUG_PRT(""); }
 //	return tv.tv_sec + (double)tv.tv_usec*1e-6;
 	return val.tv_sec*1000 + (val.tv_usec / 1000);
 #endif
@@ -307,7 +349,7 @@ double get_spend_time(int ct1)
 
 
 // 棋泉形式の2バイトを4バイトに変換。numは現在の手数。num=0から始まる。
-void shogi::trans_4_to_2_KDB(int b0,int b1, int num, int *bz,int *az, int *tk, int *nf)
+void shogi::trans_4_to_2_KDB(int b0,int b1, bool bGoteTurn, int *bz,int *az, int *tk, int *nf)
 {
 	int k;
 //	b0 = p->kifu[i][0];			  // b0 = 11-99, 0x81-0x87
@@ -316,7 +358,7 @@ void shogi::trans_4_to_2_KDB(int b0,int b1, int num, int *bz,int *az, int *tk, i
 		
 	if ( b0 > 0x80 ) {	// 駒打ち
 		*tk = b0 - 0x80;
-		if ( (num & 1) ) *tk |= 0x80;	// COM
+		if ( bGoteTurn ) *tk |= 0x80;	// COM
 		*bz = 0xff;
 	} else {
 		k = b0 / 10;
@@ -378,29 +420,29 @@ void InitLockYSS()
 void shogi::hyouji()
 {
    int x,y,i;
-   PRT("   1 2 3 4 5 6 7 8 9\n");
+   PRT("    1 2 3 4 5 6 7 8 9  \n");
    for (y=0;y<9;y++) {
-	  PRT("%d|",y+1);
+	  PRT("%d│",y+1);
 	  for (x=0;x<9;x++) {
 		 int n = ban[ (y+1)*16+x+1 ];
 		 int k = kn[n][0];
 		 if (k>0x80) k-=0x70;
 //		 PRT("%s",koma[i]);
 		 PRT("%s",koma_kanji[k]);
-	  }  PRT("| ");
+	  }  PRT("│");
 	  if (y==0) {
-		 PRT("  GOTE :");
+		 PRT("   COM :");
 //		 for (i=1;i<8;i++) PRT("%s %x:",koma[i+16],mo_c[i]);
 		 for (i=1;i<8;i++) PRT("%s %x:",koma_kanji[i+16],mo_c[i]);
 	  }
 	  if (y==8) {
-		 PRT(" SENTE :");
+		 PRT("   MAN :");
 //		 for (i=1;i<8;i++) PRT("%s %x:",koma[i],mo_m[i]);
 		 for (i=1;i<8;i++) PRT("%s %x:",koma_kanji[i],mo_m[i]);
 	  }
 	  PRT("\n");
    }
-   PRT("- - - - - - - - - - - - - - - - - -\n");
+   PRT("- - - - - - - - - - - - - - - - - - - - \n");
 }
 
 void shogi::print_kakinoki_banmen(int (*func_prt)(const char *, ... ), char *sName0,char *sName1)
@@ -1313,7 +1355,7 @@ const char *koma_kanji_str(int n)
 	  "  ","歩",  "香",  "桂",  "銀","金","角","飛",
 	  "玉","と","成香","成桂","成銀","  ","馬","龍"
 	};
-	if ( n < 0 || n >= 16 ) debug();
+	if ( n < 0 || n >= 16 ) DEBUG_PRT("");
 	return koma_kanji2[n];
 }
 
@@ -1372,7 +1414,7 @@ void shogi::change_small(int bz,int az,int tk,int nf,char retp[])
 		sprintf(retp,"PASS    ");
 		return;	
 	}
-	if ( bz < 0 || bz > 0xff || az <= 0 || az > 0x99 || nf < 0 || nf > 0x08 || tk < 0 || tk > 0x8f ) { PRT("Err bz,az,tk,nf=%02x,%02x,%02x,%02x\n",bz,az,tk,nf); debug(); }
+	if ( bz < 0 || bz > 0xff || az <= 0 || az > 0x99 || nf < 0 || nf > 0x08 || tk < 0 || tk > 0x8f ) { DEBUG_PRT("Err bz,az,tk,nf=%02x,%02x,%02x,%02x\n",bz,az,tk,nf); }
 
 	ay = az/16;
 	ax = 10-(az-ay*16);
@@ -1413,7 +1455,7 @@ void shogi::change_sg(int bz,int az,int tk,int nf,int depth, char retp[])
 		strcat(retp,"PASS");
 		return;	
 	}
-	if ( bz < 0 || bz > 0xff || az <= 0 || az > 0x99 || nf < 0 || nf > 0x08 || tk < 0 || tk > 0x8f ) { PRT("Err sg bz,az,tk,nf=%02x,%02x,%02x,%02x\n",bz,az,tk,nf); debug(); }
+	if ( bz < 0 || bz > 0xff || az <= 0 || az > 0x99 || nf < 0 || nf > 0x08 || tk < 0 || tk > 0x8f ) { DEBUG_PRT("Err sg bz,az,tk,nf=%02x,%02x,%02x,%02x\n",bz,az,tk,nf); }
 
 	ay = az/16;
 	ax = 10-(az-ay*16);

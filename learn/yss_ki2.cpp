@@ -2534,3 +2534,6 @@ void shogi::allkesu()
 		if ( ban[z] != 0 ) kikid(z);
 	}
 }
+
+void shogi::kiki_write(int z)  { kikiw(z); }
+void shogi::kiki_delete(int z) { kikid(z); }

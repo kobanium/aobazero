@@ -723,12 +723,11 @@ void clear_opening_hash()
 	static int fDone = 0;
 	int memGB = GetSystemMemoryMB() / 1024;
 	if ( fDone == 0 ) {
-		if ( memGB >= 7 ) {
-			Opening_Hash_Size = 1024*128;	// 平均31手で1個が(5*4*31)+(10*4)=660byte。1024*128=131072 で83MB, 65個並列だと5.2GB。colabは12GB。
-			Opening_Hash_Stop_Ply = 8;		// 8手以上の出現局面は登録しない。
-		} else {
-			Opening_Hash_Size = 1024*16;
-			Opening_Hash_Stop_Ply = 3;		// 3手以上の出現局面は登録しない。3手以上では2回出現で徐々に登録される
+		Opening_Hash_Size = 1024*16;
+		Opening_Hash_Stop_Ply = 3;		// 3手以上の出現局面は登録しない。3手以上では2回出現で徐々に登録される
+		if ( memGB >= 7 ) {				// そもそも35000棋譜で1重み終了。140並列だと200棋譜程度しか1プロセスで作らない。
+//			Opening_Hash_Size = 1024*128;	// 平均31手で1個が(5*4*31)+(10*4)=660byte。1024*128=131072 で83MB, 65個並列だと5.2GB。colabは12GB。
+//			Opening_Hash_Stop_Ply = 8;		// 8手以上の出現局面は登録しない。
 		}
 		Opening_Hash_Mask = Opening_Hash_Size - 1;
 		opening_hash.resize(Opening_Hash_Size);
@@ -1442,6 +1441,25 @@ if (0) {
 //		{ PRT("ply=%2d,sideToMove=%d(white=%d),move_num=%3d,v=%.5f\n",ply,sideToMove,white,move_num,v); print_board(ptree); }
 	}
 	if ( sideToMove==white ) v = -v;
+
+
+	if ( 1 ) {		// softmax
+		const float temperature = 1.8f;
+		double inv_temperature = 1.0 / temperature;
+		double wheel[MAX_LEGAL_MOVES];
+		double w_sum = 0.0;
+		for (int i = 0; i < phg->child_num; i++) {
+			double d = phg->child[i].bias;
+			wheel[i] = pow(d, inv_temperature);
+			w_sum += wheel[i];
+		}
+		double factor = 1.0 / w_sum;
+		for (i = 0; i < phg->child_num; i++) {
+//			PRT("%2d:bias=%10f -> %10f, ply=%d\n",i,phg->child[i].bias,factor * wheel[i],ply);
+			phg->child[i].bias = factor * wheel[i];
+		}
+	}
+
 
 	phg->hashcode64     = ptree->sequence_hash;
 	phg->hash64pos      = get_marge_hash(ptree, sideToMove);
@@ -2476,7 +2494,7 @@ int balanced_opening(tree_t * restrict ptree, int sideToMove, int ply, int fPoli
 
 	int fHashFull = 0;
 	int stop_ply = nVisitCount+1;
-	const int VALUE_N = 2;	// 0ですべてノードでValueを調べる。1で1回以上なら調べる
+	const int VALUE_N = 1;	// 0ですべてノードでValueを調べる。1で1回以上なら調べる
 	if ( (phg->games_sum >= VALUE_N || ply <= 2) && phg->child_num > 0 && phg->child[0].value == 0 && ply != stop_ply ) {
 		int i;
 		for (i = 0; i < phg->child_num; i++) {
