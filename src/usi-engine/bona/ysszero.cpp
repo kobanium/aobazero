@@ -2526,9 +2526,20 @@ int balanced_opening(tree_t * restrict ptree, int sideToMove, int ply, int fPoli
 	float v = phg->net_value;
 	if ( (ply+1)&1 ) v = -v;
 	v = (1.0+v) / 2.0;
-	const float vd = 0.20; // 0.20で17%が失敗。0.15で20%が失敗。0.55 だと 0.35 < x < 0.75,  投了が0.23 なのでほぼぎりぎり
+//	const float vd = 0.20; // 0.20で17%が失敗。0.15で20%が失敗。0.55 だと 0.35 < x < 0.75,  投了が0.23 なのでほぼぎりぎり
+
+	double b = 0;
+	double c = 150;	// 上下にこのレート差の勝率まで。wr=0.5 で 0.3 < v < 0.5, wr=0.7 で 0.49 < v < 0.84
+	double wr = average_winrate;
+	if ( wr < 0.01 ) wr = 0.01;
+	if ( wr > 0.99 ) wr = 0.99;
+	double x = -400.0*log(1.0/wr - 1.0) / log(10.0);
+	double r0 = 1.0 / (1.0 + pow(10.0,(b+c-x)/400.0));
+	double r1 = 1.0 / (1.0 + pow(10.0,(b-c-x)/400.0));
+	// r0 < v < r1 ならOK
+//	PRT("v=%f, %f < %f < %f\n",v, r0,wr,r1);
 	int ret = 0;
-	if ( ply <= stop_ply && (v > average_winrate + vd || v < average_winrate - vd) ) ret = 1;
+	if ( ply <= stop_ply && (v > r1 || v < r0) ) ret = 1;
 
 	if ( fPolicyBest == 0 && ret ) {
 		*pUndo = 1;
