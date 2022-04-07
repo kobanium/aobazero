@@ -474,8 +474,8 @@ public:
 	  || value == HUGE_VALF)
 	die(ERR_INT("cannot interpret value %s (engine %s)",
 		    str_value+2, get_fp()));
-//    if (value < th_resign) flag_resign = true;
-      if (value < th_resign && _nmove > 30) flag_resign = true;
+    if (value < th_resign) flag_resign = true;
+//    if (value < th_resign && _nmove > 30) flag_resign = true;
 
       const char *str_count = OSI::strtok(nullptr, " ,", &saveptr);
       if (!str_count) die(ERR_INT("cannot read count (engine %s)", get_fp()));
