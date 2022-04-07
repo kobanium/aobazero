@@ -723,12 +723,11 @@ void clear_opening_hash()
 	static int fDone = 0;
 	int memGB = GetSystemMemoryMB() / 1024;
 	if ( fDone == 0 ) {
-		if ( memGB >= 7 ) {
-			Opening_Hash_Size = 1024*128;	// 平均31手で1個が(5*4*31)+(10*4)=660byte。1024*128=131072 で83MB, 65個並列だと5.2GB。colabは12GB。
-			Opening_Hash_Stop_Ply = 8;		// 8手以上の出現局面は登録しない。
-		} else {
-			Opening_Hash_Size = 1024*16;
-			Opening_Hash_Stop_Ply = 3;		// 3手以上の出現局面は登録しない。3手以上では2回出現で徐々に登録される
+		Opening_Hash_Size = 1024*16;
+		Opening_Hash_Stop_Ply = 3;		// 3手以上の出現局面は登録しない。3手以上では2回出現で徐々に登録される
+		if ( memGB >= 7 ) {				// そもそも35000棋譜で1重み終了。140並列だと200棋譜程度しか1プロセスで作らない。
+//			Opening_Hash_Size = 1024*128;	// 平均31手で1個が(5*4*31)+(10*4)=660byte。1024*128=131072 で83MB, 65個並列だと5.2GB。colabは12GB。
+//			Opening_Hash_Stop_Ply = 8;		// 8手以上の出現局面は登録しない。
 		}
 		Opening_Hash_Mask = Opening_Hash_Size - 1;
 		opening_hash.resize(Opening_Hash_Size);
@@ -1442,6 +1441,24 @@ if (0) {
 //		{ PRT("ply=%2d,sideToMove=%d(white=%d),move_num=%3d,v=%.5f\n",ply,sideToMove,white,move_num,v); print_board(ptree); }
 	}
 	if ( sideToMove==white ) v = -v;
+
+
+	if ( fOpeningHash == false ) {	// policy softmax
+		const float temperature = 1.8f;	// 1.0 より 1.4 - 1.8 の方が100-800playoutでは+50 ELO強い
+		double inv_temperature = 1.0 / temperature;
+		double wheel[MAX_LEGAL_MOVES];
+		double w_sum = 0.0;
+		for (int i = 0; i < phg->child_num; i++) {
+			double d = phg->child[i].bias;
+			wheel[i] = pow(d, inv_temperature);
+			w_sum += wheel[i];
+		}
+		double factor = 1.0 / w_sum;
+		for (i = 0; i < phg->child_num; i++) {
+//			PRT("%2d:bias=%10f -> %10f, ply=%d\n",i,phg->child[i].bias,factor * wheel[i],ply);
+			phg->child[i].bias = factor * wheel[i];
+		}
+	}
 
 	phg->hashcode64     = ptree->sequence_hash;
 	phg->hash64pos      = get_marge_hash(ptree, sideToMove);
@@ -2178,7 +2195,7 @@ void usi_newgame(tree_t * restrict ptree)
 		if ( (rand_m521() % 10) == 0 ) {	// 10%で投了を禁止。間違った投了が5％以下か確認するため
 			resign_winrate = 0;
 		}
-		if ( average_winrate ) {
+		if ( 0 && average_winrate ) {
 			char str[256] = "startpos moves ";	// "position startpos moves "
 		 	char *lasts = str;
 			usi_posi( ptree, &lasts );
@@ -2476,7 +2493,7 @@ int balanced_opening(tree_t * restrict ptree, int sideToMove, int ply, int fPoli
 
 	int fHashFull = 0;
 	int stop_ply = nVisitCount+1;
-	const int VALUE_N = 2;	// 0ですべてノードでValueを調べる。1で1回以上なら調べる
+	const int VALUE_N = 1;	// 0ですべてノードでValueを調べる。1で1回以上なら調べる
 	if ( (phg->games_sum >= VALUE_N || ply <= 2) && phg->child_num > 0 && phg->child[0].value == 0 && ply != stop_ply ) {
 		int i;
 		for (i = 0; i < phg->child_num; i++) {
@@ -2505,14 +2522,28 @@ int balanced_opening(tree_t * restrict ptree, int sideToMove, int ply, int fPoli
 
 	int fUseValue = (phg->child_num > 0 && phg->child[0].value != 0 && fHashFull == 0);	// valueの差をPolicyの代わりに
 
+//fUseValue = 0;
+
 	float v = phg->net_value;
 	if ( (ply+1)&1 ) v = -v;
 	v = (1.0+v) / 2.0;
-	const float vd = 0.20; // 0.20で17%が失敗。0.15で20%が失敗。0.55 だと 0.35 < x < 0.75,  投了が0.23 なのでほぼぎりぎり
-	int ret = 0;
-	if ( ply <= stop_ply && (v > average_winrate + vd || v < average_winrate - vd) ) ret = 1;
+//	const float vd = 0.20; // 0.20で17%が失敗。0.15で20%が失敗。0.55 だと 0.35 < x < 0.75,  投了が0.23 なのでほぼぎりぎり
 
-	if ( fPolicyBest == 0 && ret ) {
+	double b = 0;
+	double c = 150;	// 上下にこのレート差の勝率まで。wr=0.5 で 0.3 < v < 0.5, wr=0.7 で 0.49 < v < 0.84
+	double wr = average_winrate;
+	if ( wr < 0.01 ) wr = 0.01;
+	if ( wr > 0.99 ) wr = 0.99;
+	double x = -400.0*log(1.0/wr - 1.0) / log(10.0);
+	double r0 = 1.0 / (1.0 + pow(10.0,(b+c-x)/400.0));
+	double r1 = 1.0 / (1.0 + pow(10.0,(b-c-x)/400.0));
+	// r0 < v < r1 ならOK
+//	PRT("v=%f, %f < %f < %f\n",v, r0,wr,r1);
+	int ret = 0;
+	if ( ply <= stop_ply && (v > r1 || v < r0) ) ret = 1;
+
+	// Undoして勝率調整すると、0手目の全部の局面が同じ勝率、で学習されてしまう。
+	if ( 0 && fPolicyBest == 0 && ret ) {
 		*pUndo = 1;
 		return ret;
 	}
@@ -2520,6 +2551,7 @@ int balanced_opening(tree_t * restrict ptree, int sideToMove, int ply, int fPoli
 	if ( ply == stop_ply ) {	// 31で30手
 		static int all,n[10];
 		static int v_dist[101];
+		static int furi_file[2][9] = {0}, furi[2] = {0};
 		all++;
 //		if ( BOARD[33]==-1 ) n[0]++;	// 34歩
 //		if ( BOARD[47]==+1 ) n[0]++;	// 76歩
@@ -2528,8 +2560,12 @@ int balanced_opening(tree_t * restrict ptree, int sideToMove, int ply, int fPoli
 		if ( BOARD[43]==+1 && BOARD[24]==-6 ) n[0]++;	// ▲25歩、△33角
 //		if ( BOARD[24]==-6 ) n[0]++;	// ▲25歩、△33角
 		v_dist[(int)(100.0*v) % 101]++;	// 0.90 - 0.10
+		for (int i=0;i<81;i++) {
+			if ( BOARD[i] == +7 ) { furi_file[0][i%9]++; furi[0]++; }
+			if ( BOARD[i] == -7 ) { furi_file[1][i%9]++; furi[1]++; }
+		}
 
-/*
+
 		const int SAME_MAX = 100000;
 		static uint64 same_hash[SAME_MAX];
 		static int same_num = 0;
@@ -2544,8 +2580,12 @@ int balanced_opening(tree_t * restrict ptree, int sideToMove, int ply, int fPoli
 		}
 		PRT("v=%.3f(%d),%d/%d=%f,unique=%d(%.3f)\n",v,ret,n[0],all,(float)n[0]/all,same_num,(float)same_num/all);
 //		for (j=0;j<101;j++) PRT("%d(%.3f),",v_dist[j],(float)v_dist[j]/all); PRT("\n");
-*/
-		PRT("v=%.3f(%d),%d/%d\n",v,ret,n[0],all);
+
+//		PRT("v=%.3f(%d),%d/%d\n",v,ret,n[0],all);
+		for (int j=0;j<2;j++) {
+			for (int i=0;i<9;i++) PRT("%6.3f,",(float)furi_file[j][i]/(furi[j]+(furi[j]==0)));
+			PRT("\n");
+		}
 		print_board(ptree);
 
 		return ret;
@@ -2570,7 +2610,7 @@ int balanced_opening(tree_t * restrict ptree, int sideToMove, int ply, int fPoli
 		hs.child[i].bias = pc->bias;
 		hs.child[i].move = pc->move;
 		float d = max_v - pc->value;
-//		PRT("%s:diff=%9f,%f,%f\n",str_CSA_move(pc->move, true),d,1.0/exp(d*70.0),1.0/exp(d*90.0));
+//		PRT("%s:bias=%9f,value=%9f,diff=%9f,%f,%f\n",str_CSA_move(pc->move),pc->bias,pc->value,d,1.0/exp(d*70.0),1.0/exp(d*90.0));
 		if ( fUseValue ) hs.child[i].bias = 1.0/exp(d*70.0);
 		sum += hs.child[i].bias;
 	}
@@ -2578,10 +2618,11 @@ int balanced_opening(tree_t * restrict ptree, int sideToMove, int ply, int fPoli
 	for (i = 0; i < phg->child_num; i++) {
 //		CHILD *pc = &phg->child[i];
 		hs.child[i].bias /= sum;
-//		PRT("%s:->%9f\n",str_CSA_move(pc->move, true),hs.child[i].bias);
+//		PRT("%s:->%9f\n",str_CSA_move(pc->move),hs.child[i].bias);
 	}
 
-	const float epsilon = 0.25f;	// epsilon = 0.25
+//	const float epsilon = 0.25f;	// epsilon = 0.25
+	const float epsilon = 0.05f;	// epsilon = 0.25 が通常だが探索なしはノイズの影響が大きいので減らす
 	const float alpha   = 0.15f;	// alpha ... Chess = 0.3, Shogi = 0.15, Go = 0.03
 	if ( fAddNoise ) add_dirichlet_noise(epsilon, alpha, &hs);
 
@@ -2609,8 +2650,8 @@ int balanced_opening(tree_t * restrict ptree, int sideToMove, int ply, int fPoli
 	if ( pc==NULL || i==phg->child_num ) DEBUG_PRT("Err.\n");
 
 undo:
-	char sg[2] = { '+','-' };
-	PRT("%2d:fUseValue=%d,%2d:net_v=%7.4f(%6.3f)ret=%d:%c%s,bias=%6.3f,r=%.3f/%.3f\n",ply,fUseValue,i,phg->net_value,v,ret,sg[(ptree->nrep+ply+1) & 1],str_CSA_move(pc->move),pc->bias,indicator,w_sum);
+//	char sg[2] = { '+','-' };
+//	PRT("%2d:fUseValue=%d,%2d:net_v=%7.4f(%6.3f)ret=%d:%c%s,bias=%6.3f,r=%.3f/%.3f\n",ply,fUseValue,i,phg->net_value,v,ret,sg[(ptree->nrep+ply+1) & 1],str_CSA_move(pc->move),pc->bias,indicator,w_sum);
 	MakeMove(   sideToMove, pc->move, ply );
 	MOVE_CURR = pc->move;
 	balanced_opening_move[ply] = pc->move;
@@ -2646,7 +2687,7 @@ void make_balanced_opening(tree_t * restrict ptree, int sideToMove, int ply) {
 	for (i=0;i<30;i++) PRT("%d,",n_vCount[i]);
 	PRT("\n");
 	count_OpeningHash();
-	print_board(ptree);
+//	print_board(ptree);
 	DEBUG_PRT("make_balanced_opening fail. average_winrate=%f\n",average_winrate);
 }
 

@@ -172,7 +172,7 @@ int GetSystemMemoryMB()
 
 const char *get_kdbDirSL() { return ""; }	// NULLではない。長さが0の文字列の先頭アドレスを返す
 
-int get_learning_dir_number() { PRT("must be programmed!\n"); debug(); return 0; }
+int get_learning_dir_number() { DEBUG_PRT("must be programmed!\n"); return 0; }
 
 int change_dir(const char* /* sDir */) { return 0; }
 void return_dir() {}
@@ -207,7 +207,6 @@ int open_one_file(char *filename)
 	}
 
 	PS->SetSennititeKif();	// 千日手も棋譜情報に登録する
-
 
 	PRT_ON();
 	return 1;
@@ -290,7 +289,7 @@ int get_next_file_from_dirs(char *filename, const char *ext, const char *dir_lis
 				return 0;
 			}
 			if ( change_dir(p_current_dir) == 0 ) {
-				PRT("fail change dir=%s\n",p_current_dir); debug();
+				DEBUG_PRT("fail change dir=%s\n",p_current_dir);
 			}
 		}
 
@@ -386,7 +385,7 @@ int PRT(const char *fmt, ...)	// printf() の書式文字列は const
 #else
 	if ( len < 0 || len >= PRT_LEN_MAX ) {
 		PRT_sub("PRT len over!\n");
-		debug();
+		DEBUG_PRT("PRT len over!");
 	}
 	PRT_sub("%s",text);	// PRT(text) だとtext="%CHUDAN"が"HUDAN"になってしまう。
 #endif
@@ -458,7 +457,7 @@ int shogi::kifu_set_move(int bz,int az,int tk,int nf, int t)
 //	char retp[20];
 //	change(bz,az,tk,nf,retp);
 //	PRT("%s, bz,az,tk,nf = %x,%x,%x,%x\n",retp,bz,az,tk,nf);
-	if ( tesuu >= KIFU_MAX-1 ) { PRT("KIFU_MAX Err\n"); debug(); }
+	if ( tesuu >= KIFU_MAX-1 ) { DEBUG_PRT("KIFU_MAX Err\n"); }
 	move_hit(bz,az,tk,nf);
 	tesuu++; all_tesuu = tesuu;
 	kifu[tesuu][0] = bz;
@@ -880,7 +879,6 @@ int shogi::getMoveFromCsaStr(int *bz, int *az, int *tk, int *nf, char *str)
 	return 1;
 }
 
-
 // CSA形式の棋譜を読み込む
 int shogi::LoadCSA()
 {
@@ -935,6 +933,11 @@ int shogi::LoadCSA()
 			prt_flag = 0;
 			ban_saikousei();	// 盤面の再構成。
 			check_kn();			// 盤面の状態が正常化チェック
+
+			// 駒落ち判定
+			ZERO_DB *pz = &zdb_one;
+			pz->handicap = get_handicap_from_board();
+			if ( pz->handicap && fGotekara==0 ) DEBUG_PRT("pz->handiacp=%d\n",pz->handicap);
 		}
 
 		// csa形式のコメントを取り込む
@@ -972,7 +975,7 @@ int shogi::LoadCSA()
 					char str[10];
 					int n = 0;
 					for (;;) {
-						if ( n>=10 ) { PRT("Err csa move str >= %d,w=%d,%s\n",n,pz->weight_n,sIndex); debug(); }
+						if ( n>=10 ) { DEBUG_PRT("Err csa move str >= %d,w=%d,%s\n",n,pz->weight_n,sIndex); }
 						c = *p++;
 						str[n++] = c;
 						if ( c==',' || c=='\r' || c =='\n' || c==0 ) break;
@@ -993,7 +996,7 @@ int shogi::LoadCSA()
 						}
 					} else {
 						if ( (count&1)== 0 ) {
-							if ( b0==0 && b1==0 ) debug();
+							if ( b0==0 && b1==0 ) DEBUG_PRT("");
 							int v = atoi(str);
 							if ( v > 0xffff ) v = 0xffff;
 							sum_visit += v;
@@ -1002,9 +1005,10 @@ int shogi::LoadCSA()
 							pz->vv_move_visit[tesuu].push_back(move_visit); 
 							b0 = b1 = 0;
 						} else {
-							if ( getMoveFromCsaStr(&bz, &az, &tk, &nf, str)==0 ) debug();
-							if ( is_pseudo_legalYSS((Move)pack_te(bz,az,tk,nf), (Color)((tesuu&1)==1)) == false ) {
-								PRT("move Err %3d:%s\n",tesuu,str); debug();
+							if ( getMoveFromCsaStr(&bz, &az, &tk, &nf, str)==0 ) DEBUG_PRT("");
+							int c = (tesuu+(pz->handicap!=0))&1;
+							if ( is_pseudo_legalYSS((Move)pack_te(bz,az,tk,nf), (Color)(c==1) ) == false ) {
+								DEBUG_PRT("move Err %3d:%s\n",tesuu,str);
 							}
 							pack_from4_to_2_KDB(&b0,&b1, bz, az, tk, nf);
 						}
@@ -1051,7 +1055,7 @@ P+00KE00KE00FU
 '  後手持駒
 P-00HI
 P-00AL
-*/				
+*/
 /*
 P-21KE22OU33KE23FU
 P+32GI14FU26KE
@@ -1061,6 +1065,15 @@ P-00AL
 +2634KE
 -2232OU
 +0042KI
+*/
+/*
+PI                          平手
+PI11KY                      香落ち
+PI22KA                      角落ち
+PI82HI                      飛車落ち
+PI82HI22KA                  2枚落ち
+PI82HI22KA11KY91KY          4枚落ち
+PI82HI22KA11KY91KY21KE81KE  6枚落ち
 */
 
 			y = lpLine[1];
@@ -1102,6 +1115,17 @@ P-00AL
 					else if ( y == '-' ) mo_c[i]++;	// 後手の持駒
 				}
 			}
+			if ( y == 'I' ) {	// 初期設定配置
+				for (lpCopy=lpLine+2; lpCopy-lpLine<nLen-4; lpCopy+=4) {
+					int xx = *(lpCopy+0) - '0';
+					int yy = *(lpCopy+1) - '0';
+					if ( yy<1 || yy>9 || xx<1 || xx>9 ) { DEBUG_PRT("PI Err\n"); }
+					int i = get_csa_koma(lpCopy+2);
+					if ( i==0 ) { DEBUG_PRT("持駒種別エラー='%c%c'\n",*(lpCopy+2),*(lpCopy+3)); }
+					init_ban[yy*16+(10-xx)] = 0;
+				}
+			}
+
 			y = lpLine[1] - '0';
 			if ( 1<=y && y<=9 ) {	// 1行の駒
 				lpCopy = lpLine+2;
@@ -1143,8 +1167,10 @@ P-00AL
 			pz->moves = tesuu;
 			pz->result = ZD_DRAW;
 			pz->result_type = RT_NONE;
+			int is_gote_turn = (tesuu + (pz->handicap!=0))& 1;
+
 			if ( strstr(lpLine,"TORYO") ) {
-				if ( tesuu & 1 ) {
+				if ( is_gote_turn ) {
 					pz->result = ZD_S_WIN;
 				} else {
 					pz->result = ZD_G_WIN;
@@ -1152,7 +1178,7 @@ P-00AL
 				pz->result_type = RT_TORYO;
 			}
 			if ( strstr(lpLine,"KACHI") ) {
-				if ( tesuu & 1 ) {
+				if ( is_gote_turn ) {
 					pz->result = ZD_G_WIN;
 				} else {
 					pz->result = ZD_S_WIN;
@@ -1180,7 +1206,7 @@ P-00AL
 			for (i=0;i<(int)pz->vv_move_visit.size();i++) {
 				sum += pz->vv_move_visit[i].size();
 			}
-			PRT("moves=%d,result=%d, mv_sum=%d,%.1f\n",pz->moves,pz->result,sum, (double)sum/(tesuu+0.00001f));
+			PRT("handicap=%d,moves=%d,result=%d, mv_sum=%d,%.1f\n",pz->handicap,pz->moves,pz->result,sum, (double)sum/(tesuu+0.00001f));
 			if ( pz->result_type == RT_NONE ) DEBUG_PRT("");
 #endif
 			break;		// 読み込み終了
@@ -1264,7 +1290,7 @@ void shogi::LoadShotest(void)
 				char *pdest;
 
 				pdest = strchr( drop_shotest, c );
-				if ( pdest == NULL ) { PRT("持ち駒発見ミス shotest\n"); debug(); }
+				if ( pdest == NULL ) { DEBUG_PRT("持ち駒発見ミス shotest\n"); }
 				i = pdest - drop_shotest + 1;
 			}
 			tk = i + (0x80)*(tesuu&1);
@@ -1361,7 +1387,7 @@ void shogi::LoadTextBan()
 			for (i=1;i<8;i++) {
 				sprintf(find,"%s",koma_kanji[i+16]);
 				char *q = strstr(p+2*9,find);
-				if ( q==NULL) { PRT("not found 駒\n"); debug(); }
+				if ( q==NULL) { DEBUG_PRT("not found 駒\n"); }
 				mo_c[i] = *(q+3) - '0';
 			}
 		}
@@ -1391,7 +1417,7 @@ void shogi::LoadTextBan()
 
 const char *sSengoSankaku[3] = {"▲","△","▽"};
 
-int shogi::IsSenteTurn() { return ( ((fGotekara+tesuu)&1) == 0 ); }	// 駒落ちで正しくない
+int shogi::IsSenteTurn() { DEBUG_PRT(""); return ( ((fGotekara+tesuu)&1) == 0 ); }	// 駒落ちで正しくない
 int shogi::GetSennititeMax() { return nSennititeMax; }
 
 // 柿木形式の棋譜を読み込む

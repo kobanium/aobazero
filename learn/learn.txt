@@ -9,28 +9,34 @@ xzと開発環境をinstallします。
 $ sudo apt install xz-utils liblzma-dev
 
 archive/ の下に
-  arch000000000000.csa.xz から
-  arch000000200000.csa.xz
+  arch000051420000.csa.xz から
+  arch000052500000.csa.xz
 ぐらいまでを置きます。
-https://drive.google.com/drive/folders/1dbE5xWGQLsduR00oxEGPpZQJtQr_EQ75
+https://drive.google.com/drive/folders/1fZJn288VhU6kE7crX7H1Ml4GcRZH0uHK
 
-$ cd archive
-$ xz -d -k *.xz
+ディレクトリに名に合わせて yss_dcnn.cpp の 2778行目あたりの下の2つも変更します。
+char dir_arch[] = "/home/yss/tcp_backup/archive/";
+char dir_pool[] = "/home/yss/tcp_backup/pool";
 
-ですべて展開します。
+yss_dcnn.cpp で
+fReplayLearning = 1; にします。
+乱数で初期化された重みから始める場合は下の行をコメントアウトします。
+net->CopyTrainedLayersFrom(sNet);	// caffemodelを読み込んで学習を再開する場合
+5142万棋譜から学習するには下のようにします。
+int zdb_count_start = 51420000;
 
 $ make
 $ learn
 
 で実行します。
-12万棋譜を読み込んだ後、2000棋譜追加ごとに4000回学習、を繰り返します。
-過去10万棋譜からランダムに64局面を取り出して64 minibatchで学習します。
+100万棋譜を読み込んだ後、2000棋譜追加ごとに4000回学習、を繰り返します。
+過去100万棋譜からランダムに64局面を取り出して64 minibatchで学習します。
+
+
 
 
 実際の強化学習を行うには
-yss_dcnn.cpp の
 fReplayLearning = 0;
-ZERO_DB_SIZE = 500000;
 にして、pool/ の下に最新の棋譜が
 no000000000000.csa.xz
 no000000000001.csa.xz
@@ -46,5 +52,5 @@ no000000009999.csa.xz
 archive/arch000000000000.csa.xz
 が作られるようにします。詳しくはサーバ側をご覧ください。
 
-過去50万棋譜まで見るにはメモリが最低でも19GB以上必要です。
+過去100万棋譜まで見るにはメモリが最低でも12GB以上必要です。
 

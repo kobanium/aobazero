@@ -253,7 +253,8 @@ public:
     argv[argc++] = opt_p_value;
 
     char opt_kld[]       = "-kldgain";
-    char opt_kld_value[] = "0.0000013";
+//  char opt_kld_value[] = "0.0000013";
+    char opt_kld_value[] = "0.000006";
     argv[argc++] = opt_kld;
     argv[argc++] = opt_kld_value;
 #endif
@@ -473,8 +474,8 @@ public:
 	  || value == HUGE_VALF)
 	die(ERR_INT("cannot interpret value %s (engine %s)",
 		    str_value+2, get_fp()));
-//    if (value < th_resign) flag_resign = true;
-      if (value < th_resign && _nmove > 30) flag_resign = true;
+    if (value < th_resign) flag_resign = true;
+//    if (value < th_resign && _nmove > 30) flag_resign = true;
 
       const char *str_count = OSI::strtok(nullptr, " ,", &saveptr);
       if (!str_count) die(ERR_INT("cannot read count (engine %s)", get_fp()));

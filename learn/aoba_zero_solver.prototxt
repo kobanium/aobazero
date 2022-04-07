@@ -1,8 +1,9 @@
 #net: "aoba_zero.prototxt"
 #net: "aoba_zero_256x40b.prototxt"
 #net: "aoba_zero_256x20b.prototxt"
-net: "aoba_zero_256x20b_mb128.prototxt"
+#net: "aoba_zero_256x20b_mb128.prototxt"
 #net: "aoba_zero_256x40b_mb64.prototxt"
+net: "aoba_256x20b_swish_mb128.prototxt"
 
 # test_iter specifies how many forward passes the test should carry out.
 # In the case of MNIST, we have test batch size 100 and 100 test iterations,
