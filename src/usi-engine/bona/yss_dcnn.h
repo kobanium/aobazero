@@ -24,6 +24,7 @@ typedef struct child {
 	float value;		// win rate (win=+1, loss=0)
 	float bias;			// policy
 	int   exact_value;	// WIN or LOSS or DRAW
+	int   mate_bit;		// 3è‹l‚âdfpn‚Ì’·è”‚Ì‹l‚ğs‚Á‚½‚©Bbit’PˆÊ‚Å
 #ifdef USE_LCB
 	float squared_eval_diff;	// Variable used for calculating variance of evaluations. for LCB
 	int acc_virtual_loss;		// accumulate virtual loss. for LCB
@@ -40,6 +41,8 @@ typedef struct hash_shogi {
 	uint64 hashcode64;			// sequence hash
 	uint64 hash64pos;			// position hash, we check both hash key.
 	int deleted;	//
+	int mate_bit;
+	float win_sum;
 	int games_sum;	// sum of children selected
 	int col;		// color 1 or 2
 	int age;		//
@@ -56,6 +59,15 @@ typedef struct hash_shogi {
 enum {
   EX_NONE, EX_WIN, EX_LOSS, EX_DRAW		// exact value.
 };
+
+const int MATE_CLEAR  = 0;	// bit‚Å”»’è
+const int MATE_3      = 1;
+const int MATE_DFPN_0 = 2;
+const int MATE_DFPN_1 = 4;
+const int MATE_DFPN_2 = 8;
+const int MATE_DFPN_3 = 16;
+const int MATE_DFPN_4 = 32;
+
 
 extern int fAddNoise;
 extern int fVisitCount;

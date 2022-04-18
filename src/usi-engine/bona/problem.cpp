@@ -136,8 +136,8 @@ solve_mate_problems( tree_t * restrict ptree, unsigned int nposition )
 
       Out( "Problem #%d %s\n",
 	   uposition, ptree->nsuc_check[1] ? "(in check)" : "" );
-	
-      iret = dfpn( ptree, root_turn, 1 );
+	  unsigned int move;
+      iret = dfpn( ptree, root_turn, 1, &move );
       if ( iret < 0 ) { return iret; }
 
       if ( istatus == record_eof ) { break; }

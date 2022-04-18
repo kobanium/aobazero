@@ -76,6 +76,7 @@ typedef struct {
 
 typedef struct {
   uint64_t node_limit;
+  uint64_t node_sum;
   int turn_or;
   int root_ply;
   unsigned int sum_phi_max;

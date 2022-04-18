@@ -561,6 +561,33 @@ usi_go( tree_t * restrict ptree, char **lasts )
     token = "infinite";
   }
 
+  if ( ! strcmp( token, "mate" ) ) {
+    int n = DFPN_NODE_LIMIT;
+    token = strtok_r( NULL, str_delimiters, lasts );
+    if ( token && ! strcmp( token, "nodes" ) ) {
+      token = strtok_r( NULL, str_delimiters, lasts );
+      if ( token ) n = atoi(token);
+    }
+    // "go mate nodes 100"
+    // "checkmate G*8f 9f9g 8f8g 9g9h 8g8h"
+    unsigned int move;
+    iret = dfpn( ptree, root_turn, 1, &move, n );
+    PRT("iret=%d,n=%d\n",iret,n);
+    if ( move == MOVE_NA ) {
+      if ( iret >= 0 ) {
+        USIOut("checkmate nomate\n");	// ハッシュFullで停止でもこの表示
+      } else {
+        USIOut("checkmate timeout\n");
+      }
+    } else {
+      char buf[7];
+      csa2usi( ptree, str_CSA_move(move), buf );
+      USIOut("checkmate %s\n",buf);
+	}
+    return 1;
+  }
+
+
 #if defined(YSS_ZERO)
   fUSIMoveCount = 0;
   if ( ! strcmp( token, "visit" ) ) {
@@ -2061,8 +2088,8 @@ static int CONV cmd_dfpn( tree_t * restrict ptree, char **lasts )
   else if ( ! strcmp( str, "go" ) )
     {
       AbortDifficultCommand;
-
-      return dfpn( ptree, root_turn, 1 );
+      unsigned int move;
+      return dfpn( ptree, root_turn, 1, &move );
     }
   else if ( ! strcmp( str, "connect" ) )
     {
