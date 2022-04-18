@@ -1614,46 +1614,46 @@ skip_select:
 
 	enum { SENNITITE_NONE, SENNITITE_DRAW, SENNITITE_WIN };
 	int flag_sennitite = SENNITITE_NONE;
-	if ( flag_illegal_move == 0 ) {
-		const int np = ptree->nrep + ply - 1;
-		// ptree->history_in_check[np] にはこの手を指す前に王手がかかっていたか、が入る
-//		PRT("ptree->nrep=%2d,ply=%2d,sideToMove=%d,nrep=%2d,hist_in_check[]=%x\n",ptree->nrep,ply,sideToMove,np,ptree->history_in_check[np]);
-		// 千日手判定
-		// usiで局面を作るときはmake_move_root()を千日手無視で作っている。
-		// 6手一組以上の連続王手の千日手はある？
-		int i,sum = 0;
-		uint64 key  = HASH_KEY;
-//		uint64 hand = Flip(sideToMove) ? HAND_B : HAND_W;
-		const int SUM_MAX = 3;		// 過去に3回同じ局面。つまり同一局面4回
-		for (i=np-1; i>=0; i-=2) {
-			if ( ptree->rep_board_list[i] == key && ptree->rep_hand_list[i] == HAND_B ) {
-				sum++;
-				if ( sum == SUM_MAX ) break;
-			}
-		}
-		if ( sum == SUM_MAX ) {
-//			PRT("sennnitite=%d,i=%d(%d),nrep=%d,ply=%d,%s\n",sum,i,np-i,ptree->nrep,ply,str_CSA_move(pc->move));
-			flag_sennitite = SENNITITE_DRAW;
 
-			// 連続王手か？。王手をかけた場合と王が逃げた場合、の2通りあり
-			int start_j = np-1;
-			if ( now_in_check==0 ) start_j = np;
-			int j;
-			int flag_consecutive_check = 1;
-//			for (j=0; j<=np; j++) PRT("%d",(ptree->history_in_check[j]!=0)); PRT("\n");
-			for (j=start_j; j>=i; j-=2) {
-				if ( ptree->history_in_check[j]==0 ) { flag_consecutive_check = 0; break; }
-			}
-			if ( flag_consecutive_check ) {
-				if ( now_in_check ) {
-//					PRT("perpetual check! delete this move.  %d -> %d (%d)\n",start_j,i,(start_j-i)+1);
-					flag_illegal_move = 1;
-				} else {
-///					PRT("perpetual check escape! %d -> %d (%d)\n",start_j,i,(start_j-i)+1);
-					flag_sennitite = SENNITITE_WIN;
-				}
+	const int np = ptree->nrep + ply - 1;
+	// ptree->history_in_check[np] にはこの手を指す前に王手がかかっていたか、が入る
+//	PRT("ptree->nrep=%2d,ply=%2d,sideToMove=%d,nrep=%2d,hist_in_check[]=%x\n",ptree->nrep,ply,sideToMove,np,ptree->history_in_check[np]);
+	// 千日手判定
+	// usiで局面を作るときはmake_move_root()を千日手無視で作っている。
+	// 6手一組以上の連続王手の千日手はある？
+	int i,sum = 0;
+	uint64 key  = HASH_KEY;
+//	uint64 hand = Flip(sideToMove) ? HAND_B : HAND_W;
+	const int SUM_MAX = 3;		// 過去に3回同じ局面。つまり同一局面4回
+	for (i=np-1; i>=0; i-=2) {
+		if ( ptree->rep_board_list[i] == key && ptree->rep_hand_list[i] == HAND_B ) {
+			sum++;
+			if ( sum == SUM_MAX ) break;
+		}
+	}
+	if ( sum > 0 ) {
+//		PRT("sennnitite=%d,i=%d(%d),nrep=%d,ply=%d,%s\n",sum,i,np-i,ptree->nrep,ply,str_CSA_move(pc->move));
+		flag_sennitite = SENNITITE_DRAW;
+
+		// 連続王手か？。王手をかけた場合と王が逃げた場合、の2通りあり
+		int start_j = np-1;
+		if ( now_in_check==0 ) start_j = np;
+		int flag_consecutive_check = 1;
+//		for (int j=0; j<=np; j++) PRT("%d",(ptree->history_in_check[j]!=0)); PRT("\n");
+		for (int j=start_j; j>=i; j-=2) {
+			if ( ptree->history_in_check[j]==0 ) { flag_consecutive_check = 0; break; }
+		}
+		if ( flag_consecutive_check ) {
+			if ( now_in_check ) {
+//				PRT("perpetual check! delete this move.  %d -> %d (%d)\n",start_j,i,(start_j-i)+1);
+				flag_illegal_move = 1;
+			} else {
+//				PRT("perpetual check escape! %d -> %d (%d)\n",start_j,i,(start_j-i)+1);
+				flag_sennitite = SENNITITE_WIN;
 			}
 		}
+		if ( now_in_check ) flag_illegal_move = 1;	// 王手の同一局面は指さない。王が逃げる手で4回目、だと3回目の王手を選ぶ
+		if ( sum != SUM_MAX ) flag_sennitite = SENNITITE_NONE;
 	}
 
 	if ( flag_illegal_move ) {
@@ -1686,7 +1686,7 @@ skip_select:
 		}
 	}
 
-	if ( !now_in_check && is_do_mate3() && (pc->mate_bit & MATE_3)==0 ) {
+	if ( skip_search == 0 && !now_in_check && is_do_mate3() && (pc->mate_bit & MATE_3)==0 ) {
 		pc->mate_bit |= MATE_3;
 		if ( is_mate_in3ply(ptree, Flip(sideToMove), ply+1) ) {
 			PRT("mated3ply: ply=%2d,col=%d,move=%08x(%s)\n",ply,sideToMove, MOVE_CURR,string_CSA_move(MOVE_CURR).c_str());	// str_CSA_move() は内部でstaticを持つので複数threadでは未定義
@@ -1696,7 +1696,7 @@ skip_select:
 		}
 	}
 
-	if ( 0 && !now_in_check && is_do_mate3() && (pc->mate_bit & MATE_DFPN_0)==0 && pc->games >= 0 ) {	// ( || hasLoss)
+	if ( 0 && skip_search == 0 && !now_in_check && is_do_mate3() && (pc->mate_bit & MATE_DFPN_0)==0 && pc->games >= 0 ) {	// ( || hasLoss)
 		pc->mate_bit |= MATE_DFPN_0;
 		unsigned int move;
 		dfpn(ptree, Flip(sideToMove), ply+1, &move, 1000);
