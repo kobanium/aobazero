@@ -960,7 +960,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 	} SORT_LCB;
 	SORT_LCB sort_lcb[SORT_MAX];	// 勝率、LCB、ゲーム数、着手、元のindexを保存
 
-	float exact_v = 0;
+	float exact_v = ILLEGAL_MOVE;
 	int loss_moves = 0;
 	if ( is_use_exact() ) for (i=0;i<phg->child_num;i++) {
 		CHILD *pc = &phg->child[i];
@@ -982,7 +982,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		break;
 	}
 	if ( phg->child_num == loss_moves ) {
-		exact_v = -1.0f;
+		exact_v = 0.0f;
 		PRT("LOSS\n");
 	}
 
@@ -1089,7 +1089,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 			CHILD *pbest = &phg->child[max_i];
 			v = (pbest->value + 1.0) / 2.0;	// -1 <= x <= +1  -->  0 <= x <= +1
 		}
-		if ( exact_v != 0 ) v = exact_v;
+		if ( exact_v != ILLEGAL_MOVE ) v = exact_v;
 		sprintf(buf_move_count,"v=%.04f,%d",v,sum_games);
 	} else {
 		sprintf(buf_move_count,"%d",sum_games);
