@@ -42,7 +42,7 @@ int CONV dfpn_ini_hash( void )
   n2 = 1U << dfpn_hash_log2;
   size = sizeof( dfpn_hash_entry_t ) * ( n2 + 1 + DFPN_NUM_REHASH );
 
-  dfpn_hash_tbl = memory_alloc( size );
+  dfpn_hash_tbl = (dfpn_hash_entry_t*)memory_alloc( size );
   if ( dfpn_hash_tbl == NULL ) { return -1; }
 
   dfpn_hash_mask = n2 -1;
@@ -90,7 +90,7 @@ void CONV dfpn_hash_probe( const dfpn_tree_t * restrict pdfpn_tree,
   uint64_t hash_key_curr, word1, word2, word3, hash_key, nodes;
   unsigned int index, hand_b, phi, delta, u, offset, hand_b_curr;
   int relation, is_phi_loop, is_delta_loop;
-
+  (void)ply;
 #define REL_SUPE 0
 #define REL_INFE 1
 

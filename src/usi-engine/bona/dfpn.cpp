@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
+#include <string>
 #include "shogi.h"
 #include "dfpn.h"
 
@@ -37,20 +38,22 @@ static void CONV select_child( const tree_t * restrict ptree,
 static void CONV num2str( char buf[16], unsigned int num );
 
 #if defined(TLP)
-static dfpn_tree_t dfpn_tree[ TLP_MAX_THREADS ];
+static dfpn_tree_t dfpn_tree[ TLP_NUM_WORK ];
 #else
 static dfpn_tree_t dfpn_tree;
 #endif
 
 int CONV
-dfpn( tree_t * restrict ptree, int turn, int ply )
+dfpn( tree_t * restrict ptree, int turn, int ply, unsigned int *pret_move, int dfpn_node_limit )
 {
   dfpn_tree_t * restrict pdfpn_tree;
   node_t * restrict pnode;
   float fcpu_percent, fnps, fsat;
   unsigned int cpu0, cpu1, elapse0, elapse1, u;
   int iret, i;
-  
+
+  *pret_move = MOVE_NA;
+
   if ( get_cputime( &cpu0 )    < 0 ) { return -1; }
   if ( get_elapsed( &elapse0 ) < 0 ) { return -1; }
 
@@ -75,7 +78,10 @@ dfpn( tree_t * restrict ptree, int turn, int ply )
   pdfpn_tree->root_ply     = ply;
   pdfpn_tree->turn_or      = turn;
   pdfpn_tree->sum_phi_max  = 0;
-  pdfpn_tree->node_limit   = 50000000;
+//pdfpn_tree->node_limit   = DFPN_NODE_LIMIT;//50000000;
+  pdfpn_tree->node_limit   = dfpn_node_limit;
+
+  bool fView = (ply==1);
 
   pnode = pdfpn_tree->anode + ply;
   pnode->phi           = INF_1;
@@ -95,7 +101,7 @@ dfpn( tree_t * restrict ptree, int turn, int ply )
 
       num2str( buf1, pnode->phi );
       num2str( buf2, pnode->delta );
-      Out( "Research [%s:%s]\n", buf1, buf2 );
+      if ( fView ) PRT( "Research [%s:%s]\n", buf1, buf2 );
       pnode->phi   = INF;
       pnode->delta = INF;
       iret = mid( ptree, pdfpn_tree, ply );
@@ -109,36 +115,44 @@ dfpn( tree_t * restrict ptree, int turn, int ply )
     {
       DFPNOut( "UNSOLVED %d\n", iret );
       switch ( iret ) {
-      case DFPN_ERRNO_MAXNODE:  Out( "RESULT: MAX NODE\n" );      break;
-      case DFPN_ERRNO_MAXPLY:   Out( "RESULT: MAX PLY\n" );       break;
-      case DFPN_ERRNO_SUMPHI:   Out( "RESULT: MAX SUM_PHI\n" );   break;
-      case DFPN_ERRNO_DELTA2P:  Out( "RESULT: MAX DELTA2+1\n" );  break;
+      case DFPN_ERRNO_MAXNODE:  if ( fView ) PRT( "RESULT: MAX NODE\n" );      break;
+      case DFPN_ERRNO_MAXPLY:   if ( fView ) PRT( "RESULT: MAX PLY\n" );       break;
+      case DFPN_ERRNO_SUMPHI:   if ( fView ) PRT( "RESULT: MAX SUM_PHI\n" );   break;
+      case DFPN_ERRNO_DELTA2P:  if ( fView ) PRT( "RESULT: MAX DELTA2+1\n" );  break;
       default:
 	assert( DFPN_ERRNO_SIGNAL == iret );
-        Out( "RESULT: SIGNAL\n" );
+        if ( fView ) PRT( "RESULT: SIGNAL\n" );
 	break;
       }
     }
   else if ( pnode->delta == INF )
     {
-      const char *str;
       for ( i = 0; i < pnode->nmove && pnode->children[i].phi != INF; i++ );
       assert( i < pnode->nmove );
-      str = str_CSA_move(pnode->children[i].move);
-      Out( "RESULT: WIN %s\n", str );
-      DFPNOut( "WIN %s\n", str );
+//    const char *str = str_CSA_move(pnode->children[i].move);
+      *pret_move = pnode->children[i].move;
+      std::string s = string_CSA_move(*pret_move);
+      if ( fView ) PRT( "RESULT: WIN %s\n", s.c_str());
+      DFPNOut( "WIN %s\n", s.c_str());
     }
   else {
-    Out( "RESULT: LOSE\n" );
+    if ( fView ) PRT( "RESULT: LOSE\n" );
     DFPNOut( "LOSE\n" );
   }
 
-  fsat = dfpn_hash_sat();
-  if ( 3.0 < fsat )
-    {
-      dfpn_hash_age += 1U;
-      dfpn_hash_age &= DFPN_AGE_MASK;
-    }
+  pdfpn_tree->node_sum += ptree->node_searched;
+  if ( pdfpn_tree->node_sum > 30000 ) {
+    pdfpn_tree->node_sum = 0;
+    fsat = dfpn_hash_sat();
+  } else {
+    pdfpn_tree->node_sum = 0;
+    fsat = 0;
+  }
+
+  if ( 3.0 < fsat ) {
+    dfpn_hash_age += 1U;
+    dfpn_hash_age &= DFPN_AGE_MASK;
+  }
 
   if ( get_cputime( &cpu1 )    < 0 ) { return -1; }
   if ( get_elapsed( &elapse1 ) < 0 ) { return -1; }
@@ -148,15 +162,17 @@ dfpn( tree_t * restrict ptree, int turn, int ply )
   fnps            /= (float)( elapse1 - elapse0 + 1U );
   node_per_second  = (unsigned int)( fnps + 0.5 );
 
-  Out( "n=%" PRIu64 " sat=%3.1f%%", ptree->node_searched, fsat );
-  Out( " age=%u sum_phi=%u", dfpn_hash_age, pdfpn_tree->sum_phi_max );
-  Out( " time=%.2f cpu=%.1f%% nps=%.2fK\n",
-       (float)( elapse1 - elapse0 + 1U ) / 1000.0F,
-       fcpu_percent, fnps / 1e3F );
-    
-  Out( "\n" );
+  if ( !fView ) return iret;
 
-  return 1;
+  PRT( "n=%" PRIu64 " sat=%3.1f%%", ptree->node_searched, fsat );
+  PRT( " age=%u sum_phi=%u", dfpn_hash_age, pdfpn_tree->sum_phi_max );
+  PRT( " time=%.2f cpu=%.1f%% nps=%.2fK,ply=%d,limit=%d\n",
+       (float)( elapse1 - elapse0 + 1U ) / 1000.0F,
+       fcpu_percent, fnps / 1e3F, ply, dfpn_node_limit );
+  PRT( "\n" );
+
+//  return 1;
+  return iret;
 }
 
 

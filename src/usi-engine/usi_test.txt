@@ -1,22 +1,64 @@
+2020-04-28
+AperyWCSC25を動かすために、@increment だけ山岡さんのソースから引っ張って移植。
+
+この形式にはAperyは未対応と思われるので
+go btime 40000 wtime 50000 binc 10000 winc 10000
+
+この形でbtimeを正しく補正
+go btime 60000 wtime 50000 byoyomi 10000
+
+usiToCsa.rbのdlshogi対応
+https://tadaoyamaoka.hatenablog.com/entry/2020/04/28/220054
+
+
+setoption Threads value 1
+setoption Hash value 64
+setoption NodesLimit value 10000
+setoption USI_Hash value 64         ... yane600ではこの形式のみ
+
+yane600では isready は最後に
+
+setoption name Threads value 1
+setoption name USI_Hash value 64
+
+
+dlshogiではmodelのpathを
+
+setoption name DNN_Model value /home/yss/shogi/dlshogi_dr2_exhi/model/model-dr2_exhi.onnx
+setoption name DebugMessage value true
+setoption name UCT_NodeLimit value 1000000  ... メモリ確保が主目的?でもなさそう。
+setoption name Const_Playout value 100     ... 機能しない？ isready の前に
+setoption name Resign_Threshold value 0
+go nodes 1000
+
+
+$ ./yane603a_suisho4kai_avx2
+setoption NodesLimit value 10000
+setoption name BookMoves value 32
+setoption name BookDepthLimit value 0
+setoption name ConsiderBookMoveCount value true
+isready
+
+suisho5 では
+setoption name FV_SCALE value 24
+
+
+
 position startpos moves
 ignore_moves 7g7f
 go
 stop
 
-
 position startpos moves 5i5h
 ignore_moves 8c8d
 go
-stop
 
 position startpos moves 5i5h 5a5b
 ignore_moves 7g7f 2g2f
 go
-stop
 
 position startpos moves 5i5h 5a5b
 ignore_moves 7g7f 2g2f 5h6h 5h4h
-
 
 
 position startpos moves 7g7f 8c8d 2g2f 8d8e 5i5h 8e8f 8g8f 8b8f 6i7h 1c1d 2f2e 8f8d P*8g 5a6b 3i3h
@@ -271,6 +313,26 @@ position startpos moves 7g7f 8c8d 7i6h 3c3d 6g6f 7a6b 5g5f 5c5d 3i4h 3a4b 4i5h 4
 先手：佐藤康光    
 
 
+連続王手の千日手、後手玉が逃げて4回でAobaZeroの反則負け。
+position startpos moves 2g2f 8c8d 2f2e 8d8e 6i7h 4a3b 2e2d 2c2d 2h2d P*2c 2d2h 7a7b 3i3h 9c9d 9g9f 1c1d 4g4f 8e8f 8g8f 8b8f 3h4g 8f8b P*8g 7b8c 7g7f 8c7d 7i6h 7d8e 6h7g 3c3d 4i5h 3a4b 3g3f 4c4d 2i3g 4b4c 5g5f 4d4e 5i6i 3d3e 3g4e 6a5b 8g8f 8e7d 3f3e P*4d 4e5c+ 5b5c 7h8g 4d4e 6i7h 5c4d 8h7i 2a3c 2h3h 4e4f 4g4f P*8e 8f8e 8a9c 8e8d 8b8d P*8f P*8e 8f8e 9c8e P*8f 8e7g+ 8i7g S*4i 3h4h 4i5h 4h5h 2b3a N*5e P*8e 7g8e 7d8e 8f8e N*8f 8g8f 3a8f 8e8d G*7g 7h6i 7g6g R*7a 5a4b P*6h 6g5h 6i5h N*6f 5h4g R*4i P*4h 4i7i+ 5e4c+ 3b4c S*3a 4b5c N*6e 5c5d G*5e 4d5e 4f5e 5d6e 5e6f 6e6f G*6g 6f6e N*5g 6e6d S*6e 6d5c 7a5a+ P*5b S*5d 4c5d 6e5d 5c4d 5a4a N*4b G*4e 3c4e 5d4e 4d3e 4a3b N*3d 4e3f 3e4d 3f4e 4d3e 4e3f 3e4d 3f4e 4d3e 4e3f 3e4d 3f4e 4d3e
+
+後手：Suisho2_200323_i9-7960X 
+後手の持駒：角　金三　銀二　歩　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香 ・ ・ ・ ・ ・ 銀 ・v香|一
+| ・ ・ ・ ・v歩v桂 龍 ・ ・|二
+| ・ ・v歩v歩 ・ ・ ・v歩 ・|三
+|v歩 歩 ・ ・ ・ ・v桂 ・v歩|四
+| ・ ・ ・ ・ ・ 銀v玉 ・ ・|五   手数=140,IsSenteTurn()=1  △35玉
+| 歩v角 歩 ・ 歩 ・ ・ ・ ・|六
+| ・ ・ ・ 金 桂 玉 ・ ・ 歩|七
+| ・ ・ ・ 歩 ・ 歩 ・ ・ ・|八
+| 香 ・v龍 ・ ・ ・ ・ ・ 香|九
++---------------------------+
+先手の持駒：桂　歩四　
+先手：AobaZero_w918_n_p800 
+
 
 同一局面3回で千日手は打開してる
 position startpos moves 7g7f 8c8d 7i6h 3c3d 6h7g 7a6b 3i4h 3a4b 6i7h 5c5d 5i6i 4a3b 4i5h 5a4a 8h7i 6a5b 7i6h 8d8e 6i7i 4b3c 4g4f 2b3a 4h4g 3a4b 6g6f 4a3a 2g2f 7c7d 5h6g 3a2b 7i8h 9c9d 6h5i 7d7e 7f7e 4b7e 3g3f 6b7c P*7f 7e6d 5i3g 7c7d 1g1f 8a7c 1f1e 9d9e 1i1g 6d5c 2f2e 5c3a 3g2f 8b8a 2i3g 8a6a 5g5f 3a6d 2h2i 6d4b 2i5i 4b6d 6g5g 5b4b 3g4e 3c4d 5g6g 6a5a 5i2i 4b5b 2i4i 5a6a 4i5i 6d4b 5i2i 6c6d 2i5i 6a8a 5i2i 8a6a 2i5i 6a8a 5i2i 8a6a 2i5i 6a8a 5i2i 8a5a 2i5i 5a6a 5i2i 6d6e 6f6e 6a6e P*6f 6e6b 2i5i 4b6d 5i2i 6d4b 2i5i 4b6d 5i2i 6d4b 2i5i 4b6d 5i2i 6b6a 2i5i 5b4b
@@ -404,6 +466,26 @@ position startpos moves 7g7f 3c3d 2g2f 2b8h+ 7i8h 3a2b 8h7g 2b3c 7g6f 3c4d 5g5f 
 先手の持駒：金　銀　桂　香　歩四　
 
 
+2枚龍の1手詰みをうっかり
+position startpos moves 2g2f 8c8d 2f2e 8d8e 7g7f 4a3b 8h7g 3c3d 7i8h 2b7g+ 8h7g 3a2b 6i7h 2b3c 5i6h 7a7b 3i3h 7c7d 3g3f 5a4b 3h3g 7b7c 3g4f 6a5b 3f3e 3d3e 4f3e 7c6d 2e2d 3c2d 3e2d 2c2d 2h2d P*2c 2d2h 7d7e 7f7e B*5d P*3c 4b3c S*4a 5b4b 4a3b 4b3b P*3d 3c4b P*2b 3b2b B*7a 8b7b G*8b 7b7e 8b8a S*2g 2h4h 2g3f+ N*7f 6d7c 8a9a 7e2e L*5f 2e2i+ 5f5d 5c5d 6h7i S*3g 7i8h 3g4h+ 4i4h R*3i B*5c 4b3b S*3a 3i8i+
+
+後手：gikou2_1c 
+後手の持駒：桂二　香　歩四　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+| 金 ・ 角 ・ ・ ・ 銀v桂v香|一
+| ・ ・ ・ ・ ・ ・v玉v金 ・|二
+|v歩 ・v銀v歩 角v歩 ・v歩v歩|三
+| ・ ・ ・ ・v歩 ・ 歩 ・ ・|四
+| ・v歩 ・ ・ ・ ・ ・ ・ ・|五   手数=74,IsSenteTurn()=1  △89飛成
+| ・ ・ 桂 ・ ・ ・v全 ・ ・|六
+| 歩 歩 銀 歩 歩 歩 ・ ・ 歩|七
+| ・ 玉 金 ・ ・ 金 ・ ・ ・|八
+| 香v龍 ・ ・ ・ ・ ・v龍 香|九
++---------------------------+
+先手の持駒：
+先手：AobaZero_w558_n_p800 
+http://wdoor.c.u-tokyo.ac.jp/shogi/view/2019/06/06/wdoor+floodgate-300-10F+AobaZero_w558_n_p800+gikou2_1c+20190606210005.csa
 
 
 平手初期配置
@@ -411,3 +493,954 @@ position sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1
 position sfen lnsgkgsnl/1r7/pppppp1pp/6p2/9/2P4P1/PP1PPPP1P/1S5R1/LN1GKGSNL w Bb 1
 豊島YSS 14金
 position sfen lnsg5/3kl1+R2/p1ppppn1p/9/8+R/2P6/PPNPPPP1P/2G2S3/+b+pS1K2G1 w BSL3Pgnl 1
+
+
+
+最大可能手数 593手
+position startpos moves 9g9f 9c9d 7g7f 3c3d 2g2f 2c2d 2f2e 2d2e 2h2e 8c8d 8h2b+ 8b2b 1g1f 2b2e 5i4h 2e2i+ 8i7g 2i1i 4h3h 1i3i 3h2g 3i4i 2g2f 4i6i 2f2e 6i7i 2e2d 7i9i 7g6e 9i9f 6e7c 9f7f 7c8a+ 7f8g 8a9a 8g6g 9a8a 6g5g 8a7a 5g4g 7a6a 5a6a 2d3d R*2d 3d2d 1a1b R*1a 3a2b 1a1b L*1a 1b1a 4g3g L*2i 2b2c 2d2c 3g3d 2c3d 4a3b S*7e 6a7b 7e8d 7b8b 8d9c+ 8b7b 9c9d 7b8b 9d8d 3b2c 3d2c 8b9b 8d7c S*7b 7c7b S*7c 7b7c G*6b 7c6b 2a3c 2c3c 1c1d G*9c 9b9c G*9b 9c9b 1f1e 1d1e 1a1e L*1a 1e1a 9b9c 6b6c 9c9b 3c4c 9b9c 6c7c 9c9b 4c5c 9b9c 7c8b 9c8b 5c4b 8b9c L*4i 9c9d L*6i 9d9c S*5b S*3b 4b3b B*4b 3b4b 9c9b 4b3b 9b9c B*5c 9c9b S*7b 9b9c N*9d 9c9d P*9c 9d9c P*9d 9c9d P*9c 9d9c P*9d 9c9d P*9c 9d9c P*9d 9c9d P*9c 9d9c P*9d 9c9d 3b4c 9d9c 4c4b 9c9d 4b3b 9d9c S*8b 9c9b
+
+position sfen 8R/kSS1S1K2/4B4/9/9/9/9/9/3L1L1L1 b PLNSGBR17p3n3g 1
+
+後手：
+後手の持駒：金三　桂三　歩十七　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+| ・ ・ ・ ・ ・ ・ ・ ・ 飛|一
+|v玉 銀 銀 ・ 銀 ・ 玉 ・ ・|二
+| ・ ・ ・ ・ 角 ・ ・ ・ ・|三
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|四
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|五   手数=144,IsSenteTurn()=1  △92玉
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|六
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|七
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|八
+| ・ ・ ・ 香 ・ 香 ・ 香 ・|九
++---------------------------+
+先手の持駒：飛　角　金　銀　桂　香　歩　
+先手：
+
+
+256手だがあと2枚敵陣に打てば後手の宣言勝ち。先手は27点で1点足りない。aobazeroは勝を分かってる。elmoの評価は正しくない
+position startpos moves 2g2f 8c8d 2f2e 4a3b 2e2d 2c2d 2h2d P*2c 2d2h 8d8e 6i7h 8e8f 8g8f 8b8f P*8g 8f8b 3i3h 7a7b 3h2g 3c3d 2g3f 3a4b 3f2e 8b8d 7g7f 2b8h+ 7i8h 2a3c 2e3f 4c4d 9g9f 4b4c P*2b 3b2b B*3a 2b3b 3a5c+ 6a5b 5c7e 8d8b P*2b 3b2b 7e3a 2b3b 3a2a B*2b 8h7g 5a4b 7f7e 6c6d 4g4f 7b6c 9f9e 7c7d 7e7d 6c7d 4f4e 3c4e 2a2b 3b2b 3f4e 4d4e B*5e 4b3b N*4d 4c4d 5e4d 4e4f S*4a 3b4a 4d2b+ 4a5a 2h2c+ B*1d 2b3c 5a6b 2c2a 4f4g+ 5i6h P*8h 6h7i 8h8i+ 7i8i P*4a P*7i P*7f 7g7f P*7e G*8e 7d8e 7f8e 8b8e 2a1a S*6i S*8h 6i7h 7i7h N*7f S*7g 7f8h+ 7g8h N*7f N*7d 6b7c L*8f 8e8f 8g8f P*8g 8h8g S*8h 3c8h 7f8h+ 8i8h S*6h 8h9g S*8h 9g9f 9c9d R*7a G*7b S*8b 7c8c 1a1c L*5c 1c5c 5b5c L*8e 8c7d 7a7b+ 7d6e G*6f 6e5d 8b9a+ R*8i 9i9h 8i4i+ 8e8c+ 4g5g L*5e 5d4e 5e5c+ 4e4f 9f8e 4f4g 9a8a 4i2i G*1e 1d2c P*2d 9d9e 2d2c+ 2i2c B*1d 2c1d 1e1d 4g3h 8e8d B*5h 1d2c 6d6e 6f6e B*4e N*6d 4e7b 6d7b+ 5h6g+ 6e7e 3d3e B*2b 6g2c 2b8h+ P*7g 9h9e 2c5f 7h7g N*6e 8g7h G*9f 8h9h P*8g 7h8g P*9g 9h8i 5f8i 8g9f 6e7g+ 8d7c 9g9h+ P*6d 9h9g 9f8e 9g8g R*3a 8g8f 8e8d 7g7f 7e7f 8f7f 3a3e+ R*4i 6d6c+ 4i1i+ 9e9c+ P*2g 7c8b 2g2h+ 8a9a G*2g 8d7c+ 2g3g P*3d G*3f 3e4d 3f4g 5c4c G*4e 4d8d 8i7h N*5c 4e3f 5c4a+ 3f2g 3d3c+ 2g1g 8d1d 1g2g 1d1i 2h1i R*1f 1i1h 1f7f 7h6g 7f1f 6g5h 1f1a+ P*7h 8b7a 7h7i+ P*2c 7i7h 2c2b+ P*8h 7b6b 8h8i+ 6b7b 8i8h G*2f 2g2f 1a1h P*2h 1h1a 2h2i+ 4a3a 2i2h 3a3b 2h2g
+
+後手：AobaZero_w898_n_p800 
+後手の持駒：飛　角　金　桂　香　歩　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+| 全 ・ 玉 ・ ・ ・ ・ ・ 龍|一
+| ・ ・ 圭 ・ ・ ・ 圭 と ・|二
+| 杏 杏 全 と ・ 杏 と ・ ・|三
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|四
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|五   手数=256,IsSenteTurn()=1  △27と
+| ・ ・ ・ ・ ・ ・ ・v金 ・|六
+| ・ ・ ・ ・vとv金v金vと ・|七
+| ・vとvとv銀v馬 ・v玉 ・ ・|八
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|九
++---------------------------+
+先手の持駒：銀　桂　歩十　
+先手：elmo_WCSC27_479_1000k 
+http://wdoor.c.u-tokyo.ac.jp/shogi/view/2020/02/28/wdoor+floodgate-300-10F+elmo_WCSC27_479_1000k+AobaZero_w898_n_p800+20200228040003.csa
+
+
+257手で後手が宣言勝できる。
+position startpos moves 2g2f 8c8d 2f2e 8d8e 6i7h 4a3b 2e2d 2c2d 2h2d P*2c 2d2f 3c3d 9g9f 7a7b 3i3h 5a4b 5i4h 2b4d 2f3f 3b3c 4g4f 8e8f 8g8f 8b8f 4f4e 8f3f 3g3f 4d5e 2i3g 7c7d P*8d 3d3e R*5f R*4f 5f4f 5e4f 8d8c+ 7b8c R*8f 3e3f 8f4f 3f3g+ 4h3g 3c3d 4f3f 3d4e 3f2f P*8g 8h9g 3a2b 2f8f 6a7b P*8d 8c9b 3g4h P*3g 3h3g R*2i 4h5i 2i1i+ P*2i 1i2i 3g4h N*3f 4h3g L*4g 7g7f 2i4i 5i6h 8a7c 6h7g 4g4h+ 7f7e G*8e 8f6f 7d7e 7g8g 4h5h 3g3f 4e5e P*7d 5e6f 6g6f P*8f 8g9h 8e9f 7d7c+ 2b3c P*3d 3c3d N*2f P*3c B*1e R*4d G*7g 7b7c 7g8f 9f8f 9g8f G*9f G*9g 9f8f 9g8f P*8e 8f7e 8e8f N*5f 4d5d P*4d 3d4e 3f4e 4i4e 2f3d 4e3d 4d4c+ 4b4c P*4d 3d4d 5f4d 5d5g+ 8i7g S*8g 9h9g 8g7h S*5b 4c3d 7i7h B*7i 9g9f 7i8h+ S*8i 8h9i R*3g N*3e 3g5g 5h5g P*9e 9i8i 7h8i R*9i G*9h 9i8i+ B*4c 3d4e 5b6c+ 7c6c R*6e 4e4f 6e6c+ S*5d 6c5d 5c5d 4c5d+ 4f4g P*5i S*4h 9f8e 8i5i 5d2a L*7a P*7d R*6h 2a6e S*5f 6e5d 6h6f+ G*4f 4g3h 1e3c+ 6f7g 4d5b+ 7g6h 3c5e N*6c 5e9a 6c7e 9a9b 5f6e 7d7c+ P*7d 5d4c 8f8g+ 9b9c 7a7c 4f3e 6h9h 8d8c+ 8g8f 8e8d 7e8g+ 4c6e G*4g 9c9d G*8e 8d7c 8e9e 9d9c 9e8e 6e5e 7d7e 3e3f 3h4i 7c6b 7e7f L*6d 7f7g+ 6d6c+ 8e7f 3f4f 4g4f 5e4f G*4g 4f5e P*3h 5e1a 3h3i+ L*1f 3i3h 1f1c+ 3h3g 1c2c P*3h 5b5a 3h3i+ N*6e 3i3h 6e5c+ P*2h G*8a 2h2i+ 1g1f 2i2h 9c8d 2h2g 8d7d 2g2f 1f1e 2f2e 1e1d G*2d 2c2d 2e2d 1d1c+ 2d3e 5c4c 3e4f 7d8d 4f5f 8a8b 5f6g 6b5c 5g6h 5c4d 6g7h P*4e 7f6g 1a3c
+
+後手：AobaZero_w893_n_p800 
+後手の持駒：香　歩七　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+| ・ ・ ・ ・ 圭 ・ ・ ・ 馬|一
+| ・ 金 ・ ・ ・ ・ ・ ・ ・|二
+| ・ と ・ 杏 ・ 圭 ・ ・ と|三
+| ・ 馬 ・ ・ ・ 玉 ・ ・ ・|四
+| ・ ・ ・ ・ ・ 歩 ・ ・ ・|五   手数=256,IsSenteTurn()=1  △67金
+| ・vと ・ ・ ・ ・ ・ ・ ・|六
+| ・v圭vとv金 ・v金vと ・ ・|七
+|v龍 ・vとv杏 ・v銀vと ・ ・|八
+| ・ ・ ・ ・v龍v玉 ・ ・ ・|九
++---------------------------+
+先手の持駒：金　銀三　桂　香　歩三　
+先手：elmo_WCSC27_479_1000k 
+
+
+256手で先手が宣言勝できそう。敵陣に9枚
+position startpos moves 2g2f 3c3d 7g7f 8c8d 2f2e 8d8e 2e2d 2c2d 2h2d 2b8h+ 7i8h B*3c 2d2h P*2g 2h5h 8e8f 8g8f 8b8f P*8g 8f8d 6i7h 8d4d 4i3h 3a3b 3g3f 3d3e 3f3e 5a6b 8h7g 6b7b 7g6f 6a6b 8i7g 4d2d 3h3g P*3h 3g3h 3c4d 8g8f 4d3e 8f8e 3e2f 5i6h 7a8b P*2h 2g2h+ 3i2h P*3g 3h3i P*8f 6f7e 7c7d 7e8f 5c5d 8e8d 2f5c 8f8e 7d7e 7f7e 2d4d 5h4h 5d5e B*6f 8a7c 8e7d 2a3c 2h3g 3c4e 3g4f 4e5g+ 6h5g P*7f N*6e 5c6d 4f5e 7f7g+ 7h7g 6d5e 6f5e 4d7d 7e7d 7c6e 5g4f S*5g 4f3g N*4e 3g2g 5g4h+ 3i4h N*1e 2g3f S*6d 5e1a+ 6e7g+ 1a7g R*7i S*8c 7b6a 8c8b+ 7i7g+ L*5f B*5c B*2d 7g7d 5f5c+ P*3e 2d3e 6d5c B*8c 7d8c 8d8c+ B*2g 3f4f G*3f 4f5f 3f3e P*3c 3b3c R*1b P*3b 1b1a+ 6a5b 8c7b 5b4b 7b6b L*5d P*5e 4e5g+ 5f5g 5d5e P*5f 5c6b 5f5e P*5f 5g5h B*3i S*3g 3e3f N*5d 4b5c 5d6b+ 3i4h+ 3g4h 3f4g 5h4g G*3f 4g5h 5f5g+ 4h5g 3f4g 5h4g 2g3h+ 4g3h 1e2g+ 3h2g P*2f 2g3g 2f2g+ 3g4g 2g3g 4g5f 3c3d 1a4a 5c4d R*5d 4d3e S*4f 3e3f 5d3d 3f2g 4f3g 2g3h G*2h 3h4i G*4h 4i5i G*4i 5i6i S*5h 6i7h G*6i 7h8i B*7h 8i9i 6i7i P*8h 7i8h L*8e 8h8i 8e8i+ 7h8i 6c6d 3d6d 9i8i 5f6e G*7c 6e5d 7c6d 5d6d R*7h 6d5c 7h7c+ 5c5b 7c8b G*7b 8b8e P*8b 8e5e P*5c B*4d L*5f 5e6d 5g6f 3b3c P*3b 3c3d 3b3a+ 4d3e 3a3b 3e7i+ P*2b S*8c 2b2a+ 8c7b 6b7b 1c1d 2a2b 4c4d 2b2c P*6e 6f5e 6d7d S*6c 7d8c 5e6d 8c8f 6d7c 8f5f 7c6b 7i9g 7b7c 5f8f P*7b 8f8d 7c7d 8d8b P*8c 8b9b N*8d L*5e 8d9b+ 9a9b 8c8b+ P*8f 7d8c G*6d
+
+後手：elmo_WCSC27_479_1000k 
+後手の持駒：桂　歩　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+| ・ ・ ・ ・ ・ 龍 ・ ・ ・|一
+|v香 と 歩 銀 玉 ・ と ・ ・|二
+|v歩 圭 ・ 銀 歩 ・ ・ と ・|三
+| ・ ・ ・v金 ・v歩v歩 ・v歩|四
+| ・ ・ ・v歩v香 ・ ・ ・ ・|五   手数=256,IsSenteTurn()=1  △64金打
+| ・v歩 ・ ・ ・ ・ ・ ・ ・|六
+|v馬 ・ ・ 歩 ・ ・ 銀 ・ 歩|七
+| ・ ・ ・ ・ 銀 金 ・ 金 ・|八
+| ・v玉 ・ ・ ・ 金 ・ 桂 香|九
++---------------------------+
+先手の持駒：飛　角　桂　香　歩四　
+先手：AobaZero_w888_n_p800 
+
+
+先手が宣言勝できる。
+position startpos moves 2g2f 8c8d 7g7f 4a3b 2f2e 3c3d 6i7h 2b8h+ 7i8h 3a2b 5i6h 2b3c 8h7g 7a7b 3i3h 6c6d 3g3f 7b6c 3h3g 4c4d 3g2f 7c7d 2f1e 3c2b 2e2d 2c2d 1e2d P*2c 2d1e 8a7c 1e2f 2b3c 4i5h 6a5b 9g9f 8b8a 9f9e 5a6b 6g6f 8a4a 6h7i 4d4e 2f3g 1c1d 7i8h 1d1e 5h6g 3c4d 5g5f 2a3c 3g2f 2c2d 2f1e 1a1e 1g1f 4e4f 4g4f 1e1f 1i1f B*1i 2h4h P*4g 4h4g 1i2h+ 1f1c+ 4a8a 2i1g S*3h 4g4h 2h3g 4h6h 3h4g+ P*2c 3b4c 2c2b+ 3g4f L*4i 3c4e 4i4g 4f4g 9e9d L*9b 7f7e 7d7e 2b3b 4e5g+ 6g5g 4g5g P*7d 6c7d N*8f G*6c P*4e 7c8e 4e4d 4c4d S*4a 5b5a S*5b 5a4a 8f7d 6b5b 3b4a 8e7g+ 8i7g 6c7d B*7b 8a4a S*6c 5b4c N*5e 4d5e 5f5e N*7f 8h9g N*8e 9g8f 7f6h+ 6c7d+ R*7f 8f9e S*5d P*4e 9c9d 9e8d S*9c 8d7c 9c8b 7c8b S*7a 8b8c 7a7b 8c7b 4a4b 7b8a 5d4e S*5a 4b5b G*4b 4c4d 4b5b 6h7h 7g8e G*5h R*2g P*4g G*3g 4e4f N*4i 4f3g+ 4i5g 4d5e 2g3g 5e6f 3g4g B*3h 4g4c+ 3h7d+ P*5i 5h5i P*7i 7h6h S*8h S*7g 8h7g 6f7g S*8f 7g6g S*7g 7f7g+ 8f7g 6g7g 4c5c 7d8e 5c6d N*6f 5a6b+ G*7d 6d6c 7d8d 6c5d 7g8h 8g8f 8e7f 5d8d 8h9i B*6e P*8g 6e7f 7e7f B*5e 6h6g 5e9a+ 7f7g+ 9a9b 6g5g 8d9d P*9h 9d3d P*1f 3d2d 1f1g+ 8f8e B*5h 8e8d 5h3f+ G*7b N*6g 8d8c+ 8g8h+ 9b8b 6g7i+ 2d3c S*4g 1c2b 3f1h P*4b P*6h 4b4a+ 6f5h+ 4a4b P*4h 4b4c P*3g 4c4d 3g3h+ P*4b 8h8i 4b4a+ P*8g 4a4b 4g3f 4b4c 3f3g 4c3b 8i8h P*4b 8h7h 4b4a+ S*7d 4a4b 7i8i 4b4c L*2h 4c5c S*6i 5c5d 7g7f 5d5e 4h4i+ 4d4e 8g8h+ 5e4d 7d6e 4e4f P*8f P*6c 8f8g+ 4d5c 6e6f 4f3e 6f6g+ 3e4d 4i4h 4d4c 4h4g
+
+後手：Krist_483_473stb_1000k 
+後手の持駒：桂　歩三　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+| ・ 玉 ・ ・ ・ ・ ・ ・ ・|一
+| ・ 馬 金 全 金 ・ と 杏 ・|二
+| ・ と ・ 歩 と と 龍 ・ ・|三
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|四
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|五   手数=266,IsSenteTurn()=1  △47と
+| ・ ・vと ・ ・ ・ ・ ・ ・|六
+| ・vと ・v全v圭vとv銀 ・vと|七
+|v歩vとvとv歩v圭 ・vとv香v馬|八
+|v玉v圭 ・v銀v金 ・ ・ ・ ・|九
++---------------------------+
+先手の持駒：飛　金　香二　歩　
+先手：AobaZero_w878_n_p800 
+
+
+
+
+position sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1         ... 平手初期配置
+position sfen lnsg1gsnl/1r3k1b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1 moves 3c3d 5g5f 8c8d
+position sfen lnsgkgsnl/1r7/pppppp1pp/6p2/9/2P4P1/PP1PPPP1P/1S5R1/LN1GKGSNL w Bb 1
+position sfen lnsg5/3kl1+R2/p1ppppn1p/9/8+R/2P6/PPNPPPP1P/2G2S3/+b+pS1K2G1 w BSL3Pgnl 1   ... 豊島YSS14金
+position sfen 8R/kSS1S1K2/4B4/9/9/9/9/9/3L1L1L1 b PLNSGBR17p3n3g 1                        ... 最大可能手数593手
+
+position sfen ln1g4l/1ks6/2pp1+R1p1/pp7/2NSp2Pp/P1P4b1/1P1P5/2KS2+p2/LN1G3NL b PSG4pgbr 1 moves S*8c 7b8c 7e8c+ 8b8c 4c6c
+
+// ky 香落ち
+position sfen lnsgkgsn1/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1
+// ka 角落ち
+position sfen lnsgkgsnl/1r7/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1
+// hi 飛車落ち
+position sfen lnsgkgsnl/7b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1
+// 2mai 2枚落
+position sfen lnsgkgsnl/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1
+position sfen lnsgkgsnl/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1 moves 7a6b 7g7f 5c5d 2g2f 6b5c 2f2e 4a3b
+// 4mai 4枚落
+position sfen 1nsgkgsn1/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1
+// 6mai 6枚落
+position sfen 2sgkgs2/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1
+
+
+
+
+
+
+100手目まで
+position startpos moves 2g2f 8c8d 2f2e 8d8e 6i7h 4a3b 2e2d 2c2d 2h2d P*2c 2d2h 5a5b 3i3h 7a7b 9g9f 8e8f 8g8f 8b8f P*8g 8f8d 7g7f 7c7d 4g4f 7d7e 7f7e 3c3d 3h4g 7b7c 7h7g 7c6d 7g8f 8a7c 4i5h 2b8h+ 7i8h 6a7b 5i6h B*3c B*7g 6d6e 7g3c+ 2a3c 8i7g B*4d 6g6f 6e6f 4g5f P*7f 8f7f 6f7g+ 7f7g N*7f 7g7f 4d8h+ 8g8f S*8g 5h6g 8g7f+ 6g7f 8h8g S*7g G*7h 6h6g 7h7g 7f7g 8g8f 7g8f 8d8f P*6d G*6f 6g5h 8f8h+ N*6h 6f5f 5g5f S*6i 5h6i 8h9i 6i5h 9i3i 2h1h 3i2i 6d6c+ 7b6c S*7b L*6a B*8c 3b2b 7b6a 5b4b L*4d N*5a S*5b 4b3b 5b5a 4c4d N*4c L*4a 6a5b 4a4c
+90手目から。sfen の数値は次の手が何手目か、を示す。平手なら1
+position sfen l2S2s1l/5k1g1/pBngppnpp/6p2/2P6/P3PP3/6P1P/3NK3R/7+rL b 3PLS2GB3pns 91 moves L*4d N*5a S*5b 4b3b 5b5a 4c4d N*4c L*4a 6a5b 4a4c
+85手目から
+position sfen l5s1l/2S1k1g2/p1ngppnpp/6p2/2P6/P3PP3/6P1P/3NK3R/7+rL w 3PS2G2B3plns 86 moves L*6a B*8c 3b2b 7b6a 5b4b L*4d N*5a S*5b 4b3b 5b5a 4c4d N*4c L*4a 6a5b 4a4c
+
+
+
+
+保木さんのusi-test, data/w485-out_head5.txt の最初の局面。後手の可能手が4つ
+position startpos moves 3i3h 4c4d 4g4f 3c3d 7g7f 8b4b 3h4g 3a3b 4g5f 2b3c 2h4h 5a6b 4i5h 6b7b 5i6h 7a6b 1g1f 4a5b 3g3f 1c1d 2i3g 3b4c 6h7h 5c5d 3g2e 3c2b 4f4e 9c9d 9g9f 6b5c 8h7g 6a6b 4e4d 4c4d P*4e 4d5e 5f5e 5d5e 5g5f 5e5f S*3c 2a3c 2e3c+ S*5g 4h4i P*4h 3c4b 2b7g+ 8i7g 5b4b 4i5i 5g5h 6i5h 4h4i+ 5i4i S*5g 5h5i P*4h 4i2i 5g6f+ 6g6f 5f5g+ R*3a G*4a 3a1a+ B*5f 7h8h N*6g 7i7h 6g5i+ 2i5i G*6h S*7i 6h5i P*5d 5c5d S*5a R*5h 5a4b 5f7h+ 7i7h S*7i 8h9g 5h7h+ G*7a 7b7a 1a4a G*6a 9g8f 7i8h N*6i 5i6i L*7b 7a7b N*8d 8c8d 4a6a
+
+後手の持駒：銀　桂二　香　歩　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂 ・ 龍 ・ ・ ・ ・ ・|一
+| ・ ・v玉v金 ・ 銀 ・ ・ ・|二
+| ・ ・v歩v歩 ・ ・ ・v歩 ・|三
+|v歩v歩 ・ ・v銀 ・v歩 ・v歩|四
+| ・ ・ ・ ・ ・ 歩 ・ ・ ・|五   手数=97,IsSenteTurn()=0  ▲61龍
+| 歩 玉 歩 歩 ・ ・ 歩 ・ 歩|六
+| ・ 歩 桂 ・vと ・ ・ 歩 ・|七
+| ・v銀v龍 ・ ・v歩 ・ ・ ・|八
+| 香 ・ ・v金 ・ ・ ・ ・ 香|九
++---------------------------+
+先手の持駒：角二　金二　
+
+
+320手で引き分け。320手で8枚、先手で44点。255手で5枚、29点。
+position startpos moves 2g2f 8c8d 2f2e 4a3b 3i3h 8d8e 6i7h 7a7b 9g9f 8e8f 8g8f 8b8f P*8g 8f8b 3g3f 3c3d 2e2d 2c2d 2h2d 5a4b 2d2f P*2c 3h3g 7b8c 7g7f 8c7d 5i5h 7d6e 3f3e 3d3e 8i7g 6e5d 3g4f 6a5b 7i6h 9c9d 5g5f 9d9e 9f9e P*9g 9i9g P*8f 8g8f 8b8f P*8g 8f7f 6g6f 6c6d 6h6g 7f7d P*3c 2b3c P*3d 3c4d 8h7i 6d6e 7i5g 3e3f 4f3e 4d3e 5g3e P*9f B*8e 7d8d 9g9f S*7d 8e7d 8d7d S*8e 7d6d 6f6e 6d6b 3e5g 5d4e 9e9d P*9b 5h6i 3f3g+ 2i3g B*1e P*2g 4e3d P*3e 1e2f 2g2f P*3f 3g2e 3d2e 2f2e 3f3g+ 6g5h 1c1d B*5e R*2i 4i3i 2i1i+ 5e3g 1i1h 3g5e L*5d 5e1a 5d5f 1a6f+ 5f5g+ 6f5g P*3h S*2i 1h1g 2i3h P*3g 3h2i 1g2f P*5f 7c7d 8e7f 6b7b P*7c 7b7c 6e6d 7d7e P*7d 7e7f 7d7c+ 7f7g+ 6d6c+ 7g7h 6i7h P*7g 7h6g B*8e L*7f N*6e 5g7e G*5e 6c5b 4b3c G*6f S*7h 6g6h P*6g 5h6g 3c2b 6f5e 8a7c P*1c 2a1c L*3d 1c2e 7e5c N*6c 5e6e 2b1c 3d3b+ 7h6g+ 6h6g 8e7f 6g7g 3a3b R*1a L*1b G*3d S*2b 7g7f 2f5f G*6f 5f5c 5b5c 3b3c 5c6c 3c3d 6c7c 2b1a 3e3d B*6h 7f7e R*7i N*7f 7i3i+ 3d3c+ G*2b 3c3d L*3c 3d3c P*7d 7c7d 3i2i 3c2b 1a2b R*3b S*3a 3b5b+ P*7c 7d7c 3g3h+ 7e8d P*7b 7c7b 6h3e+ 8d7c 3e2f 7c8b 1c2d 8b9a 2d1e P*3b 1e1f 3b3a+ 2b3a P*3b 3a2b 3b3a+ 2b3a P*3b 3a2b 3b3a+ 2b3a P*3b 3a2b 3b3a+ 2b3a P*3b 3a2b 3b3a+ 2b3a P*3b 3a2b 3b3a+ 2b3a 5b1b 1f1g 1b1d 1g2h 1d2c 2h1i 2c4c 2e3g+ 4c5b P*1h 5b4a 2f3f 4a3a 3f7b S*8b 7b2g P*7b 2i4i 7f8d 4i4g 8d9b+ 4g8g 9d9c+ 8g9f 6f7e P*4f 6e7d 4f4g+ 7e8d 3h4h 8d7c 9f4f 7d8c G*6c 7c6c 2g6c G*7c 6c6d 3a6a G*7d G*6c 6d6e 7c7d 6e7d G*7c 7d5f P*5b G*8d 8c8d P*5a 5b5a+ P*8a 9b8a P*7a 7b7a+ P*9b 9c8c L*6b 6a6b P*7b 7a7b P*6a 7b6a 5f4e P*7b 4e6c 7c6c G*6d 6c6d P*2h 6d6e P*6d 6e6f 4f6f 8d7c G*9c 8c9c 9b9c G*8c 6f8f 8c9b 8f8b 9b8b 1i2i P*2b S*8d P*3b 8d7c 6b7c 9c9d 7c6b 9d9e
+
+後手：Novice
+後手の持駒：金　歩二　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+| 玉 圭 ・ と と ・ ・ ・ ・|一
+| ・ 金 歩 龍 ・ ・ 歩 歩 ・|二
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|三
+| ・ ・ ・v歩 ・ ・ ・ ・ ・|四
+|v歩 ・ ・ ・ ・ ・ ・ ・ ・|五   手数=320,IsSenteTurn()=1  △95歩
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|六
+| ・ ・ ・ ・ ・vとv圭 ・ ・|七
+| ・ ・ ・ ・ ・vと ・v歩v歩|八
+| ・ ・ ・ ・ ・ ・ ・v玉 ・|九
++---------------------------+
+先手の持駒：飛　角二　金二　銀四　桂二　香四　歩五　
+先手：Aoba Zero
+
+
+setoption name USI_WeightFile value /home/yss/test/extract/20200308_180743_win500k_swa_lr0_m128_w857_iter_6000.txt
+setoption name USI_WeightFile value ../../test/extract/w000000001115.txt
+
+
+5手詰見逃し、256手で引き分け。
+position startpos moves 7g7f 3c3d 2g2f 8c8d 2f2e 8d8e 6i7h 4a3b 2e2d 2c2d 2h2d 8e8f 8g8f 8b8f 2d3d 2b3c 5i5h 5a5b 3g3f 3a4b 2i3g 3b2c 3d3e 8f8b 3i3h 2c2d 3e6e P*2g P*2i 4c4d 9g9f 7a6b 8i9g 7c7d 6e8e P*8d 8e3e 2d3e 3f3e 2g2h+ 2i2h 8a7c 3e3d 3c2d 8h4d 7c6e 7i6h R*5d 4d6f 6b7a G*4e 6e5g+ 6h5g 5d5g+ 6f5g S*6i 5h6i 2d5g+ S*6h 5g5f R*2f 5f6e 2f2b+ P*4d 4e4f 6a5a 2b1a 6e7f P*7g 7f4c N*3e 4c3b 1a1b P*2b L*2g 4b3a 2g2c+ 2b2c 3e2c+ L*1a 1b3b 3a3b 2c3b R*8i 7h7i B*8g 6i5h 8i9i+ S*8h 9i7i 8h7i 8g3b+ B*7f G*4c 3d3c+ 2a3c P*3d 5c5d 3d3c+ 3b3c P*5e N*3d 4f3f 3c4b P*3e 5b6a 3e3d 4b9g 3d3c+ 4c3c 3g2e 3c3d P*3e 3d4e 3f4e 4d4e G*7c L*5f N*5g 5f5g 5h5g 9g6d 7c8b 6d8b R*2a P*3g 3h3g P*3a 2a3a+ G*5b N*4d 5b6b P*8c 8b6d 3a1a P*3a 5g4h N*5f 4h3h 5f6h+ 7i6h 6d5e P*5b 5a4a 1a1c S*3f 3g3f G*3g 3h3i N*5f R*3h 3g3h 4i3h 5f6h+ 3i2i 5e4d S*8b N*2f L*7c 7a8b 8c8b+ R*5i L*3i 4a5b S*3g 2f3h+ 2i3h P*2f 3g2f 6h5h 3h2g 5i3i+ P*5c 6b5c N*6e 5c4c P*5c 5b5c 7c7b+ 6a5b 6e5c+ 5b5c G*3d 3i3f 2g3f N*2d 3d2d 5h5g 2e3c+ P*2c 1c2c 4d3c 2d3c N*4d 3f2g S*3f 2g1f P*1e 1f1e G*2e 2f2e S*2f 1e1d L*1a N*1c 3f2e 1d2e P*2d 2e2f 2d2e 2c2e S*3g 2f2g S*2f 2g1f 1a1c N*1d N*2d 2e2d 2f1g+ 1f1e 1g1f 1e1f 1c1d 1f2e 3g2f+ 2e1d P*1c 1d2c N*1a 2c2b 4c3c
+
+後手：Krist_483_473stb_100k 
+後手の持駒：金　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香 ・ ・ ・ ・ ・v歩 ・v桂|一
+| ・ と 杏 ・ ・ ・ ・ 玉 ・|二
+|v歩 ・ ・v歩v玉 ・v金 ・v歩|三
+| ・v歩v歩 ・v歩v桂 ・ 龍 ・|四
+| ・ ・ ・ ・ ・v歩 歩 ・ ・|五   手数=232,IsSenteTurn()=1  △33金
+| 歩 ・ 角 ・ ・ ・ ・v全 ・|六
+| ・ ・ 歩 歩v圭 歩 ・ ・ ・|七
+| ・ ・ ・ ・ ・ ・ ・ 歩 ・|八
+| ・ ・ ・ ・ ・ ・ ・ ・ 香|九
++---------------------------+
+先手の持駒：飛　角　金二　銀三　桂　香　歩三　
+先手：AobaZero_w1465_n_p800 
+http://wdoor.c.u-tokyo.ac.jp/shogi/view/2020/07/11/wdoor+floodgate-300-10F+AobaZero_w1465_n_p800+Krist_483_473stb_100k+20200711170005.csa
+
+
+256手制限で頓死
+position startpos moves 7g7f 7a6b 2g2f 8c8d 2f2e 4a3b 6i7h 3c3d 2e2d 2c2d 2h2d 5a4b 2d3d 8d8e 3d2d P*2c 2d2h 7c7d 8h7g 2b7g+ 7h7g 3a2b 4i5h 6b7c 6g6f 7c6d 7i8h 8e8f 8g8f 7d7e 5h6g 4b3a 8h8g 2a3c 5i6i 7e7f 8g7f B*1d B*3f 1d3f 3g3f B*5e 2h1h P*8h 5g5f 5e1i+ 1h1i 8h8i+ 6f6e 6d7c 2i3g 8b8d 3i4h 8i9i B*5e L*2f P*7d 8d7d B*8c L*7b 8c7d+ 7c7d 3f3e 7d7e 7f7e 7b7e P*7f 2f2h+ 3e3d 2h1i 3d3c+ 2b3c 3g4e B*2d 4g4f R*2i P*3i 3c4d P*2b 3a4b N*3f 4d5e 3f2d 2i2d+ 5f5e N*4a 2b2a+ N*3f 4h3g 8a7c B*8c P*7b R*8a S*7a S*6b 6a6b 8a7a+ 6b5b S*6a 5b5a S*6b B*4g 6i7h 4c4d 6b5a 4b4c 7a7b 7c6e 7b5b 4c3d 5b3b P*3c 3b4a S*3e 7f7e 2d1e G*1f 1e1f 1g1f 1c1d 7h8g 6e7g+ 8g7g P*7f 7g7f 4g8c+ 4e3c+ 3d2e G*2g 8c9d N*8e G*6e 7f6e 9d8c N*7d 6c6d 6e6f B*4h G*5g 4h3g+ 2g3g 8c6a P*6e S*2h 3g3h 2e1f 6e6d 2h1g 6d6c+ 3f2h+ 6f6e 2h3h 3i3h 5c5d 6e5d 6a2e 5d5c 3e2f 5c6b G*6a 6b5c 9i9h 7d6b+ 6a5a 6b5a 1d1e 5c6b S*8b G*7b 8b8c 7b7c 8c8d 7c8b 9h9g 8b9a 2c2d 9a9b 8d7e 9b9c 9g8g 9c8b P*6f 6g5f 8g7g 5g6f 7g7f 6f7e 7f7e 5f6e 7e6e 5e5d 2e1d S*2c 1d3f 5d5c+ S*6d P*7b 2d2e P*5b 6d5c 6c5c P*8a 8b8a G*2d 8a8b 2d2c 3c2c G*5d S*4b 5d5c 4b5c+ S*6d G*4c 1g2h+ G*6c 6d5c 6c5c S*6d S*4b 6d5c 4b5c+ G*5d S*4b 5d5c 4b5c+ S*6d G*4b 6d5c 6b5c P*6a P*6b G*5d 5c6c 5d6d 6c7c 3f6c 7c8c 6c7d 8c9c S*8d 9c9d 6d7e R*5d 6e6d 5d6d 7d6d 9d8c 6d7d 8c9d R*9e
+
+後手：elmo_WCSC27_479_4t_10m 
+後手の持駒：歩二　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+| ・ ・ ・v歩 圭 龍 ・ とv香|一
+| ・ 金 歩 歩 歩 金 ・ ・ ・|二
+| ・ ・ ・ ・ ・ 金 ・ 圭 ・|三
+| 玉v銀v馬 ・ ・v歩 ・ ・ ・|四
+|v飛 桂v金 ・ ・ ・ ・v歩v歩|五   手数=250,IsSenteTurn()=1  △95飛打
+| ・ 歩 ・ ・ ・ 歩 ・v銀v玉|六
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|七
+| ・ ・ ・ ・ ・ ・ 歩v全 ・|八
+| ・ ・ ・ ・ ・ ・ ・ ・v杏|九
++---------------------------+
+先手の持駒：角　銀　桂　香二　歩五　
+先手：AobaZero_w1525_n_p800 
+http://wdoor.c.u-tokyo.ac.jp/shogi/view/2020/07/19/wdoor+floodgate-300-10F+AobaZero_w1525_n_p800+elmo_WCSC27_479_4t_10m+20200719140005.csa
+
+
+宣言勝ちと千日手が絡んでバグってるぽい
+position startpos moves 7g7f 9c9d 2g2f 3c3d 2f2e 2b8h+ 7i8h 3a2b 5i6h 2b3c 3i3h 6a6b 8h7g 8c8d 3g3f 4a4b 3h3g 8d8e 3g4f 7c7d 6i7h 8a7c 6g6f 8b8d 3f3e 3d3e 4f3e 4b3b 4i5h 7a7b 2e2d 3c2d 3e2d 2c2d 2h2d P*2c 2d2h B*6d S*4f 4c4d B*6g S*4e 2h2f 6b5b 9g9f 4e4f 4g4f S*3e 2f2e 3e2d 2e2f 2d3e 2f2e 3e2d 2e2f 2d3e 2f2e 3e2d 2e2h 6d4f P*3g 2a3c 6g5f 3c4e 5h4g 2d3e 2h4h 4f5g+ 4g5g 4e5g+ 6h5g G*4f 4h4f 3e4f 5g4f R*4i 4f5g 4i8i+ S*7i 7d7e G*7d N*6e 6f6e 8d7d 7g6f G*4e 5f6g 7e7f S*8h 7d5d P*5f 7f7g+ 7h7g P*7h 7g7h 6c6d 6e6d P*6e 6f7g P*7f 7g7f P*7e 7f7e 8e8f 8g8f 4e5f 6g5f 5d5f 5g5f B*3d 5f4g 3d7h+ B*1e G*2d R*7a 7b6a 7i7h 8i2i 6d6c+ 5b6c N*5e 2d1e 5e6c 5a4b B*5a 4b4c 5a1e+ 2i4i P*4h N*5e 4g5f 4i5h P*5g B*4e 5f5e 5h5g 5e6d 5g5d 6d7c 6a6b 7c8b 6b7a 8b7a R*7b 7a8a 7b7e G*8b 5d8d N*5e 4c5d G*8c S*9c 8c8d 9c8b 8a8b G*9b 8b8a 7e7h+ S*7c 5d5e S*6d 5e6f G*7i 6f5g 7i7h 4e7h+ 1e2e S*4i 2e4g 5g6h 4g6e 3b4c 6e4c N*5a 4c4d P*8g 8h8g 7h8g 4d5c G*6a P*7b S*5g 7b7a+ P*5h 7a6a 8g8h 6a6b 5h5i+ 6b5b 8h9i 5b4b 4i5h+ P*5b P*6g 5b5a+ 2c2d 5a5b L*3c 5b6a 5g4h+ P*5b 6h5g 5b5a+ 9i7g 5a5b 2d2e 5b4a P*5f P*5b 7g6f 5b5a+ 2e2f P*5b 2f2g+ P*7b 6f8d G*8b 9b8b 7c8b+ G*8c G*7c 8c8b 7c8b G*8c G*7c 8c8b 7c8b G*8c G*7c 8c8b 7c8b G*8c G*7c 8c8b
+
+後手：amamus 
+後手の持駒：金　銀　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香 玉 ・ と と と ・ ・v香|一
+| ・v金 歩 ・ 歩 と ・ ・ ・|二
+| ・ ・ 金 桂 馬 ・v香 ・v歩|三
+|v歩v馬 ・ 銀 ・ ・ ・ ・ ・|四
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|五   手数=234,IsSenteTurn()=1  △82金
+| 歩 歩 ・ ・v歩 ・ ・ ・ ・|六
+| ・ ・ ・v歩v玉 ・ 歩vと 歩|七
+| ・ ・ ・ ・v全v全 ・ ・ ・|八
+| ・ ・ ・ ・vと ・ ・ ・ 香|九
++---------------------------+
+先手の持駒：飛二　金　桂三　歩二
+先手：AobaZero_w1545_n_p800 
+http://wdoor.c.u-tokyo.ac.jp/shogi/view/2020/07/22/wdoor+floodgate-300-10F+AobaZero_w1545_n_p800+amamus+20200722200007.csa
+
+▲91馬と捨ててしまう。△91同馬を完全に読み抜け。51手目で次に△91同馬を指せるか、という局面。
+position startpos moves 7g7f 3c3d 2g2f 8c8d 2f2e 8d8e 6i7h 4a3b 2e2d 2c2d 2h2d 8e8f 8g8f 8b8f 2d3d 2b3c 5i5h 5a4b 3g3f 3a2b 2i3g 8f8b P*8d 2b2c 3d3e 8b8d P*2b P*3d 3e6e 6c6d P*8e 8d9d 6e7e 3b2b 9g9f 7a6b 3g4e 3c8h+ 7i8h B*3g 9f9e 9d7d 7e7d 7c7d B*8c 6a5a 8c7b+ 6d6e 7b8a 3g1i+ 8a9a
+後手：
+後手の持駒：飛　香　歩三　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香 馬 ・ ・v金 ・ ・v桂v香|一
+| ・ ・ ・v銀 ・v玉 ・v金 ・|二
+|v歩 ・ ・ ・v歩v歩 ・v銀v歩|三
+| ・ ・v歩 ・ ・ ・v歩 ・ ・|四
+| 歩 歩 ・v歩 ・ 桂 ・ ・ ・|五   手数=50,IsSenteTurn()=1  △19角成
+| ・ ・ 歩 ・ ・ ・ 歩 ・ ・|六
+| ・ ・ ・ 歩 歩 歩 ・ ・ 歩|七
+| ・ 銀 金 ・ 玉 ・ ・ ・ ・|八
+| 香 桂 ・ ・ ・ 金 銀 ・v馬|九
++---------------------------+
+先手の持駒：飛　桂　
+先手：
+https://bleu48.hatenablog.com/entry/2020/07/23/034057
+
+左右反転
+position sfen ln2g3+B/1g1k1s3/ps1pp3p/2p3p2/3N1p1PP/2P3P2/P2PPP3/4K1GS1/+b1SG3NL w LNR3plr 52
+左右反転 (角成)
+position sfen ln2g3+B/1g1k1s3/ps1pp3p/2p3p2/3N1p1PP/2P3P2/P2PPP3/4K1GS1/b1SG3NL w LNR3plr 52
+手順なし
+position sfen +B3g2nl/3s1k1g1/p3pp1sp/2p3p2/PP1p1N3/2P3P2/3PPP2P/1SG1K4/LN3GS1+b w LNR3plr 52
+手順なし (角成)
+position sfen B3g2nl/3s1k1g1/p3pp1sp/2p3p2/PP1p1N3/2P3P2/3PPP2P/1SG1K4/LN3GS1+b w LNR3plr 52
+
+左右反転 (先手番)
+position sfen ln2g3+B/1g1k1s3/ps1pp3p/2p3p2/3N1p1PP/2P3P2/P2PPP3/4K1GS1/+b1SG3NL b LNR3plr 53
+左右反転 (先手番)(角成)
+position sfen ln2g3+B/1g1k1s3/ps1pp3p/2p3p2/3N1p1PP/2P3P2/P2PPP3/4K1GS1/b1SG3NL b LNR3plr 53
+手順なし (先手番)
+position sfen +B3g2nl/3s1k1g1/p3pp1sp/2p3p2/PP1p1N3/2P3P2/3PPP2P/1SG1K4/LN3GS1+b b LNR3plr 53
+手順なし (先手番)(角成)
+position sfen B3g2nl/3s1k1g1/p3pp1sp/2p3p2/PP1p1N3/2P3P2/3PPP2P/1SG1K4/LN3GS1+b b LNR3plr 53
+
+△92馬(29) (-2992UM)
+position sfen 4g2nl/+B2s1k1g1/p3pp1sp/6p2/PPp2N3/2Pp1PP2/3PP3P/1SG1K4/LN3GS+b1 w LNR3plr 52
+左右反転
+position sfen ln2g4/1g1k1s2+B/ps1pp3p/2p6/3N2pPP/2PP1pP2/P3PP3/4K1GS1/1+bSG3NL w LNR3plr 52
+position sfen 4g2nl/+B2s1k1g1/p3pp1sp/6p2/PPp2N3/2Pp1PP2/3PP3P/1SG1K4/LN3GS+b1 b LNR3plr 53
+position sfen ln2g4/1g1k1s2+B/ps1pp3p/2p6/3N2pPP/2PP1pP2/P3PP3/4K1GS1/1+bSG3NL b LNR3plr 53
+
+
+
+△52龍(58) (-5852RY)
+position sfen ksg3+P1+R/lgg1B4/1pn2pP2/p1pp3Pp/P6n1/LL6P/NSGP1P3/1S2+r4/1KS3+p1L w 3Ppnb 158
+左右反転
+position sfen +R1+P3gsk/4B1ggl/2Pp2np1/pP3pp1p/1n6P/P6LL/3P1PGSN/4+r2S1/L1+p3SK1 w 3Ppnb 158
+
+後手：名人コブラ
+後手の持駒：角　桂　歩　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v玉v銀v金 ・ ・ ・ と ・ 龍|一
+|v香v金v金 ・ 角 ・ ・ ・ ・|二
+| ・v歩v桂 ・ ・v歩 歩 ・ ・|三
+|v歩 ・v歩v歩 ・ ・ ・ 歩v歩|四
+| 歩 ・ ・ ・ ・ ・ ・v桂 ・|五   手数=228,IsSenteTurn()=1  △39歩成
+| 香 香 ・ ・ ・ ・ ・ ・ 歩|六
+| 桂 銀 金 歩 ・ 歩 ・ ・ ・|七
+| ・ 銀 ・ ・v龍 ・ ・ ・ ・|八
+| ・ 玉 銀 ・ ・ ・vと ・ 香|九
++---------------------------+
+先手の持駒：歩三　
+先手：Aoba Zero
+
+
+
+▲11角成(99) (+9911UM)
+position startpos moves 7g7f 3c3d 2g2f 1a1b 2f2e 2b1a 9g9f 9c9d 9i9g 7a6b 8h9i 5c5d 6i7h 6b5c
+
+position sfen ln1gkgsnb/1r6l/1pppsp1pp/p3p1p2/7P1/P1P6/LP1PPPP1P/2G4R1/BNS1KGSNL b - 15
+position sfen bnsgkg1nl/l6r1/pp1psppp1/2p1p3p/1P7/6P1P/P1PPPP1PL/1R4G2/LNSGK1SNB b - 15
+
+後手：
+後手の持駒：
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂v銀v金v玉 ・v銀v桂v角|一
+| ・v飛 ・ ・ ・ ・v金 ・ ・|二
+|v歩 ・v歩v歩v歩v歩 ・v歩v香|三
+| ・ ・ ・ ・ ・ ・v歩 ・v歩|四
+| ・v歩 ・ ・ ・ ・ ・ ・ ・|五   手数=14,IsSenteTurn()=1  △53歩
+| ・ ・ 歩 ・ 歩 ・ ・ ・ 歩|六
+| 歩 歩 ・ 歩 銀 歩 歩 歩 ・|七
+| 香 ・ ・ ・ ・ ・ ・ 飛 ・|八
+| 角 桂 銀 金 玉 金 ・ 桂 香|九
++---------------------------+
+先手の持駒：
+先手：
+
+
+空き王手で5手詰
+position startpos moves 7g7f 8c8d 2h6h 8d8e 8h7g 7a6b 1g1f 1c1d 7i7h 5a4b 2g2f 3c3d 6h2h 4a3b 6g6f 7c7d 7h6g 6b7c 2f2e 7d7e 7f7e 7c6d 7e7d 8b8d 2e2d 2c2d 2h2d 8d7d 2d2b+ 3a2b 6f6e 6d7c P*2c 2b3c B*8c 7d7g+ 8i7g P*7b 6g5h 3b3a 6e6d 6c6d 7g8e 7c6b P*7c B*2g 1f1e P*2h 3i2h 2g6c+ 1e1d P*1h 1i1h R*2e 1d1c+ 2a1c 2h3i 2e2i+ 1h1c N*6f 4g4f 2i1h 8g8f 6f5h+ 6i5h 1h1c N*2e 1c2c 2e3c+ 2c3c N*7e 6c5d 7c7b+ 6a7b 8c7d+ P*7c R*5b 4b4a
+
+後手：az_kai_0723 
+後手の持駒：銀　桂　香　歩二　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂 ・ ・ ・v玉v金 ・v香|一
+| ・ ・v金v銀 飛 ・ ・ ・ ・|二
+|v歩 ・v歩 ・v歩v歩v龍 ・ ・|三
+| ・ ・ 馬v歩v馬 ・v歩 ・ ・|四
+| ・ 桂 桂 ・ ・ ・ ・ ・ ・|五   手数=78,IsSenteTurn()=1  △41玉
+| ・ 歩 ・ ・ ・ 歩 ・ ・ ・|六
+| 歩 ・ ・ ・ 歩 ・ 歩 ・ ・|七
+| ・ ・ ・ ・ 金 ・ ・ ・ ・|八
+| 香 ・ ・ ・ 玉 金 銀 ・ ・|九
++---------------------------+
+先手の持駒：銀　歩五　
+先手：Krist_483_473stb_16t_100m 
+
+
+角飛を連続で素抜かれる
+position startpos moves 2g2f 8c8d 2f2e 8d8e 6i7h 4a3b 2e2d 2c2d 2h2d P*2c 2d2f 7a7b 1g1f 1c1d 3i3h 5a4b 3g3f 3c3d 3h3g 7c7d 3g4f 8a7c 5i5h 8e8f 8g8f 8b8f P*8g 8f8e 4i4h 2b4d 3f3e 3d3e 7g7f 3e3f 8h4d 4c4d 7i8h 3a2b 4h3h 2b3c 8i7g 8e8d B*6f 7d7e 2f3f B*5d 3f2f 5d7f 4f3e P*3d 6f7e 8d7d 2f7f 3d3e
+
+後手：az_kai_0723 
+後手の持駒：銀　歩二　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香 ・ ・v金 ・ ・ ・v桂v香|一
+| ・ ・v銀 ・ ・v玉v金 ・ ・|二
+|v歩 ・v桂v歩v歩 ・v銀v歩 ・|三
+| ・ ・v飛 ・ ・v歩 ・ ・v歩|四
+| ・ ・ 角 ・ ・ ・v歩 ・ ・|五   手数=54,IsSenteTurn()=1  △35歩
+| ・ ・ 飛 ・ ・ ・ ・ ・ 歩|六
+| 歩 歩 桂 歩 歩 歩 ・ ・ ・|七
+| ・ 銀 金 ・ 玉 ・ 金 ・ ・|八
+| 香 ・ ・ ・ ・ ・ ・ 桂 香|九
++---------------------------+
+先手の持駒：角　歩三　
+先手：Krist_483_473stb_16t_100m 
+
+
+先日の馬の話と同じですが角換わりで１８の角が８１に成る筋を読めず
+position startpos moves 2g2f 8c8d 2f2e 8d8e 7g7f 4a3b 8h7g 3c3d 7i8h 2b7g+ 8h7g 3a2b 3i3h 2b3c 3g3f 7a6b 3h3g 6c6d 3g4f 6b6c 5i6h 6c5d 6h7h 4c4d 5g5f 6a5b 3f3e 5d4c 6i6h 5a4b 9g9f 9c9d 6g6f 1c1d 4i5h 1d1e 3e3d 4c3d 7h8h 4b3a 6h7h 3a2b 5h6h 7c7d 4f5e 8b6b 6h6g B*4i B*1h P*3h
+
+
+連続王手の千日手で負け。
+position startpos moves 2g2f 8c8d 2f2e 4a3b 9g9f 8d8e 6i7h 9c9d 2e2d 2c2d 2h2d P*2c 2d2h 3c3d 3i4h 8e8f 8g8f 8b8f P*8g 8f8b 4g4f 7a7b 4h4g 7b8c 7g7f 8c8d 8h2b+ 3a2b 7i8h 2b3c 8h7g 1c1d 3g3f 5a4b 2i3g 9d9e 9f9e P*9f 7g8f 4b3a 4i5h 8d9e 8f9e 9a9e P*9h 4c4d 2h2e 3d3e 5i6h 3c2d 2e2h 3e3f 4g3f 6a5a B*5e B*5d 4f4e 5a4b P*3d S*8e S*7g P*8f 8g8f 8e8f 7g8f 8b8f S*8g 8f8e 5e7g S*4f 5h4h P*3c P*8f 8e8b 7g4d 4b4c 3d3c 2a3c 4d8h 4c3d 8h6f P*8h 6f8h 5d6e P*3e 2d3e 3f3e 4f3e P*3f 3e4f S*3e 3d3e 3f3e P*3f 3e3d 3f3g+ 3d3c+ 3g4h 8h4d S*8h 4d5c+ P*4b 3c3b 3a3b P*3c 3b2b G*3b 2b1c 2h4h N*5f 5g5f S*5g 6h6i 8b8d 7h8h 5g4h 6i7i R*2i N*6i 6e5f P*2e G*1b 5c4b 1d1e G*3f 4h3g 1g1f 2i1i+ S*2b 1b2b 3b2b L*2a 3f3g S*5h G*6h 5h6i 6h6i 4f3g P*5i 1i1f 4b7e 8d3d 2b2a 1c1d 7e5c 5f4g+ S*5h 4g4f S*5g 4f4e L*4i P*4g 4i4g 4e1h 3c3b+ 3g2f+ 2a1a 3d3h+ P*4i 1d2e 5g4h N*2g 3b3c 1f1g 5c5b P*3d P*1i 1h1i 3c3d P*5a 5b4c P*4b 4c6a 2g3i+ 3d3e 2e3e P*3g P*3f 4h3i 3h3i 6a6b 3e2e 6b6a 2e3e 6a6b 3e2e 6b6a 2e3e 6a6b 3e2e
+
+後手：dlshogi 
+後手の持駒：金　銀　歩二　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+| ・v桂 ・ ・v歩 ・ ・ ・ 金|一
+| ・ ・ ・ 馬 ・v歩 ・ ・ ・|二
+| ・ ・v歩v歩 ・ ・ ・v歩 ・|三
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|四
+|v香 ・ ・ ・ ・ ・ ・v玉v歩|五   手数=190,IsSenteTurn()=1  △25玉
+|v歩 歩 歩 ・ ・ ・v歩v全 ・|六
+| ・ 銀 ・ 歩 ・ 香 歩 ・v龍|七
+| 歩 金 ・ ・ 銀 ・ ・ ・ ・|八
+| 香 桂 玉 金 歩 歩v龍 ・v馬|九
++---------------------------+
+先手の持駒：桂二　香　歩　
+先手：aobazero 
+
+宣言勝ち内部のバグ(2手前の局面で△69銀打や△68歩打で勝ちと勘違い)
+https://github.com/kobanium/aobazero/issues/44
+position startpos moves 2g2f 8c8d 2f2e 8d8e 7g7f 4a3b 8h7g 3c3d 7i8h 2b7g+ 8h7g 3a2b 6i7h 2b3c 3i3h 7a7b 3g3f 7c7d 5i6h 7b7c 2i3g 7c6d 4g4f 5a4b 3h4g 7d7e 7f7e 6d7e P*7f 8e8f 8g8f 7e8f 7g8f 8b8f P*8g 8f7f B*8c 6a5b 8c6e+ 7f7a 6e6f 6c6d 4i5h 8a7c 3f3e 7c6e 3e3d 3c3d P*7b 7a8a 2e2d 2c2d 2h2d 3b2c 2d2i P*2g 3g4e P*7f 6f7f 4c4d P*3e 3d3e P*3f 3e2f 6g6f P*7g 8i7g 6e7g+ 7f7g 4d4e 4f4e P*4c 4e4d 4c4d P*4c 4b3b 7g7f B*5d 7f5d 5c5d B*9f P*8e 7b7a+ 8a7a 9f8e S*7d P*7b 7a7b 8e6g N*5e S*4a 3b4a 6g2c+ 4a5a 4g5f P*7g 7h7g N*8e P*7h 8e7g+ 7h7g P*7f 7g7f 7d8e 5f5e 8e7f 4c4b+ 5b4b 5e5d B*9e N*8f 7f8g+ N*7d 7b7d P*4c 7d7g+ 6h6i 4b5b P*7c S*7h 6i5i 7g7c G*4b 5b4b 4c4b+ 5a6a 2c3d 6a7a 3d4d P*5c P*7b 7a8a G*3h 9e8f 5i4h N*4f 4d2f 4f5h+ 4h3g N*3d 7b7a+ 8a8b 2f3e 5c5d 3e3d G*1e P*2f S*2h 2i2h 2g2h+ 3g2h P*3g 3h3g P*2g 2h2g 8f5i+ S*3h P*2e 3d2e 1e2e N*9e 5i9e 2f2e P*2f 3g2f 8b8c 7a7b 7c7b P*8h 8g8h P*7c 7b7c P*8e 9e8e 4b4a 8c7d S*9f 8e7f P*7i 8h7i 2e2d 7d7e N*8h 7e6f 8h7f 6f5g 4a3a 5g6h B*9e P*7g 9e7c+ R*3i 7c6d 3i3h+ 2g3h G*4h 3h2h B*4i R*2g 4i3h+ 2h1h S*2i 2g2i 3h2i 1h2i R*3i 2i1h 3i3h+ G*2h 3h4i 3a2a 4h3h 2h3h 4i3h G*2h 3h4i S*3h 4i5i 1h2g P*4g 2a1a 4g4h+ 2d2c+ 4h3h 2h3h N*3d B*3e P*4f 3e1c+ 5i2i N*2h P*2b 2c2d P*1e L*3i P*3g 3f3e 3g3h+ 2g3f 3d2f R*6b 2i3i 3f2e 3h2h 6d5d 7h6g 6b4b+ L*2c 1c2b 2c2d 2e2d N*4a 4b4a G*1d 2d1d 3i3e 4a4d S*2e 1d1c G*1d 1c1b G*3a 4d3e 3a2b 1b2b B*1c 2b3b 1c3e 5d4e G*3d 4e3e 3d3e 3b3a 6g7f+ 1g1f 1e1f 1i1f 2e1f R*6a R*6g 6a4a+ 6g3g+ B*3b 7f6g 3b1d+ 7g7h+ G*3b 2f3h+ P*4b 1f2g 4a9a 7i8i 9f8g 8i9i 8g7h 6g7h 9a9c 3e3f 1d2c S*8h 9g9f 4f4g+ 9c6c 6h7i 2c2b 3g4h G*8g 3f3g 8g8h 7h8h S*7g P*8g 7g8h 8g8h+ N*1i G*7h 1i2g 2h2g S*6g S*6i 6g7h 6i7h+ S*6g S*6i 6g7h 6i7h+ S*6g S*6i 6g7h 6i7h+ S*6g S*6i 6g7h
+
+position startpos moves 2g2f 8c8d 2f2e 8d8e 7g7f 4a3b 8h7g 3c3d 7i8h 2b7g+ 8h7g 3a2b 6i7h 2b3c 3i3h 7a7b 3g3f 7c7d 5i6h 7b7c 2i3g 7c6d 4g4f 5a4b 3h4g 7d7e 7f7e 6d7e P*7f 8e8f 8g8f 7e8f 7g8f 8b8f P*8g 8f7f B*8c 6a5b 8c6e+ 7f7a 6e6f 6c6d 4i5h 8a7c 3f3e 7c6e 3e3d 3c3d P*7b 7a8a 2e2d 2c2d 2h2d 3b2c 2d2i P*2g 3g4e P*7f 6f7f 4c4d P*3e 3d3e P*3f 3e2f 6g6f P*7g 8i7g 6e7g+ 7f7g 4d4e 4f4e P*4c 4e4d 4c4d P*4c 4b3b 7g7f B*5d 7f5d 5c5d B*9f P*8e 7b7a+ 8a7a 9f8e S*7d P*7b 7a7b 8e6g N*5e S*4a 3b4a 6g2c+ 4a5a 4g5f P*7g 7h7g N*8e P*7h 8e7g+ 7h7g P*7f 7g7f 7d8e 5f5e 8e7f 4c4b+ 5b4b 5e5d B*9e N*8f 7f8g+ N*7d 7b7d P*4c 7d7g+ 6h6i 4b5b P*7c S*7h 6i5i 7g7c G*4b 5b4b 4c4b+ 5a6a 2c3d 6a7a 3d4d P*5c P*7b 7a8a G*3h 9e8f 5i4h N*4f 4d2f 4f5h+ 4h3g N*3d 7b7a+ 8a8b 2f3e 5c5d 3e3d G*1e P*2f S*2h 2i2h 2g2h+ 3g2h P*3g 3h3g P*2g 2h2g 8f5i+ S*3h P*2e 3d2e 1e2e N*9e 5i9e 2f2e P*2f 3g2f 8b8c 7a7b 7c7b P*8h 8g8h P*7c 7b7c P*8e 9e8e 4b4a 8c7d S*9f 8e7f P*7i 8h7i 2e2d 7d7e N*8h 7e6f 8h7f 6f5g 4a3a 5g6h B*9e P*7g 9e7c+ R*3i 7c6d 3i3h+ 2g3h G*4h 3h2h B*4i R*2g 4i3h+ 2h1h S*2i 2g2i 3h2i 1h2i R*3i 2i1h 3i3h+ G*2h 3h4i 3a2a 4h3h 2h3h 4i3h G*2h 3h4i S*3h 4i5i 1h2g P*4g 2a1a 4g4h+ 2d2c+ 4h3h 2h3h N*3d B*3e P*4f 3e1c+ 5i2i N*2h P*2b 2c2d P*1e L*3i P*3g 3f3e 3g3h+ 2g3f 3d2f R*6b 2i3i 3f2e 3h2h 6d5d 7h6g 6b4b+ L*2c 1c2b 2c2d 2e2d N*4a 4b4a G*1d 2d1d 3i3e 4a4d S*2e 1d1c G*1d 1c1b G*3a 4d3e 3a2b 1b2b B*1c 2b3b 1c3e 5d4e G*3d 4e3e 3d3e 3b3a 6g7f+ 1g1f 1e1f 1i1f 2e1f R*6a R*6g 6a4a+ 6g3g+ B*3b 7f6g 3b1d+ 7g7h+ G*3b 2f3h+ P*4b 1f2g 4a9a 7i8i 9f8g 8i9i 8g7h 6g7h 9a9c 3e3f 1d2c S*8h 9g9f 4f4g+ 9c6c 6h7i 2c2b 3g4h G*8g 3f3g 8g8h 7h8h S*7g P*8g 7g8h 8g8h+ N*1i G*7h 1i2g 2h2g S*6g S*6i 6g7h 6i7h+ S*6g S*6i 6g7h 6i7h+ S*6g S*6i 6g7h 6i7h+ S*6g P*6h 6g7h 8h7h 2b9i
+
+最終局面が333手で次で後手が宣言勝ち可能
+position startpos moves 2g2f 8c8d 2f2e 8d8e 7g7f 4a3b 8h7g 3c3d 7i8h 2b7g+ 8h7g 3a2b 6i7h 2b3c 3i3h 7a7b 3g3f 7c7d 5i6h 7b7c 2i3g 7c6d 4g4f 5a4b 3h4g 7d7e 7f7e 6d7e P*7f 8e8f 8g8f 7e8f 7g8f 8b8f P*8g 8f7f B*8c 6a5b 8c6e+ 7f7a 6e6f 6c6d 4i5h 8a7c 3f3e 7c6e 3e3d 3c3d P*7b 7a8a 2e2d 2c2d 2h2d 3b2c 2d2i P*2g 3g4e P*7f 6f7f 4c4d P*3e 3d3e P*3f 3e2f 6g6f P*7g 8i7g 6e7g+ 7f7g 4d4e 4f4e P*4c 4e4d 4c4d P*4c 4b3b 7g7f B*5d 7f5d 5c5d B*9f P*8e 7b7a+ 8a7a 9f8e S*7d P*7b 7a7b 8e6g N*5e S*4a 3b4a 6g2c+ 4a5a 4g5f P*7g 7h7g N*8e P*7h 8e7g+ 7h7g P*7f 7g7f 7d8e 5f5e 8e7f 4c4b+ 5b4b 5e5d B*9e N*8f 7f8g+ N*7d 7b7d P*4c 7d7g+ 6h6i 4b5b P*7c S*7h 6i5i 7g7c G*4b 5b4b 4c4b+ 5a6a 2c3d 6a7a 3d4d P*5c P*7b 7a8a G*3h 9e8f 5i4h N*4f 4d2f 4f5h+ 4h3g N*3d 7b7a+ 8a8b 2f3e 5c5d 3e3d G*1e P*2f S*2h 2i2h 2g2h+ 3g2h P*3g 3h3g P*2g 2h2g 8f5i+ S*3h P*2e 3d2e 1e2e N*9e 5i9e 2f2e P*2f 3g2f 8b8c 7a7b 7c7b P*8h 8g8h P*7c 7b7c P*8e 9e8e 4b4a 8c7d S*9f 8e7f P*7i 8h7i 2e2d 7d7e N*8h 7e6f 8h7f 6f5g 4a3a 5g6h B*9e P*7g 9e7c+ R*3i 7c6d 3i3h+ 2g3h G*4h 3h2h B*4i R*2g 4i3h+ 2h1h S*2i 2g2i 3h2i 1h2i R*3i 2i1h 3i3h+ G*2h 3h4i 3a2a 4h3h 2h3h 4i3h G*2h 3h4i S*3h 4i5i 1h2g P*4g 2a1a 4g4h+ 2d2c+ 4h3h 2h3h N*3d B*3e P*4f 3e1c+ 5i2i N*2h P*2b 2c2d P*1e L*3i P*3g 3f3e 3g3h+ 2g3f 3d2f R*6b 2i3i 3f2e 3h2h 6d5d 7h6g 6b4b+ L*2c 1c2b 2c2d 2e2d N*4a 4b4a G*1d 2d1d 3i3e 4a4d S*2e 1d1c G*1d 1c1b G*3a 4d3e 3a2b 1b2b B*1c 2b3b 1c3e 5d4e G*3d 4e3e 3d3e 3b3a 6g7f+ 1g1f 1e1f 1i1f 2e1f R*6a R*6g 6a4a+ 6g3g+ B*3b 7f6g 3b1d+ 7g7h+ G*3b 2f3h+ P*4b 1f2g 4a9a 7i8i 9f8g 8i9i 8g7h 6g7h 9a9c 3e3f 1d2c S*8h 9g9f 4f4g+ 9c6c 6h7i 2c2b 3g4h G*8g 3f3g 8g8h 7h8h S*7g P*8g 7g8h 8g8h+ N*1i G*7h 1i2g 2h2g S*6g S*6i 6g7h 6i7h+ S*6g S*6i 6g7h 6i7h+ S*6g S*6i 6g7h 6i7h+ S*6g P*7g 9f9e
+
+
+1手詰みで評価反転
+position startpos moves 6i7h 3c3d 7g7f 4a3b 2g2f 8c8d 2f2e 8d8e 2e2d 2c2d 2h2d 8e8f 8g8f 8b8f 2d3d 2b3c 5i5h P*2h 3i2h 8f8b 3d3f P*8f 8h3c+ 2a3c P*8h 8b8d B*6f 8d2d 6f3c+ 3b3c 3f3c+ 2d2h+ G*3h 2h2a P*2c B*5d 3c2d 7a7b N*3d B*5e 5g5f 5e4d 2c2b+ 3a2b 3d2b+ S*5g 5h5g 4d2b P*2c 2b4d S*5e 5a6b 5e5d 5c5d S*3c 4d5c 2c2b+ 2a5a 2b1a 6b7a 5g4h S*6e 6g6f 6e6f P*6g 6f6g+ 7h6g 8f8g+ 8h8g N*2f 3h2h P*3b 3c3b+ 5c4d 8i7g 5d5e 5f5e 5a5e P*5f 5e3e 2d2a 7a8b 3b4b 3e3d P*6b 4d6b S*5b P*2g 2h2g 3d6d P*6e 6a5b 6e6d 5b4b 6d6c+ 7b6c P*6d 6c7b 6d6c+ 7b6c P*6d 6c7b 6d6c+ 7b6c L*6f P*6d 6f6d 6c6d P*6e P*6f 6g6f 6b4d 6f6g S*6f 6g6h 6f7g+ 2g2f 7g6h 7i6h P*6g 6h6g P*6f 6g5h P*5g 4h5g G*6g 5g4h P*5g 5h6g 6f6g+ 4h3h 4d2f 2a2f 6d5c 5f5e S*5h 4i4h 5h5i 4h4i 5g5h+ 4i5i L*8c 5i5h 6g5h 3h2g N*1d 2f2a S*2f 2a2f 1d2f R*2a 5c6b 2a2f+ 5h4h N*7e R*3i G*2h G*7b N*6d 7b7a 5e5d 3i9i+ 5d5c+ 4b5c P*5d 5c5d P*5e 5d6e P*6c P*2e 2f2e 6e6d 6c6b+ 7a6b P*6c 6d6c 7e6c+ P*2f 2e2f 6b6c P*6d 6c6d S*5c 6d6c S*5d 6c5d 5e5d 9i3i S*7a 8b7a G*6b 7a8b B*7a 8b9b G*8b
+
+後手：
+後手の持駒：金　銀二　桂二　香　歩四　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂 角 ・ ・ ・ ・ ・ と|一
+|v玉 金 ・ 金 ・ ・ ・ ・ ・|二
+|v歩v香v歩 ・ 銀v歩 ・ ・v歩|三
+| ・ ・ ・ ・ 歩 ・ ・ ・ ・|四
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|五   手数=195,IsSenteTurn()=0  ▲82金打
+| ・ ・ 歩 ・ ・ ・ ・ 龍 ・|六
+| 歩 歩 ・ ・ ・ 歩 歩 玉 歩|七
+| ・ ・ ・ ・ ・vと ・ 金 ・|八
+| ・ ・ ・ ・ ・ ・v龍 桂 香|九
++---------------------------+
+先手の持駒：角　銀　歩　
+先手：
+
+
+3手詰関数が打歩詰？嘘、▲93同桂成がある。これで3週間悩んでたのか・・・。宣言直前なので△91歩は宣言で勝つ。
+position startpos moves 7g7f 7a6b 2g2f 8c8d 2f2e 4a3b 6i7h 3c3d 2e2d 2c2d 2h2d 5a4b 2d3d 8d8e 3d2d P*2c 2d2h 7c7d 8h7g 2b7g+ 7h7g 3a2b 4i5h 6b7c 6g6f 7c6d 7i8h 8e8f 8g8f 7d7e 5h6g 4b3a 8h8g 2a3c 5i6i 7e7f 8g7f B*1d B*3f 1d3f 3g3f B*5e 2h1h P*8h 5g5f 5e1i+ 1h1i 8h8i+ 6f6e 6d7c 2i3g 8b8d 3i4h 8i9i B*5e L*2f P*7d 8d7d B*8c L*7b 8c7d+ 7c7d 3f3e 7d7e 7f7e 7b7e P*7f 2f2h+ 3e3d 2h1i 3d3c+ 2b3c 3g4e B*2d 4g4f R*2i P*3i 3c4d P*2b 3a4b N*3f 4d5e 3f2d 2i2d+ 5f5e N*4a 2b2a+ N*3f 4h3g 8a7c B*8c P*7b R*8a S*7a S*6b 6a6b 8a7a+ 6b5b S*6a 5b5a S*6b B*4g 6i7h 4c4d 6b5a 4b4c 7a7b 7c6e 7b5b 4c3d 5b3b P*3c 3b4a S*3e 7f7e 2d1e G*1f 1e1f 1g1f 1c1d 7h8g 6e7g+ 8g7g P*7f 7g7f 4g8c+ 4e3c+ 3d2e G*2g 8c9d N*8e G*6e 7f6e 9d8c N*7d 6c6d 6e6f B*4h G*5g 4h3g+ 2g3g 8c6a P*6e S*2h 3g3h 2e1f 6e6d 2h1g 6d6c+ 3f2h+ 6f6e 2h3h 3i3h 5c5d 6e5d 6a2e 5d5c 3e2f 5c6b G*6a 6b5c 9i9h 7d6b+ 6a5a 6b5a 1d1e 5c6b S*8b G*7b 8b8c 7b7c 8c8d 7c8b 9h9g 8b9a 2c2d 9a9b 8d7e 9b9c 9g8g 9c8b P*6f 6g5f 8g7g 5g6f 7g7f 6f7e 7f7e 5f6e 7e6e 5e5d 2e1d S*2c 1d3f 5d5c+ S*6d P*7b 2d2e P*5b 6d5c 6c5c P*8a 8b8a G*2d 8a8b 2d2c 3c2c G*5d S*4b 5d5c 4b5c+ S*6d G*4c 1g2h+ G*6c 6d5c 6c5c S*6d S*4b 6d5c 4b5c+ G*5d S*4b 5d5c 4b5c+ S*6d G*4b 6d5c 6b5c P*6a P*6b G*5d 5c6c 5d6d 6c7c 3f6c 7c8c 6c7d 8c9c S*8d 9c9d 6d7e R*5d 6e6d 5d6d 7d6d 9d8c 6d7d 8c9d R*9e
+
+100万/手で3倍ぐらい遅く。通常6秒が21秒。86手目、後手。AobaZero_w3190_b7_t28_p100k -p 100000 -drawmove 256 -b 7 -t 28
+/position startpos moves 7g7f 8c8d 2g2f 8d8e 8h7g 3c3d 7i7h 2b7g+ 7h7g 3a2b 6i7h 2b3c 3i3h 4a3b 4g4f 1c1d 1g1f 7a7b 3g3f 6c6d 2i3g 7b6c 9g9f 9c9d 6g6f 7c7d 3h4g 8a7c 5i6h 6a6b 4i4h 8b8a 2f2e 5a5b 4g5f 6c5d 6h7i 5b4b 2h2i 4b5b 7i8h 5b4b 3g4e 3c2b B*5e 5d5e 5f5e 2a3c 5e6d 3c4e 4f4e 9d9e 9f9e 4b3a N*5e B*5d 6d7c+ 6b7c N*6e N*8f 6e5c+ 5d4e S*5f 4e3f 5e4c+ P*4b 4c3b 3a3b 8g8f 8e8f 7g8f 8a8f P*8g 8f7f N*4d 3b2a P*3c 2a1b 3c3b+ P*8f G*7g N*8d 5f6g S*6i 7g7f 6i7h
+http://wdoor.c.u-tokyo.ac.jp/shogi/view/2021/04/15/wdoor+floodgate-300-10F+BB_ry4500U+AobaZero_w3190_b7_t28_p100k+20210415133004.csa
+
+100万/手で2倍ぐらい遅く。通常6秒が15秒。173手目、先手。
+position startpos moves 6i7h 8c8d 2g2f 8d8e 2f2e 4a3b 9g9f 7a7b 3i3h 8e8f 8g8f 8b8f P*8g 8f8b 3g3f 7b8c 3f3e 8c7d 2e2d 2c2d 2h2d P*2c 2d2f 7d8e 7g7f P*8f 8g8f 8e8f 8h6f 5a5b P*8h 3c3d 3e3d 2b6f 2f6f P*8g 6f5f B*2b 6g6f 3a4b 2i3g 9c9d 5i5h 8b8d 5f3f 2b4d 5h6g 9d9e 9f9e 9a9e P*9f 9e9f 9i9f P*9e L*4f 8g8h+ 7i8h P*8g 8h7i P*3e 3f2f 9e9f 4f4d 4c4d P*8e 8d8b P*9c L*5d 9c9b+ 8b9b B*8c 9b6b 8e8d 9f9g+ 8i9g P*9f 9g8e 9f9g+ 5g5f 8g8h+ 7i8h 9g8h 7h8h 6c6d 5f5e 5d5e P*5f 6d6e 5f5e 6e6f 6g5f L*6c P*6d 6c6d P*6e 6d6e P*6h 6b6d 8c6e+ 6d6e 5f6e 3e3f 2f3f B*7b R*8b 5b4a 3f2f 6a7a 8b9b+ P*9a 9b9f S*9e 9f9h P*3f 3g2e 2c2d 6e6f 2d2e 2f2e P*2c 4g4f P*8g 8h8g 7b6c P*2b 3b2b 5e5d 6c5d 8d8c+ 3f3g+ 3h3g 8f8g 9h8g 9e8f 8g4g 7a6b L*5i 5d4c 6f5g 4c3d 2e3e 3d4c 5g4h P*3d 3e5e N*3e 4g5g G*6e S*3h 6e5e 5g5e 8f7g 8c7c 8a7c 8e7c+ 6b7c P*3f 7g6h 3f3e R*8h P*8i 6h5i 4h3i 8h8g+ 8i8h 8g6g G*5h 6g3g 3h3g N*2e 3g2h L*5d R*7a
+http://wdoor.c.u-tokyo.ac.jp/shogi/view/2021/04/15/wdoor+floodgate-300-10F+AobaZero_w3190_b7_t28_p100k+3be_n007_1050Ti+20210415143007.csa
+
+
+打ち歩詰め(後手)
+position sfen kn1gS4/l1s4+Rl/1p1p3p1/pPS1G4/2N4Pp/P1P1P1b2/1+b1P3g1/3S3r1/LNK1G+p1NL b 2P4p 1 moves 8d8c+ P*5b
+
+開始日時：2013/12/30(月) 17:19:14 後手：YSS 13.70d     ファイル名：打ち不詰め3.kif 
+手合割：平手
+後手の持駒：歩四　 
+  ９ ８ ７ ６ ５ ４ ３ ２ １ 
++---------------------------+ 
+|v玉v桂 ・v金 銀 ・ ・ ・ ・|一 
+|v香 ・v銀 ・ ・ ・ ・ 龍v香|二 
+| ・v歩 ・v歩 ・ ・ ・v歩 ・|三 
+|v歩 歩 銀 ・ 金 ・ ・ ・ ・|四 
+| ・ ・ 桂 ・ ・ ・ ・ 歩v歩|五 
+| 歩 ・ 歩 ・ 歩 ・v角 ・ ・|六 
+| ・v馬 ・ 歩 ・ ・ ・v金 ・|七 
+| ・ ・ ・ 銀 ・ ・ ・v飛 ・|八 
+| 香 桂 玉 ・ 金vと ・ 桂 香|九 
++---------------------------+ 
+先手の持駒：歩二　 
+
+後手負け(10手詰)を230ノードで負け判定。
+position sfen lnS+N5/6Gg1/p1pp+R3p/4ppS2/1p1sk4/2P1LlP2/PP1P1+p2P/1KGS2+b2/LN1r1+n2+b w G4P 96
+https://tadaoyamaoka.hatenablog.com/entry/2019/08/10/212840
+
+3手、5手詰があるが連続王手の千日手になった。
+position startpos moves 7g7f 3c3d 8h2b+ 3a2b B*4e B*5d 4e5d 5c5d 2g2f 4a3b 6i7h 2b3c 3i4h 5a4b 7i8h 7a6b 4i5h 6b5c 8h7g 6a5b 4g4f 8c8d 5i6i 8d8e 2f2e 4b3a 4h4g 3a2b 3g3f 4c4d 6i7i 5b4c 2i3g 7c7d 6g6f 5c6d 7i8h 7d7e 7f7e 6d7e P*7f 7e6d 5h6g 1c1d 1g1f 9c9d 4g5f 3d3e 5f4g B*6i 4g5h 6i7h+ 8h7h 3e3f 2h2g G*4h 5h6i 4h3h 7h8h 3f3g+ 2g1g P*3f 4f4e 4d4e 6i6h P*7a 6g5f 3h2h 6f6e 6d5c B*4i 5c4d B*7d 4c5c 5f6f N*6b 7f7e 6b7d 7e7d 2h1i 1g1i 3g2h 1i1g B*2f G*1h 8e8f 8g8f 2h1h 1g1h L*1g 1h2h 2f3g+ 2h3h 3g4f 4i7f 3f3g+ 3h3i 3g4h 3i2i 4d5e 6f5e 4f5e S*6f 5e6f 7g6f 8b8f B*8g S*8e 6f7g 8f7f 8g7f 8e7f 7g7f B*4g 2i7i 4h5h 6h7g G*6h 7i3i P*3h 3i2i G*7h 8h8g 7h7g 8i7g B*7h 8g8f 4g3f+ 2e2d S*9e 8f7e 2c2d P*3d 3c4b R*4a 3b3a 4a7a+ 1g1h+ 2i2d P*2c 3d3c+ 4b3c 7a3a 2b3a 2d2c+ 9e8f 7e8f R*2b N*2d 3c2d G*4a 3a4a 2c2b P*8e 8f8e G*3b R*6a 4a4b 6a3a+ 4b4c 2b3b 4c4d 3b3d 4d5e S*6f 5e6f 3d3f 7h5f+ 3f5f 6f7g B*6f 7g7h B*8g 7h7i S*8h 7i8i 8g9h 8i7h 9h8g 7h8i 8g9h 8i7h 9h8g 7h8i 8g9h 8i7h 9h8g
+
+後手：k6 
+後手の持駒：銀　桂二　歩　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂 ・ ・ ・ ・ 龍v桂v香|一   対局日：2002/05/01(水) 18:03:14 
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|二
+| ・ ・ ・v歩v金 ・ ・ ・ ・|三
+|v歩 ・ 歩 ・v歩 ・ ・v銀v歩|四
+| ・ 玉 ・ 歩 ・v歩 ・ ・ ・|五   手数=187,IsSenteTurn()=0  ▲87角
+| ・ ・ 銀 角 龍 ・ ・ ・ 歩|六
+| 歩 角 ・ ・ 歩 ・ ・ ・ ・|七
+| ・ 銀v玉v金vと ・v歩 ・v杏|八
+| 香 ・ ・ ・ ・ ・ ・ ・ ・|九
++---------------------------+
+先手の持駒：金二　歩五　
+先手：YSS 10.62 
+
+1手詰だが△77龍の3手詰で111手目で連続王手の千日手
+position startpos moves 7g7f 3c3d 2g2f 4a3b 6i7h 4c4d 2f2e 2b3c 5g5f 6a5b 3i4h 5b4c 7i6h 3a2b 6h7g 3c4b 5i6i 2b3c 3g3f 7a6b 4i5h 5a4a 4g4f 5c5d 2i3g 8c8d 7g6f 8d8e 4h4g 7c7d 5f5e 5d5e 9g9f 8a7c 6f5e P*5d 5e6f 6c6d 6f5g 6d6e 4f4e 8e8f 8g8f 4b8f P*8g 8f6d 5g4f 6b5c 8h9g 6d9g+ 8i9g 6e6f B*6c B*5b 6c5b+ 4a5b 7f7e 6f6g+ 5h6g B*3i 7e7d 3i2h+ 7d7c+ R*4i N*5i 8b8d B*7e 8d8a P*6d P*6b 7c7b 8a4a P*7d P*7a 7b6b 5c6b 9g8e 7a7b 7e8d 4a8a 8d6b+ 5b6b 7d7c+ 7b7c 8e7c+ 6b7c S*7b 7c7b 7h7g P*7f 6g6h 7f7g+ P*5h 7g6h 6i6h 8a8g+ P*7c 7b8c 6h7i 8g7g 7i8i 7g8g 8i7i 8g7g 7i8i 7g8g 8i7i 8g7g 7i8i 7g8g 8i7i
+
+128手目で連続王手の千日手。1手詰あり。
+position startpos moves 2g2f 8c8d 2f2e 8d8e 6i7h 4a3b 1g1f 9c9d 1f1e 9d9e 7g7f 8e8f 8g8f 8b8f 2e2d 2c2d 2h2d P*2c 2d2f 8f8b P*8g 7a6b 3i4h 3c3d 3g3f 6c6d 4h3g 6b6c 3g4f 6c5d 3f3e 3d3e 4f3e 2b8h+ 7i8h 3a2b 5i6h 2b3c P*3d 3c2d 3e2d 2c2d 2f2d P*2c 2d2h 6d6e 8h7g B*6d S*4f 4c4d B*8f 6d8f 8g8f B*6d 5g5f 4d4e 4f5e 5d5e 5f5e 6d5e 2h1h P*8e 8f8e P*8f S*5f 5e4d 5f4e 4d3e P*5g 8b8e P*8h S*2g 1h5h P*4f 4g4f 3e4f B*4d 4f1i+ 4d1a+ L*4f P*4h P*4g 1a2a 4g4h+ 4i4h 4f4h+ 5h4h P*4g 4h4g 1i2i 4g2g 2i3h L*6d 3h2g 2a3b G*5h 6h5h N*4f 5h4g R*3g 4g5f S*4g 5f5e 2g4e 5e4e S*5d 4e4d 5d4c 3b4c 3g3h 4c3c 5a5b 3c4c 5b4a G*3b 4a5a 4c3c 5a5b 3c4c 5b5a 4c3c 5a5b 3c4c 5b5a 4c3c 5a5b 3c4c 5b5a
+
+
+3手詰読み抜け。ハメ手？よく見つけたなぁ。
+position startpos moves 2g2f 8c8d 2f2e 8d8e 6i7h 1c1d 9g9f 7a7b 3i3h 4a3b 3g3f 8e8f 8g8f 8b8f 5i5h 3c3d 2e2d 2c2d 2h2d 8f8d 7g7f 2b8h+ 7i8h B*3c 2d2a+ 3c8h+ B*7e 8h2b 2a3b S*6i 5h6i 8d8i+ G*7i 8i7h 6i7h 3a3b 7e5c+ G*4b 5c4b 5a4b N*5d 4b5b S*4b B*8f G*6b 6a6b R*5a
+
+後手：AobaZero_w3483_n_p800 
+後手の持駒：飛　金　桂　歩二　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂 ・ ・ 飛 ・ ・ ・v香|一
+| ・ ・v銀v金v玉 銀v銀v馬 ・|二
+|v歩 ・v歩v歩 ・v歩 ・ ・ ・|三
+| ・ ・ ・ ・ 桂 ・v歩 ・v歩|四
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|五   手数=47,IsSenteTurn()=0  ▲51飛打
+| 歩v角 歩 ・ ・ ・ 歩 ・ ・|六
+| ・ ・ ・ 歩 歩 歩 ・ ・ 歩|七
+| ・ ・ 玉 ・ ・ ・ 銀 ・ ・|八
+| 香 ・ 金 ・ ・ 金 ・ 桂 香|九
++---------------------------+
+先手の持駒：歩三　
+先手：frenzy_human 
+http://wdoor.c.u-tokyo.ac.jp/shogi/view/2021/05/10/wdoor+floodgate-300-10F+frenzy_human+AobaZero_w3483_n_p800+20210510130008.csa
+
+
+連続王手の千日手
+position startpos moves 5g5f 3c3d 2h5h 5c5d 7g7f 7a6b 5i4h 5a4b 8h2b+ 3a2b 4h3h 6b5c 7i7h 8c8d 3h2h 8d8e 7h7g 5c6d 3i3h 2b3c 5h5i 4b3b 6g6f 3c4d 1g1f 1c1d 6i7h 6a5b 7g6h 7c7d 8i7g 8a7c 6h6g 8e8f 8g8f 8b8f 6f6e 7c6e 7g6e 6d6e B*7c 1d1e 1f1e P*1g 7c9e+ 8f8a P*6f 9c9d 9e6h B*9e 6h9e 9d9e 6f6e N*1f 2h3i B*2h 3i4h 2h1i+ 2i1g 1f2h+ 1g2e L*2d 2g2f 2d2e 2f2e N*2f L*3i 2f3h+ 3i3h 1i2i N*3f S*2g S*3i 2h3i 4i3i 2i3i 5i3i G*2h 3i6i 2h3h 4h5g 2g3f 3g3f N*4e 5g6f S*5g 6f7g 3h4h P*8b 8a8b B*7c 8b8c 7c9a+ 4h5h 6i2i 5g6h 7g6f 6h5g 6f7g 5g6h 7g6f 6h5g 6f7g 5g6h 7g6f 6h5g 6f7g
+
+
+
+角の王手利き通過
+position startpos moves 2g2f 8c8d 2f2e 8d8e 7g7f 4a3b 8h7g 3c3d 7i8h 2b7g+ 8h7g 3a2b 6i7h 2b3c 5i6h 7a7b 3i3h 7c7d 3g3f 5a4b 3h3g 7b7c 3g4f 6a5b 3f3e 3d3e 4f3e 7c6d 2e2d 3c2d 3e2d 2c2d 2h2d P*2c 2d2h 7d7e 7f7e B*5d P*3c 4b3c S*4a 5b4b 4a3b 4b3b P*3d 3c4b P*2b 3b2b B*5a
+
+
+龍の王手利き通過
+position startpos moves 2g2f 8c8d 2f2e 8d8e 7g7f 4a3b 8h7g 3c3d 7i8h 2b7g+ 8h7g 3a2b 6i7h 2b3c 3i3h 7a7b 3g3f 7c7d 5i6h 7b7c 2i3g 7c6d 4g4f 5a4b 3h4g 7d7e 7f7e 6d7e P*7f 8e8f 8g8f 7e8f 7g8f 8b8f P*8g 8f7f B*8c 6a5b 8c6e+ 7f7a 6e6f 6c6d 4i5h 8a7c 3f3e 7c6e 3e3d 3c3d P*7b 7a8a 2e2d 2c2d 2h2d 3b2c 2d2i P*2g 3g4e P*7f 6f7f 4c4d P*3e 3d3e P*3f 3e2f 6g6f P*7g 8i7g 6e7g+ 7f7g 4d4e 4f4e P*4c 4e4d 4c4d P*4c 4b3b 7g7f B*5d 7f5d 5c5d B*9f P*8e 7b7a+ 8a7a 9f8e S*7d P*7b 7a7b 8e6g N*5e S*4a 3b4a 6g2c+ 4a5a 4g5f P*7g 7h7g N*8e P*7h 8e7g+ 7h7g P*7f 7g7f 7d8e 5f5e 8e7f 4c4b+ 5b4b 5e5d B*9e N*8f 7f8g+ N*7d 7b7d P*4c 7d7g+ 6h6i 4b5b P*7c S*7h 6i5i 7g7c G*4b 5b4b 4c4b+ 5a6a 2c3d 6a7a 3d4d P*5c P*7b 7a8a G*3h 9e8f 5i4h N*4f 4d2f 4f5h+ 4h3g N*3d 7b7a+ 8a8b 2f3e 5c5d 3e3d G*1e P*2f S*2h 2i2h 2g2h+ 3g2h P*3g 3h3g P*2g 2h2g 8f5i+ S*3h P*2e 3d2e 1e2e N*9e 5i9e 2f2e P*2f 3g2f 8b8c 7a7b 7c7b P*8h 8g8h P*7c 7b7c P*8e 9e8e 4b4a 8c7d S*9f 8e7f P*7i 8h7i 2e2d 7d7e N*8h 7e6f 8h7f 6f5g 4a3a 5g6h B*9e P*7g 9e7c+ R*3i 7c6d 3i3h+ 2g3h G*4h 3h2h B*4i R*2g 4i3h+ 2h1h S*2i 2g2i 3h2i 1h2i R*3i 2i1h 3i3h+ G*2h 3h4i 3a2a 4h3h 2h3h 4i3h G*2h 3h4i S*3h 4i5i 1h2g P*4g 2a1a 4g4h+ 2d2c+ 4h3h 2h3h N*3d B*3e P*4f 3e1c+ 5i2i
+
+
+
+position sfen 2sgkgs2/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1 moves 6a7b 1i1h 6c6d 7g7f 5a6a 8h7g 9c9d 6i7h 7a6b 7g6f 4a3b 6f5e 2c2d 3i4h 7b6c 4i5h 6c7d 5e3c 4c4d 7h7g 6d6e 7i7h 2d2e 3c4d+ 3b4b 4d3c 7d7e 8g8f 1c1d 3c4b 1d1e G*8a 7e8e 5h6h 6e6f 7g8g 3a3b 4g4f 8e9f 2g2f 3b3c 1g1f 7c7d 6h7g 2e2f 4h4g 9f9g 4g5h P*4g 5h4g 6f6g 1h1g 3c4b P*6c P*4h 2h1h B*9f 7f7e 6b5a P*2g 9g8h P*9c 9f8g 7h6g P*6b 9i9f 4b4c 6g7f G*5b 1f1e 4c4d 1h2h 4h4i+ 5i4i 8h7h 4g3f 9d9e 7f6g 4d4e 9f9e 7h6h 4i3i 8g2a 6g5h 2a5d 5h4g 5d4c 3f2e 2f2g 2h2g 4c8g 9e9d P*4a 8a7a 6a7a 2g2f G*1d 2f1f 7a8b 2e3f 8g5d 4g5f 1d2e P*2d 8b8a 7g7f 4e4f 6c6b+ 4f5g 6b6c P*9b 5f4e 2e3f P*4h S*9f P*6d 5d6c 3i2h 9b9c 7f8e 8a7a 6d6c P*6b 2d2c 5g5h 8i7g 7a8b B*1b 3f3g 2i3g P*3d P*9e 6h5i G*8a 8b7c 1e1d 6b6c P*5f P*2d 8a9a 9c9d 8e9d L*2e 2h3h P*1c P*6b 7c8b 4h4g 5h4i+ P*3e 2e2g+ 3h2g P*9g L*7b 5c5d 3e3d 5i6i 1f3f 8b9a 1d1c G*6g 3d3c+ 6g5h 2c2b 5d5e 1g1e 9f8g 9d8d 8g7h 5f5e 4i4h 3g2e 4a4b 2g2f 5b5c 8f8e 4b4c 2b2a+ 7h6g+ 3f3h 9g9h 2f2g 8c8d 3h1h G*3e P*3i 3e3d P*2h 6g5g 2g3f 3d3e 3f2g 4h4i 3c2b 4i3i P*3f 3i4i 1b2c+ 9a8b 2c1b 5a5b 2g1g P*5f 2b2c 3e4f 8e8d 4c4d 2a2b 5h6h 2b3a 4i5i 4e3d 5b4a 1h1i 5i4i 3d4c+ 4f4e 1b1a 5g4h 3a3b 5c5b 1e1d 9h9i+ 2c2b 8b9a 1g1h 5b4c 2b1b 4e3e 3f3e S*1f 3b2a 4c3c G*5d 1f1g 1h1g 4a5b 8d8c 6c6d 3e3d 6h5h S*8g 2d2e 1i2i 4h3h 5d4d 3c3b 2i1i N*4f 2a3a 7d7e 3a3b P*8a 8c8b 6i7i 3b3a 4i5i G*3g 7i7h 1a2b 5h6h 2h2g 3h2i 7b7a+ 4f3h+ 3g3f 9i8i P*7f 5i4i 8g7h 5b5c 1b1a 9a8b G*3i 8i8h P*8g P*9a 3f4e 5f5g 3i2i 8h9h S*8h 6h6g 2i1h 3h2i 8h7i 7e7f 7g6e 2i2h 1i2i 5g5h+ 4g4f 2h3i 5e5d P*4g 2b3b 5c4b 3b2b 4b5c 2g2f 5c4d 3d3c+ 8b9c 4e4d G*1e S*7g 3i3h 1c1b+ 2e2f 7g7f P*3e 3c3d 6d6e 2i2g N*8d 7h6i 5h5i 1d1c+ 6g5g 7a8a 9c9b P*2i 4i3i 1h2h 5g6g P*7c 6g7h 9e9d 1e1f 1g1f 3h3g G*8c 9b8c 2h3g G*7d N*9e 8c9d 1f1e P*8b 8a8b 4g4h+ 6i5h 4h4i P*9c 7d8e 7f8e 9d9e 7c7b+ N*9g 8b8c 7h8h 8e9d 8h7h 7i8h 7h7i 3d3e 2f2g 4d4c R*1i 1e2f 1i1e 9d8e 9h8h P*1g S*9i G*3c 7i7h 7b7c 9g8i+ 9c9b+ 1e1c 5d5c L*5a 3c2c 9a9b 4c3c P*4h 3c4b 7h6i 3e2e 1c1e 2c1c 5a5b 2b7g 9e8e 3g2g S*9d 7g6h 9b9c 2e1d 1e1f 2f2e 6i6h 8g8f 8e8f 2g1f B*5a R*6i P*3h 6i5i 5a6b 2e2d P*7b 4b3b 8h9h 1f1e 6b7c 5i4i 7c6d P*9b P*2c 2d3c 9i8h P*7i 8f7f 8c9c 6d7c 3c2b 8h7i P*7d 7c6b 2b2c P*8f P*8h 6e6f 2i2h 6h7h 5c5b 7h7g L*6c 9h9i 1b2a 6b5a P*6g 7b7c 2a2b 7i6h 9b9a+ 3i4i 5h4i R*8g S*9b 8i7i 9a8a 5a2d 2b2a 7i6i 1e2e 6h7i 9c8b 9d8c 8b8c 6f6g+ 1g1f P*1h 1d2d 7i8h S*4c 8d9f 2h2g P*5c 8a8b 6g6h 6c6a+ 3h3i+ B*9c 6i5i 2d3d 6h6g 1f1e 6g5g 9c7e 3i4i 3b4b S*1i 5b5a+ 5g5h 4c3b 7f6g 7e4h 8h7i P*5d 4i4h 7d7c B*3h P*6h 7g6h 3d4c
+
+後手の持駒：歩　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+| ・ ・ ・ 杏 と ・ と と と|一
+| 銀 と ・ ・ ・ 金 銀 ・ ・|二
+| ・ 杏 歩 ・v歩 と ・ 玉 金|三
+| ・ ・ ・ ・ 歩 ・ ・ ・ ・|四
+| ・ ・ ・ ・ ・ ・ ・ 金 歩|五   手数=488,IsSenteTurn()=0  ▲43と
+|v桂v歩 ・ ・ ・ 歩 ・ ・ ・|六
+| ・v飛 ・v玉 ・ ・ ・ 歩 ・|七
+| ・ ・ ・v金vとvとv角 ・v歩|八
+|vと ・v銀 ・v圭 ・ ・ ・v銀|九
++---------------------------+
+先手の持駒：
+
+
+1手詰を指さない
+position sfen 2sgkgs2/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1 moves 1c1d 1i1h 5c5d 8g8f 4c4d 4g4f 4d4e 6g6f 4e4f 9g9f 4f4g 9f9e 5d5e 3g3f 6c6d 9e9d 5e5f 9d9c+ P*9h P*9b 5f5g+ 9c9d P*5h 2h5h 5g5f P*5d 5f5e 5d5c+ 3c3d 9d9c 3d3e 6f6e 6d6e 1g1f P*5g 3f3e 4g4h 2i1g 5e5f P*4e 4a4b 5c6c 6e6f 6c6d 5a5b 3i3h 4b4a 3e3d 5f5e 6d7c 8c8d P*6e 5b4c 3d3c 6f6g+ 9c9d 1d1e 9d9c 3a2b 9c9d 4c3d 9d9c 1e1f 7i6h P*7h 5h5g 7h7i+ P*5c 1f1g+ 6i7i N*6f 9i9h 1g1f P*1i 5e5d 5g5h 6f5h+ 4i5h 3d3c N*9d R*4c 1h1f 3c4b P*3i P*7e 2g2f 6g6f 6e6d 4b3c 4e4d 3c3b 6d6c 2b1c 2f2e 4a4b 4d4c 4b4a R*1g 3b3c 1g6g 3c3b 5h4g 3b3c 3h3g 3c3b 4g4h 6f6g 3g2f R*3d 2e2d 4a4b 4h4i 3b3c 2f2e 3d3f 2e3d 3c3d 7c8b S*4a 8b8c 3d3c 1f1c 6g6f S*9f 3c3b 7i7h 3f3c 2d2c 3b3a 1c1b+ 3c3b 3i3h 3b3g 1i1h 3g3b 3h3g 3b2b 1h1g 4b3c 4c4b 7e7f 4b4a+ 3a3b S*1c 6a5b P*4b 5b5a 2c2b+ 3b4c R*8b 6f5g 8b6b+ 5a4b 4a4b 4c3d 5c5b+ P*3h P*2d 3d3e 2d2c+ 5d5c P*5e 7a6b G*5h R*5f 2c2d 6b6c 4b4c P*4g 4c4b 3c3d 5b5c 3d3c P*2c 3c3d 4b4c 5f5e 4c4d 8d8e 5h4g P*5h 5i6i 6c5d P*5b 3h3i+ 4g3f 3e4d 5c5d 4d5d S*8d P*6f 8d7c+ 5d5c 7h7i 5c5b 8c8d 5e5c 7c7d P*2h 9f8g P*1f 7d7e 1f1g+ 8g7h P*9g 8f8e 1g1f P*6b 1f1e 9d8b+ 1e1d 6h5g 6f6g P*4d 5c5f 8d8c 1d2e 9c9d 5b5c 7g7f 3d3c 8h7g 5f5d P*5e 5c4d 7g6h P*3h 2b3b 2e3f 5e5d 4d4e R*5e 4e5e 3b3c R*5i 6h5i 5h5i+ 6i5i G*8h 5d5c+ B*7b 4i4h 8h7i 8e8d G*3d R*8h 3f3e G*2e 7i7h P*1g S*4e 2e2f 3d3c 2f2g P*5f 5g6h 5f5g 5c6c 5g5h+ 5i5h 5e5d P*4i 7b8c 2g2h P*5f P*5e 5d5e 1b2b P*8e 5h5i 5f5g 9d9c 8e8f 8b8c 5g5h+ 5i5h 8f8g+ B*5c 5e5d 2d3c 7h8i P*5g N*9f G*4f 3e2f 5h5i 9f8h+ 9h9g R*6d 7e7d 6d6c 6h7g P*5f 3c4c 6g6h 9g9d 6c6d 7g6f 6d6f 4f5f S*3e 4c4d 3e4d 2b3b P*5e 1c1b 4e4f 7d7e 5e5f 4h5h 6h6i+ 5i4h 6f6h 5g5f 4f4g 4h4g 2f1g S*6d P*7h 6d6c 5d4e 3b3c G*8f 5c6d+ 6h6f+ 5h5g 6f6d 6c5d+ B*7d 3c3b 4d5c 5d5c 4e4d S*4h 4d4e 9c8b 6d6e 9d9c+ 4e4d 3b3c 4d5c 3c3d S*1f P*1e 6e6h 9c9d 5c5b 7e7d 8f7g B*8a 8g8f 2h2i 6h6b P*6c P*4f 4g4f 5b5a 5g5h 6b6a 6c6b+ 6a6b P*6h P*4g 5h5i 7g7f P*7b P*2e 7d7c 7f7e 7c7d 8f8e 7d7c 7e7d 2c2b 6b6a 7c7d 1g1h 7d7c 6i5i 2b2a+ 4g4h+ G*6d 4h5h 6d5c S*7e 4f4g G*1a 2a2b 6a6g 6h6g 1a2b R*9h P*8g 2i3h 5h5g 4g4f 8e8d P*2f P*3f 5c5d 2b2a 5d5e 2a1b 4f4e S*2g 4e4f 3f3g+ 4f4e P*3c 3d3e 3g3h 4e4f 1f1g+ 8c8d 2g2h+ P*8c 5g5h 3e3f G*9g 4f4g 2h2g 3f3e 3h3g 4g4f 1g1f 9d9e 2e2f 8d8e P*9d 8e8f 1f1e 8f8g P*6c 8g8h 5h5g N*4e 1e1f P*3d 1f1e 4e5c+ 1e1f 3d3c+ 1b1a P*1d 1f1g 5e5d 1g1f 5d6c 9g9h P*2b R*2d 5c5d 1f1e 5d5c 1e1f 5c5d 1f1e 5d5c 1e1f
+
+
+%-ILLEGAL_ACTIONI   香落ち
+position sfen lnsgkgsn1/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1 moves 6a7b 5g5f 5a6a 6g6f 4a4b 9i9h 9a9b 1i1h 2b1a 8g8f 3a3b 5i4h 4b5b 4h5h 1a2b 7g7f 5b4b 5h4h 7a6b 8i7g 3b4a 4i5i 2b1a 5i5h 6c6d 8h9i 1a2b 7g8e 2b1a 5h5g 4a3b 2h3h 1a2b 3h2h 4b5b 7i8h 2b1a 8h8g 1a2b 8g7h 5b6c 4g4f 2b1a 2h3h 1a2b 3g3f 2b1a 2i3g 1a2b 3g4e 2b1a 3h3g 1a2b 8e9c 7c7d 7h8i 2c2d 3g4g 8a7c 3i2h 3c3d 4e3c 7c6e 9i8h 6e7g 8i7h 9b9c 3c2a+ N*3g N*7c 6a7a 9g9f 2b3a 9h9g 9c9e 8h9i 3b4a 2h3g 3a4b N*9c 4c4d 9i8h 8b9b 8h9i 9b8b 9i8h 8b9b 8h9i 4a5b 6i6h 9b9a 3g2f 5c5d 2a1a 7g6i+ 6f6e 9a9b 4g3g 9b8b 4h3h 8b9b 3g4g 9b8b 5g6g 6c7c 6h5h N*2e 4g5g 5b6c 3f3e 2e3g 5g4g 8b9b 7h8i 9b9c 4g5g N*4g 9i5e 6i7i 5e6f 9c9d 9f9e 6b5a L*3f 9d8d 9g9f 8d8e 6f7e 6d6e P*6b P*9h 7e9c 7b8b 9e9d 8c8d 6g7g 8e7e 5h6g 7a6b 3h4g 6b6a N*1i 7e8e 8i8h 6a7b 1a1b 8e7e 1b2b 7i6i 4f4e 6i6h 8h9i 7e8e 9c8b+ 7b6a G*8h 6c7b 8h9h 6h7h P*6b 6a6b 9d9c P*9g 9c9b 5d5e 2b3b 9g9h 9f9c G*2i 3b2b 7c8c 7f7e 8e9e 8b9a 9e9g 9a8a 9g8g 8a9a 8g8i 9a8a 8i3i 8a9a 3i4i 4g3h 4i3i 3h4g 3i4i 4g3h 4i3i 3h4g 3i4i 4g3h 4i3i 3h4g
+
+後手の持駒：歩　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+| 馬 ・ ・ ・v銀 ・ ・ ・ ・|一
+| 歩 ・v銀v玉 ・v角 ・ 圭 ・|二
+| 香v金 ・ ・ ・ ・ ・ ・v歩|三
+| ・v歩v歩 ・ ・v歩v歩v歩 ・|四
+| ・ ・ 歩v歩v歩 歩 歩 ・ ・|五   手数=194,IsSenteTurn()=0  ▲47玉
+| ・ 歩 ・ ・ 歩 ・ 香 銀 ・|六
+| ・ ・ 金 金 飛 玉v桂 歩 歩|七
+|v歩 ・v圭 ・ ・ ・ ・ ・ 香|八
+| 銀 ・ ・ ・ ・ ・v飛v金 桂|九
++---------------------------+
+先手の持駒：
+
+
+setoption name USI_HandicapRate value 30:100:150:300:700:900:1200
+6枚
+position sfen 2sgkgs2/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1 moves 3a4b 5i6h 1c1d 3g3f 6a6b 9g9f 7a7b 8h9g 6b6a 1g1f 5a5b 3i4h 9c9d 9i9h 6a5a 6i7h 5b6a 9g5c+ 2c2d 8i9g 7b8a 5c5d 6a7b 2g2f 7b6b 3f3e 4a3a 9g8e 5a4a 8e9c 6c6d 2i3g 3a3b 3g4e 6b5a 4e5c 5a5b 9h9g 4b3a 1i1g 5b4b 5d7b 3b2b 7b7a 4b3b 7a6a 2b2c 6a7a 4a5b 7a6a 3b2b 6a7a 2b1a 7a6a 6d6e 6a7a 1a1b 7a6a 8a8b 4h3g 8c8d 6a7a 4c4d 7a8a 1b1c 8a9a 8b8c 4i4h 1c1b 5c4a+ 5b6c 3g4f 6c5d 9a8a 3c3d 8a9a 1b1c 9a8a 2c2b 8a9a 2b3c 9a8a 1c2c 4h3g 2c3b 8a9a 3b2c 9a8a 3c3b 3e3d 2c1c 3d3c 1c2c 6h5h 5d5c 3c3b 2c1c G*9a 1c1b 8a7a 1b1c 7a8a 4d4e 2f2e 8c9b 8a7a 1c2c 7a8a 3a2b 8a4e 2c1c 4e8a 1c2c 8a7a 2b3c 7a8a 2c3d 8a7a 3d4d 4f4e 4d5e 7a8a 5e6d 8a7a 3c3d 7a8a 8d8e 8a7a 9b9c 7a8a N*2g 4g4f 6d5e 8a7a 5e6d 7a8a 3d3e 3g3f 9d9e 8a7a 6d5e 7a8a 9c8b 8a7a 5e6d 7a8a 2d2e P*2b P*3h 8a7a 3e2f 7a8a 8b9c 8a7a 6d5e 7a8a 2f3e 8a7a 5e6d 7a8a 5c5d 8a7a 6e6f 7a8a 6f6g P*6b 6d5e 4a3a 5d4d 8a7a P*4h 7a8a 9e9f P*9b P*5f 4e4d 3e4d G*7a S*1i 8a8b 9c8b 2h1h B*2i 1h2h 3h3i+ 2h3h 2i1h 3h3g 4d3c 3g4g 1h2i+ 5h6g 5f5g P*5b P*3h 7a6a 5g5h 4g5g 5e6e 5g5c 9f9g 5c6c 6e7e 6c5c L*1h 5c6c 2i2h 6c5c 9g9h 5c6c 2h3g 6c5c 3g2h 5c6c 4h4i+ 6c6e+ 7e6e 6g5g R*2i 5g6g 2h3g 7h8h 2i2h 3f3e 2h2i 6a5a 2i2h 6g5g 2h2i 7i6h 3g4f 5g4f P*4h B*8a 2i2h 8a5d 6e7e 5d8a 2h2i 8a7b 9h9i+ 7b8a 7c7d 8a7b 2i2h 7b6a+ 8b7a 6a7b 7a7b 4f5e B*2i 5e5d 7e6f 5d5c 6f5f 5c4c 5f4f 4c5c 4f3g 5c4c
+
+
+
+yss@r39:~/shogi/komaochi/csa$ cat rec000000007694.csa
+setoption name USI_HandicapRate value 210:250:257:49:0:0:5
+'w 35 (crc64:ab1f55fb1cf59118), autousi 2.1, usi-engine 18, no-resign
+'-q -r 0.0 -p 800 -n -m 30 -w ./weight-save/w000000000033.txt -e 0, handicapR 210:250:257:49:0:0:5
+6枚
+position sfen 2sgkgs2/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1 moves 9c9d 2h7h 3c3d 5i5h 7a7b 9i9h 6a5b 3i2h 5a4b 1i1h 4b3c 7h6h 3c2b 7i7h 4a3b 8h9i 1c1d 4i3h 2b1c 8g8f 7b8a 9g9f 5b5a 5h4h 3b3c 9h9g 8a8b 8f8e 1c2d 2h1i 2d1e 6h5h 1e2e 5h6h 2e1e 6h5h 1e2e 2g2f 2e1e 5h6h 1e2d 6h5h 5a6b 5h6h 2d1e 6h5h 1e2d 5h5i 2d1e 5i5h 3d3e 5h6h 1e2d 6h5h 2d3d 5h5i 3a2b 5i5h 3d4e 5h6h 2b1c 6h5h 4e5e 5h6h 4c4d 1i2h 5e4e 6h5h 4e5e 5h6h 1c2d 6h5h 5e4e 5h6h 4e3d 6h5h 3d4e 5h6h 6b6a 3h2g 4e5e 6h5h 5e4e 5h6h 1d1e 1g1f 4e5e 9f9e 5e4e 2i1g 4e5e 2g3f 6a7b 9i8h 3c3b 1g2e 5e6e 2e3c 5c5d 9g9f 6e5e 8i9g 8b9c 1h1g 3b3a 6h5h 5e6e 5h6h 3e3f 1f1e G*1i 1g1f 3f3g 9e9d 3a3b P*3d P*1h 9d9c 3g3h S*6b 2d3e 9c9b 3h3i+ 9f9c 6e5e 6h5h 7b6b 8e8d S*2i 8d8c 5e4e 3c4a+ 4e3f 8c8b 3b3c 3d3c 7c7d G*9a 3f4e 3c3b 6b7c 9g8e 4e3f 5h6h 4d4e 8h9i 3i4i 4h5h 4i3i 9i8h 3i4i 1e1d 3e2d 1d1c 3f3e 1c1b 3e2f P*2b P*3h 1f1c 2d3e 8h9g 2f2e 9g3a 2e1f 3a4b 6c6d 2h2g 1f1g 4b5a 1g2h 5a6b 2h3g 6b7a 3g2h 7a6b 2h1g 3b3a+ 7c8c P*3b 8c9d 6b7a 3h3i+ 7a6b 1g2h 6b7a 2c2d 7a6b 2h1g 6b7a 3e2f 2g2f 1g2g S*8a 2g2h 7a6b 2d2e 6b7a 2h3h 7a6b 9d9c 6b7a L*2h 7a6b 4e4f 6b7a 4f4g 7a6b 4g4h+
+
+
+
+'w 33 (crc64:8fced4a690f1a9e5), autousi 2.1, usi-engine 18, no-resign
+'-q -r 0.0 -p 800 -n -m 30 -w ./weight-save/w000000000033.txt -e 0, handicapR 189:227:257:53:0:0:109
+setoption name USI_HandicapRate value 189:227:257:53:0:0:109
+2枚
+position sfen lnsgkgsnl/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1 moves 6c6d 3i3h 9c9d 9i9h 5c5d 7i7h 3a3b 8h7i 7a8b 4i5h 3c3d 1i1h 2a3c 7i8h 3c2e 4g4f 9d9e 5h6h 5d5e 8h9i 8a9c 9g9f 9c8e 8i9g 6a6b 3h4i 2c2d 8g8f 3d3e 7h8g 1a1b 2h5h 9a9d 8f8e 4a4b N*9c 5a5b 5h4h 2e3g 4h4g 6b7b 5g5f 5b5c 4g5g 5c4d 6h7h 3b2a 5g4g 4d3d 4g5g 8c8d 5g4g 2a3b 4g5g 3d2e 5g4g 8b9c 4g5g N*4g 5i4h 2e3f 6i7i 3f2e 5g5h 2e3f 5h5g 1c1d 4i3h 1b1c 5g5h 3f2e 5h5g 6d6e 5g5h 2e3f 5h5g 4b5c 5g5h 3f2e 5h5g 2e3f 2g2f 3b2a 2f2e 2a2b 5g5h 3f2f 5h5g 4g5i+ 8g7f 5i5h 4h4g 2f1e 9i8h 5c5d 8h9i 1e2f 7f6e P*6h P*3b 2f1e 8e8d 9e9f P*9b P*8h 7i8h 7b7a 4g3g 9f9g N*8c N*2g 1g1f 1e2e P*2c P*8g 2c2b 5d6d S*9a 8g8h 2i1g 2e1f 1g2e G*1g 2e3c 9g9h 5g4g 9c8b 7h7i L*2h 4g5g 9d9g 3h2i 1f1e 5g4g 1e1f 7i8h P*8g P*1b 2h2i+ 3b3a+ S*1i 4g5g 8g8h 6e7d G*3i 5g4g 1i2h
+
+
+
+yss@r39:~/shogi/komaochi/csa$ cat rec000000008634.csa
+'w 35 (crc64:ab1f55fb1cf59118), autousi 2.1, usi-engine 18, no-resign
+'-q -r 0.0 -p 800 -n -m 30 -w ./weight-save/w000000000033.txt -e 0, handicapR 210:250:257:49:0:0:0
+setoption name USI_HandicapRate value 210:250:257:49:0:0:0
+香落ち %+ILLEGAL_ACTION  141手目の72銀(71)で勝率v=0.987
+position sfen lnsgkgsn1/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1 moves 5c5d 5i5h 4a5b 6g6f 5b6b 9i9h 5a4a 1i1h 6a5a 2h4h 9a9b 4h3h 4a4b 5h4h 9c9d 1g1f 4b5b 1f1e 5a4a 2g2f 3a3b 1h1f 2c2d 8h9i 8c8d 2i1g 5b5c 1g2e 4c4d 3h2h 9d9e 2h2g 8a9c 2g1g 9e9f 4h5h 9f9g 1g2g 9g9h 4i5i L*1h 8i9g 9c8e 9g8e 1c1d 4g4f 8d8e N*9c N*1g 2e1c 8b7b 5g5f 2b1c 2g2h N*2g 5h6h 1h1i+ 2h5h 7b8b 5i4h 2d2e 7i7h 8b8d 1e1d 3b4c 6h5g 1c2d P*9d P*1h 5g4g 2a1c 1f1e 8d6d 3g3f 2d3e 2f2e 6d6e 3f3e 4a4b B*9a 6e4e 9a8b 4c3d 8b9a 4e5e 4g3g 1g2i+ 4h5g 6b6a 5h1h 5c4c 9a7c 9h9i+ 3g3f B*1g 7c8d+ 1g2h 6i5h 2h1g+ 1d1c 1g3e 3f2g P*2h 2g1f 6a7b P*3b 3e4f N*6h P*9h N*9e 4f3g 5h4g 4d4e 4g3g 4b4a 8d8c 5e6e 3i4h 1i1h B*9a R*1i 9a5e 9b9c 5e9a N*3a P*4b 6e6d 9a8b+ 7b7c 5g4g 6d9d P*9b P*1g 3g3h 7c7b 1c1b 7b8c 9b9a+ B*9b 6h7f 7a7b 3h3g 7b8a 7f8d 3a2c 1e1c 2c1e 8b7a 1e2g 7a6a 4c4d 6a7a 4d4c 7a6a 4c4d 6a7a 4d4c 7a6a 4c4d 6a7a 4d4c
+
+
+
+yss@r39:~/shogi/komaochi/csa$ cat rec000000000133.csa
+'w 36 (crc64:2b86a0cefbbd7966), autousi 2.1, usi-engine 18, no-resign
+'-q -r 0.0 -p 800 -n -m 30 -w ./weight-save/w000000000036.txt -e 0, handicapR 210:250:257:49:0:0:0
+setoption name USI_HandicapRate value 210:250:257:49:0:0:0
+平手 %+ILLEGAL_ACTION
+position startpos moves 2h1h 9a9b 9g9f 3a3b 4i4h 1a1b 5i4i 8b6b 8i9g 5a5b 1h2h 4a3a 9f9e 6a5a 1g1f 4c4d 8g8f 5b4b 1f1e 4d4e 2i1g 3a4a 3i3h 5a6a 9g8e 6a5b 1i1h 5b5a 9e9d 5a6a 9i9f 4a3a 2g2f 6a5a 2h2g 5a5b 2f2e 5c5d 2g2i 6c6d 2i1i 6d6e 8h9i 5b5c 6i5i 5d5e 1i2i 6e6f 2i2f 4b5a 2f2i 6b4b 2i1i 5e5f 8e9c+ 8a9c 1i2i 1c1d 5g5f 2b1a 2e2d 5a6a 2i2g 1d1e 4h5h 1b1c P*1b P*9e 7i8h 9e9f 5i6i 6a5a 6i5i N*7b 4i3i 7a8b 3i2i 5a6a 5i4i 1e1f 2i3i L*6b 5f5e 4e4f 9d9c+ 1c1d P*9h 9b9c 2g2i 1d1e 2i1i 1a2b N*6h 2b1c 3i2i 3a2b 4i5i P*5d 5i6i 8b9a 6i7i 9a8b 7i8i 8b9a 8i7i 9a8b 7i8i 8b9a 1g2e 1f1g 8i7i 2b1b 7i8i 9a8b 8i7i 8b9a 2i2h 6a5a 7i8i 9f9g 2e3c+ 9a8b 1i7i P*3d 7i5i 9c9e 5i1i 2c2d 5h5g 3b2c P*2e 2d2e 5e5d 4b2b P*1f P*5e 8h9g 5a6a 2h3i 6a7a P*2d 7a8a 9g8h 8a9a 8h8g 1g1h+ 1i1h 9a8a 1h1i 8a9a 9h9g P*1d 8g7f 5c6c 9g9f 9a8a 1i2i 5e5f 2i1i 1e1f P*1e 1d1e 1i2i 8b9a 2i2e 9a9b P*1g P*9c 2e9e 5f5g 9e4e 2c2d 4e1e P*1a 1e7e 8a9a 7e1e P*2c 1e7e 9b8a 7e2e 9a8b 2e9e 2d2e 9e9d 8b9a 1g1f 9a8b P*2g 8b9a 9f9e 9a8b L*3f 2e1f 3i2i 8b9a 3f3e 9a8b L*4i 8b9a 2i1i 9a8b 9d9c+ 8b9c P*1e R*9d 5d5c 9d8d 1i1h P*9f 9e9d 9c9b 4g4f 2c2d 9i8h 9f9g 7f8g 8d8e 8h7i 2d2e 8i9h G*6i 9h9i 2b4b 9i8i 1c3a 8g9f 2a3c 3e3d 1f2g 3h2g N*7f S*9a 8e9e P*2b 9b9a 4i4g S*8g 8f8e 8a8b 9f9e 8b9c 6h7f 9c8b R*8a 9a9b 7i5g L*5d N*9c 8b7a 8a9a 9b8b 9a8a 8b9b 8i9i 2e2f 8a9a 9b8b 9a8a 8b9b 8a9a 9b8b 9a8a 8b9b 8a9a 9b8b 9a8a 8b9b
+
+
+690万棋譜でのハンデ
+setoption name USI_HandicapRate value 26:114:385:434:599:663:781
+
+
+豊島-藤井 叡王戦第5局 111手目で投了の評価値が低い。▲82金をAobaZero(w3435)は読み抜け。Aoba駒落ちは読む。
+position startpos moves 2g2f 8c8d 2f2e 8d8e 6i7h 4a3b 3i3h 7a7b 9g9f 9c9d 5i6h 1c1d 3g3f 8e8f 8g8f 8b8f 2i3g 7c7d 2e2d 2c2d 2h2d P*2c 2d7d 7b7c P*8g 8f8b 7d7e 3c3d 7e2e 3a4b 7g7f 4c4d 4g4f 4b4c 4i4h 7c6d 3h4g 4c5d 2e2i 5d6e 7h7g P*7e 7f7e 6d7e 8h9g 7e6d 6g6f 6e7d 7i7h 2b3c 9g8h 7d8e 6h5h 6a5b 4g5f 5c5d 6f6e 6d7e P*2d 2c2d P*2e 5b4c 2e2d P*2b 5f6g 3d3e P*7f 7e8d 2i2f 3e3f 2f3f P*3d 7g6f 3c2d 6f5f 3d3e 3f1f P*8f 4f4e 8f8g+ 7h8g P*8f 8g7h 4c3d P*8c 8b8c 4e4d 3e3f 1f3f 3d3e 3f3e 2d3e 5f4e 3e1c 4e5d P*4g 4h3h 5a6b 4d4c+ 3b4c 5d4c 6b7b 8i9g P*3f 9g8e 3f3g+ G*6b 7b6b 8h4d 6b7b S*6a
+
+詰み手順 ▲44角から13手詰み。
+ 7b8b 4d7a+ 8b9b G*8b 8c8b 7a8b 9b8b R*6b 8b8c 6b7b+
+
+先手玉を危ない状態にすると▲82金を読む。賢いな。
+position startpos moves 2g2f 8c8d 2f2e 8d8e 6i7h 4a3b 3i3h 7a7b 9g9f 9c9d 5i6h 1c1d 3g3f 8e8f 8g8f 8b8f 2i3g 7c7d 2e2d 2c2d 2h2d P*2c 2d7d 7b7c P*8g 8f8b 7d7e 3c3d 7e2e 3a4b 7g7f 4c4d 4g4f 4b4c 4i4h 7c6d 3h4g 4c5d 2e2i 5d6e 7h7g P*7e 7f7e 6d7e 8h9g 7e6d 6g6f 6e7d 7i7h 2b3c 9g8h 7d8e 6h5h 6a5b 4g5f 5c5d 6f6e 6d7e P*2d 2c2d P*2e 5b4c 2e2d P*2b 5f6g 3d3e P*7f 7e8d 2i2f 3e3f 2f3f P*3d 7g6f 3c2d 6f5f 3d3e 3f1f P*8f 4f4e 8f8g+ 7h8g P*8f 8g7h 4c3d P*8c 8b8c 4e4d 3e3f 1f3f 3d3e 3f3e 2d3e 5f4e 3e1c 4e5d P*4g 4h3h 5a6b 4d4c+ 3b4c 5d4c 6b7b 8i9g P*3f 9g8e 3f3g+ G*6b 7b6b 8h4d 6b7b S*6a 7b8b 4d7a+ 8b9b 1g1f 3g3h 1f1e 8f8g+
+
+
+後手が振穴で四間飛車にしただけで21手目に+1744。明らかにおかしい。w3682でp800で94.55%。これはひどい。
+http://wdoor.c.u-tokyo.ac.jp/shogi/view/2021/03/27/wdoor+floodgate-300-10F+AobaZero_w3190_kld_ave_p704+Yss1000k+20210327200013.csa
+position startpos moves 6i7h 3c3d 7g7f 4c4d 2g2f 8b4b 9g9f 5a6b 9f9e 6b7b 3i4h 7b8b 5i6i 9a9b 5g5f 8b9a 7i6h 7a8b 4i5h 6a7a
+
+
+
+6枚落ちで上手は27点あるが盤上の駒が9枚(馬+小駒8枚=13点、落とした14点足せば27点)。
+position sfen 2sgkgs2/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1 moves 3a2b 7g7f 4a3b 9g9f 6c6d 9f9e 7a8b 8h5e 6a7b 5e6d 5a5b 5g5f 8c8d 2h5h 4c4d 5f5e 3b4c 6d9g 3c3d 7i6h 3d3e 6h5g 7b6b 5g5f 2b3c 3i3h 7c7d 5i4h 8b7c 4h3i 2c2d 3i2h 2d2e 8i7g 6b6c 6g6f 4c4b 6i6h 1c1d 1g1f 8d8e 4g4f 5b4c 6h5g 7c8d 5f6e 8d9e 6e6d 6c6b 7g6e 8e8f 8g8f 9e9f 9g7i 9f8g 5g6g 7d7e 6g7g 8g7f 7g7f 7e7f S*5a G*5b 5a6b+ 5b6b 5h9h P*6c 6e5c+ 4b5c 6d5c+ 6b5c 9h9c+ 7f7g+ G*5d 5c5d 5e5d N*5a G*5c 4c3d 9c9a G*4a 9a6a 7g7h 7i5g P*5f 5g3i 7h6h 5c5b S*5g 5b4a 6h5h 6a5a 5h4i 3h4i 5g4f+ 5d5c+ 2e2f 2g2f P*2g 2h1g 5f5g+ P*5h S*2h 3i2h 2g2h+ 1g2h 5g4g S*2e 3d4e G*2g 4e5f N*5i G*6h 5c4c 5f6f 5i4g 6f7g 4c3c B*7h P*4h 7h6g+ 5a7a P*7f 4g3e 7g8h 7a9a 7f7g+ 3e2c+ 8h7i 2e1d 4d4e 1f1e 6h5i G*3i 7g6h 9a9h 6h7h 2h1g 6g7g P*7d 6c6d 7d7c+ 6d6e 7c7d 6e6f 7d7e 6f6g+ P*6d 6g6h 6d6c+ 6h5h 4i3h 4f5g 3i2h 5h4h 6c6d 4h3h 2h3h 4e4f P*4h 5g5h 6d6e S*8h 9h9e 8h9i 1g1f 9i8h 1f2e 8h8i 2e2d 7g8h 2g3f L*7g 3f4f P*6h 4h4g 6h6i+ 2i1g 6i6h 1g2e 6h6g 3g3f 6g5g 2d1c P*6g 1c2b 6g6h+ 2e1c+ 6h6g 3f3e 7h6h 2f2e 7g7h+ 3e3d 5i4i 1c1b 4i4h 3h4h 5h4h 1d1c 5g4g 4f3e 6g5g 1e1d 5g5h 2b2a 5h5g 1c2b+ 5g5h 1d1c+ 5h5g 2e2d 5g5h 1b1a 5h5g 1c1b 5g5h 1i1c+ 5h5g 2c3b 6h6g 2d2c+ 8h7g 3e2d 7g6h 3c4c 5g5h 3d3c+ 5h5g P*5d G*1e 5d5c+ 1e2f 9e8d 2f3g 8f8e 3g3h 5c5d 3h3g 5d5e 4g5h 4c4d 3g3h 4d4e 5g4g 3c3d 4g3g 2d3c 3g4g 3d3e 3h3g 2c2d 8i9h 2d2e 9h8g 8d1d 8g8h 8e8d 8h9g 8d8c+ 9g8h 8c8d 7h7g 8d8e 7g7h P*9d 7h7g 9d9c+ 7g7h 9c9d 7h7g 9d9e 7i7h 9e9f 7h7i 8e8f 3g3h P*8d 3h3g 8d8c+ 3g3h 8c8d 3h3g P*7d 3g3h 7d7c+ 3h3g 8d8e 3g3h 1d9d 3h3g P*4d 3g3h 4d4c+ 3h3g 2e2f 7g7h P*2d 6g7g 6e6f 5h5g 2d2c+ 3g2h 3e3f 7i6i 9f9g 8h7i 9g9h 6h5h 2c2d P*6g 2d2e 6g6h+ 7c6c 6h6g 6f6e 4h3h 6c6d 4g3g 3f4f 3g4g 4f3f 4g3g 3f3g 3h3g 6d5d 3g2g 2f2g 2h2g 4e3e 7g6h 7e7f 2g3h 5d4d P*4h 4d4e 4h4i+ 4e4f 4i4h 8f8g 4h4g 4f4g 5g4g 4c4d 4g5g 4d4e P*4g 1c2c 4g4h+ P*1d 4h4g 1d1c+ P*8h 8e8f 8h8i+ 1c1d 8i8h 8g8h 7h8h 9h8h 7i8h 8f8g 8h7i P*8d 6g7h 8d8c+ 6h6g 8c8d 6g6h 8d8e 6h6g 8e8f 7i6h 1d1e P*8h 1e1f 8h8i+ 2e2f 8i8h 8g8h 7h8h 1f1g 3h2h 2f2g 2h3h 1g1h P*4h 1h2h 3h2h 2g2h 4h4i+ 3e3f 4i4h P*8d 4h4i 8d8c+ 4i4h 8c8d P*3h 8d8e 3h3i+ P*1d 3i3h 2h2g 5h5i 1d1c+ 5i5h 1c1d 4h4i 1d1e 4i4h 1e1f 4h4i 1f1g 5h4h 1g1h 4h5h 8e9e 5h5i 9e9f 5i5h 9f9g 5h5i P*8d 5i5h 8d8c+ 5h5i 8c8d 5i5h 8d8e 5h5i 9g8g 8h7i 9d9h 4i4h 6e6f 4h5h 5e5f 5g5f 6f5f 4g5g 4e4f P*4g 1h2h 4g4h+ P*6d 3h2h 2g2h P*3h 3f3g 3h3i+ 6d6c+ 5i4i 6c6d 4i5i 6d6e P*7g 7f7g 6g7g 8g7g 6h7g 8f8g 7g6h 6e6f P*7g 8e8f 7g7h+ 8f7f 5i4i P*1d 4i5i 1d1c+ 5i4i 1c1d 4i5i 1d1e 5i4i P*6d 4i5i 1e1f 5i4i 1f1g 4i5i 1g1h 5i4i 1h1i 4i5i 6d6c+ 5i4i 6c6d 4i5i 6d6e 5i4i 6e5e 4i5i P*6d 5i4i 6d6c+ 4i5i 6c6d 5i4i 6d6e 4i5i 5f5g 5h5g 5e5f 5g5f 6f5f P*5g 6e6f 5g5h+ 6f6g 5i4i 6g6h 5h6h P*6d 4h5h 4f4g P*4h 6d6c+ 4i5i 6c6d 4h4i+ 6d6e 4i4h 6e6f 5i4i P*4d 4i5i 4d4c+ 5i4i 4c4d P*3h 4d4e 6i5i 7f7g 5i6i 4e4f 7h7g 8g7g P*7h P*8d 4i5i 8d8c+ 5i4i 8c8d 4i5i 8d8e 5i4i 8e8f 4i5i 8f8g 4h4g 4f4g P*4f 5f4f 5i4i 8g8h P*9g 9h9g 6i5i 9g9h 3i2i 1i2i 3h3i+ 2i3i 4i3i 3g3h 3i6f 7g6f P*4e 4f4e 5i6i 6f7f P*8g 9h8g 5h4i 4g5g 7i8i 8h8i 4i4h 3h4h 6i5i 8i7h 5i4h 7h6h P*8f 7f8f
+
+
+先手四間飛車穴熊。後手左美濃。w3760で先手勝率18%。20手目、香を上がる直前では28%
+position startpos moves 7g7f 8c8d 7i7h 3c3d 6g6f 7a6b 2h6h 5a4b 5i4h 4b3b 7h6g 5c5d 4h3h 6a5b 6i5h 2b3c 3h2h 3b2b 6g5f 4c4d 1i1h 1c1d 1g1f 6b5c 2h1i 8d8e 8h7g 7c7d 3i2h 3a3b
+後手の持駒：
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂 ・ ・ ・v金 ・v桂v香|一
+| ・v飛 ・ ・v金 ・v銀v玉 ・|二
+|v歩 ・ ・v歩v銀 ・v角v歩 ・|三
+| ・ ・v歩 ・v歩v歩v歩 ・v歩|四
+| ・v歩 ・ ・ ・ ・ ・ ・ ・|五   手数=30,IsSenteTurn()=1  △32銀
+| ・ ・ 歩 歩 銀 ・ ・ ・ 歩|六
+| 歩 歩 角 ・ 歩 歩 歩 歩 ・|七
+| ・ ・ ・ 飛 金 ・ ・ 銀 香|八
+| 香 桂 ・ ・ ・ 金 ・ 桂 玉|九
++---------------------------+
+先手の持駒：
+2022-01-11 順位戦青嶋未来 六段 vs. 出口若武 五段 第80期順位戦Ｃ級１組９回戦
+https://shogidb2.com/games/6739871f80313e6d1b183bb7d2774cf70b32b857
+
+
+position startpos moves 7g7f 8c8d 5g5f 8d8e 8h7g 3c3d 6g6f 7c7d 2h7h 7a6b 7i6h 1c1d 5i4h 1d1e 4h3h 5a4b 3h2h 4b3b 6h6g 6a5b 1i1h 5c5d 2h1i 2b3c 3i2h 3b2b 4i3i 3a3b 3g3f 2c2d 6i5h 3b2c 4g4f 4a3b 5h4g 6c6d 7h3h 4c4d 3f3e 3d3e 3h3e 5b4c 3e3h P*3d P*3e 3d3e 3h3e P*3d 3e3h 6b5c 6g5h 9c9d 5h5g 8b7b P*3e 3d3e 6f6e 6d6e 3h3e 7b6b 3e3h P*3d P*3e 3d3e 3h3e P*3d 3e3h 7d7e 7f7e P*7f 7g8h 8e8f 8g8f 6b8b 7e7d 8b8f P*8b 8f8b 7d7c+ 8a7c P*7d 3c5a P*6d 5c6d 7d7c+ 5a7c 4f4e 5d5e 4e4d 4c4d 5f5e 8b8g+ N*5f 4d4c 5e5d P*5e P*7d 7c8b 5f6d 8b6d S*7c 6d8f 8h5e P*4d P*8h 8g6g 7c6d+ P*5b P*4e 4c3c 4e4d 6g6i P*3e 3d3e 6d6c N*3f 4g3f 3e3f N*4e 6i5i 5g4f G*4g 3h3f P*3h 3i3h P*3e 3f3e P*3d 3h4g 3d3e P*3i R*5h 6c5b 8f7e G*3h 5h3h+ P*6f 3h4g 5d5c+ 5i5e 4e3c+ 3b3c 4f5e N*3f G*3g 3f2h+ 1i2h 4g4h R*3h 4h4i 4d4c+ 3c4c 5c4c 4i4c P*5c 4c4i 2h1i 3e3f 3g3f S*4g G*2h 4g3h 2h3h P*3e 3f3g 3e3f 3g3f P*3e 3f4f P*4e 4f3e B*5g N*3d 2b1b S*3a G*3b 5b4b 3b3a 4b3a 5g3e+ G*2b 1b1c 2b2c 1c2c 3a2a R*5h 3d2b+ 2c3c S*2h G*5f 2b1a 5f5e L*3g 3c4d 3g3e 5e6f 7d7c+ 4d5e 7c7d 7e8f N*4h S*5i B*7c 5e4d 2h3g 5i4h 3h4h 4i3i 4h5h G*3h R*3d 4d5c S*5d 5c5b 7d6c 5b4a 3d3b+
+
+後手：AobaZero_w3813_n_p800 
+後手の持駒：金　銀　桂　歩三　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香 ・ ・ ・ ・v玉 ・ 全 圭|一
+| ・ ・ ・ ・ ・ ・ 龍 ・ ・|二
+| ・ ・ 角 と ・ ・ ・ ・ ・|三
+|v歩 ・ ・ ・ 銀 ・ ・v歩 ・|四
+| ・ ・ ・v歩 ・v歩 香 ・v歩|五   手数=217,IsSenteTurn()=0  ▲32飛成
+| ・v角v歩v金 ・ ・ ・ ・ ・|六
+| 歩 ・ ・ ・ ・ ・ 銀 歩 歩|七
+| ・ 歩 ・ ・ 金 ・v金 ・ 香|八
+| 香 桂 ・ ・ ・ ・v龍 桂 玉|九
++---------------------------+
+先手の持駒：歩四　
+先手：Yss1000k 
+http://wdoor.c.u-tokyo.ac.jp/shogi/view/2022/01/15/wdoor+floodgate-300-10F+Yss1000k+AobaZero_w3813_n_p800+20220115010003.csa
+
+7手頓死。△13銀(24)が正解。 -drawmove 256 だと200手を超えると、入玉してない局面がすべて5割近くになってしまう。
+position startpos moves 7g7f 8c8d 2h7h 1c1d 7f7e 1d1e 7e7d 7c7d 7h7d 7a6b 8h5e P*7c 5i4h 5a4b 4h3h 3c3d 5e2b+ 3a2b 7d3d B*4e 3d3f 4e6g+ 7i7h 6g5g 3i4h 5g2d P*6e 2b3c 7h6g 4b3b 3f7f 2d3d 6i5h 4c4d 3g3f 3d4c 8i7g 3b2b 3f3e 4a3b 4h3g 5c5d 4i4h 6a5b 2g2f P*3d 3e3d 3c3d 4g4f P*3e 6g5f 5b4b 5h4g 6b5c P*7d 7c7d 7f7d P*7c 7d7f 2c2d P*3f 3e3f 3g3f P*3e 3f2g 4b3c 2i3g 3c2c 5f6g 2a3c 3h2h 2d2e 2f2e 3c2e 2h3h 2e3g+ 4g3g P*2e N*4g 2c2d 3h4i 8d8e 6g5h 5c4b P*3f 3e3f 3g3h 4b3c P*3e 2d3e 4g3e 3d3e P*3g 3f3g+ 3h3g 5d5e 5h4g 3e2d 4f4e 4d4e 2g3f N*5f 4g5f 5e5f 7f5f P*5e 5f5e P*5d 5e5g S*6f 5g5f 6f5e 5f7f P*3e 3f4e P*4d P*5f 4d4e 5f5e 5d5e S*4g 8e8f 8g8f N*3f 3g3f 3e3f 7f3f P*3e 3f6f S*7e 6f6h 8b8f P*5i 4e4f 4g5h 7e6f P*4d 4c4d B*9e 6f7g 9e8f 7g8f+ P*2c 2b2c R*2a 3c2b 2a4a+ G*4b 4a8a N*5f 8a8f 5f6h+ 8f8d 6h5h 5i5h R*6i G*5i 6i9i+ 8d4d S*3c B*4e L*3d 4d8d 4f4g+ 4h4g P*4d 4e6c+ 3e3f P*3e 3d3e P*3h 3f3g+ 3h3g P*3h S*4h B*2h 4i3h 2h1i+ 8d8f 9i7i P*2f 2e2f P*2h P*6h N*5d 4b4c 6c4a 6h6i+ 5i4i P*8e 8f8e 1e1f 1g1f P*1g 8e8b P*3a 4i3i 1g1h+ N*1e 1a1e 1f1e 1h2h 3i2h L*2g P*2i N*1f 2h2g 2f2g+ 3h2g 1i2i 4a3b 3a3b G*1d 2c1b L*1c 2b1c
+
+後手：AobaZero_w3813_n_p800 
+後手の持駒：角　金　香　歩二　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香 ・ ・ ・ ・ ・ ・ ・ ・|一
+| ・ 龍 ・ ・ ・ ・v歩 ・v玉|二
+|v歩 ・v歩 ・ ・v金v銀 ・v銀|三
+| ・ ・ ・ ・ 桂v歩 ・v銀 金|四
+| ・ ・ ・ 歩v歩 ・v香 ・ 歩|五   手数=216,IsSenteTurn()=1  △13銀
+| ・ ・ ・ ・ ・ ・ ・ ・v桂|六
+| 歩 ・ ・ ・ ・ 金 歩 玉 ・|七
+| ・ ・ ・ ・ 歩 銀 ・ ・ ・|八
+| ・ ・v龍vと ・ ・ ・v馬 ・|九
++---------------------------+
+先手の持駒：桂二　香　歩五　
+先手：Yss1000k 
+http://wdoor.c.u-tokyo.ac.jp/shogi/view/2022/01/14/wdoor+floodgate-300-10F+Yss1000k+AobaZero_w3813_n_p800+20220114220005.csa
+
+
+宣言勝ち直前の評価値が互角ぐらい。Policyで1手しか読まなくなる。他の候補を読まない。-drawmove 256 の影響。
+position startpos moves 2g2f 3c3d 7g7f 4c4d 7i7h 8b4b 3i4h 5a6b 9g9f 3a3b 9f9e 7c7d 4i5h 7a7b 5i6h 6c6d 6h7i 4a5b 5g5f 8a7c 2f2e 2b3c 3g3f 3b4c 4h5g 4b2b 5g4f 2c2d 2i3g 2d2e 2h2e 3c2d 7f7e 2a3c 2e2d 2b2d 7e7d 2d2h+ B*8b 7c8e 8b9a+ R*2i L*5i 2i1i+ 9a6d L*7a 6d7e 7b6c 7e8e 6c7d 8e9f 5c5d 5f5e 7d6e P*7d 7a7d P*7f 4d4e 4f5g P*7c 9f8f 7d7f P*7g 5d5e 7g7f 4c4d L*6f 6e6f 8h6f L*8d 8f7e 5b6c S*6d 6a7b 6d6c 7b6c 7e4b S*5a 4b4c 6c5c 4c3d P*6h 5g6h 5a5b N*6e 5c4c P*5c 4c3d 5c5b+ 6b5b S*5d 5b4b G*4c 4b3a 3f3e 4d3e 6f5e P*3b 3g4e 3a2b 4e3c+ 3b3c P*3f 3e2d N*3e 3d3e 3f3e P*5g 6h5g P*6h 7i6h P*5f 5g5f 2b2c P*2e P*5g 2e2d 2c1d 5e2h 1i2h 6h5g 2h1g 2d2c+ B*3i S*4h 3i2h+ P*2i B*4f 5g6f N*7d 6f7g 4f5e 7g6h 2h2g 5f5e N*5f 6h7i 5f4h+ 5h4h 2g2f 4h5h P*5g 5h5g 1d1e 5g5h 8d8g+ 7h8g P*2h 2i2h 1g2h B*4f S*3g 4f3g 2f3g 5e4f 3g4f 4g4f P*6h 6i6h 1e1f 5d6c 1f1g 6c7d 7c7d 7i8h 1g1h 8h7g B*3h S*4g 3h2i+ G*3h 2i3h 4g3h 2h3h B*7b S*2g R*6a 1h1i 7b8c+ 3h3e 8c7d 2g1h+ 7g8f S*7b 6a6b+ G*6c 6b7b 6c7d 7b7d 3e3g 8f7e P*7c 6e7c+ 3g4f 7e8d 4f4c P*4d 4c5c G*6c 5c5a L*5d 5a8a P*8b 8a2a B*6d S*2h S*3b 2a9a N*8c 9a9b 9e9d B*5f N*6e 9c9d 9i9d 9b9d 8d9d P*8f R*7a 8f8g+ 9d9c 5f3h+ 9c9b S*9c 9b9c 3h3g 9c9b 3g6d 6c6d G*9c 9b9c P*9a P*9b 8g8f B*3a 3c3d 9b9a+ 2h3g+ 9c9b L*2e P*9d 1c1d 9d9c+ 1d1e G*2a 1a1d P*1c 1e1f 5d5c+ 8f7f
+http://wdoor.c.u-tokyo.ac.jp/shogi/view/2022/01/15/wdoor+floodgate-300-10F+AobaZero_w3813_n_p800+Yss1000k+20220115193004.csa
+
+
+後手三間穴熊。w3823で先手勝率88%。局面では91%。16手目、香を上がる直前では72%。
+position startpos moves 2g2f 3c3d 3i4h 8b3b 2f2e 2b3c 7g7f 3a4b 9g9f 4a5b 9f9e 5a6b 5i6h 6b7b 6h7h 7b8b 8h7g 9a9b 7h8h 8b9a 7i7h 7a8b 8g8f 5b6b 5g5f 4c4d 7h8g 5c5d 6i7h 4b5c
+後手：山本博志 四段 
+後手の持駒：
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v玉v桂 ・v金 ・ ・ ・v桂v香|一
+|v香v銀 ・v金 ・ ・v飛 ・ ・|二
+|v歩v歩v歩v歩v銀 ・v角v歩v歩|三
+| ・ ・ ・ ・v歩v歩v歩 ・ ・|四
+| 歩 ・ ・ ・ ・ ・ ・ 歩 ・|五   手数=30,IsSenteTurn()=1  △53銀
+| ・ 歩 歩 ・ 歩 ・ ・ ・ ・|六
+| ・ 銀 角 歩 ・ 歩 歩 ・ 歩|七
+| ・ 玉 金 ・ ・ 銀 ・ 飛 ・|八
+| 香 桂 ・ ・ ・ 金 ・ 桂 香|九
++---------------------------+
+先手の持駒：
+先手：加藤桃子 清麗 
+https://shogidb2.com/games/bf62a17e6c45122c536f907ce41f019758fee48c
+
+
+こういう序盤を指して欲しい。
+position startpos moves 2g2f 3c3d 2f2e 2b3c 7g7f 3a4b 5i6h 9c9d 9g9f 5c5d 8h3c+ 4b3c B*5c B*5e 8i7g 7c7d 5c2f+ 7a6b 2f3f 6b5c 6i7h 9d9e 9f9e 7d7e 7f7e 8b7b 6g6f 7b7e 7h6g P*7f
+後手：里見香奈 女流名人 
+後手の持駒：
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂 ・v金v玉v金 ・v桂v香|一
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|二
+| ・v歩 ・v歩v銀v歩v銀v歩v歩|三
+| ・ ・ ・ ・v歩 ・v歩 ・ ・|四
+| 歩 ・v飛 ・v角 ・ ・ 歩 ・|五   手数=30,IsSenteTurn()=1  △76歩打
+| ・ ・v歩 歩 ・ ・ 馬 ・ ・|六
+| ・ 歩 桂 金 歩 歩 歩 ・ 歩|七
+| ・ ・ ・ 玉 ・ ・ ・ 飛 ・|八
+| 香 ・ 銀 ・ ・ 金 銀 桂 香|九
++---------------------------+
+先手の持駒：歩二　
+先手：伊藤沙恵 女流三段 
+https://shogidb2.com/games/a04953a91d7003aec2eefb4895f86142b0072aeb
+
+
+
+Err. no mate3 move.
+position sfen l2g1R3/2ss1+P3/2ng3p1/1+Pp1p4/k3P4/NLPG1P3/g1B3P2/2KS4r/1N7 b 4P2LNSB5p 1
+
+上下反転
+position sfen 7n1/R4sk2/2p3b1G/3p1gpln/4p3K/4P1P+p1/1P3GN2/3+p1SS2/3r1G2L b 5P4p2lnsb 1
+position sfen 7n1/R4sk2/2p3b1G/3p1gpln/4p3K/4P1P+p1/1P3GN2/3+p1SS2/3r1G2L w 5P4p2lnsb 1
+
+これもmate3 Err。香車での空き王手で成れないのに成る手を生成。根深そう。
+position sfen l8/9/4+P4/2p4+P1/1p3P3/1PP6/3P3+b1/p2K4l/4R2Lk b 9pl4n4s4gbr 1
+
+29手目で勝率25%
+position startpos moves 5g5f 8c8d 7g7f 7a6b 8h7g 3c3d 5f5e 5a4b 2h5h 4b3b 7i6h 3a4b 5i4h 7c7d 4h3h 8d8e 3h2h 6b7c 6h5g 7c6d 5g6f 6a5b 4g4f 2b3c 1i1h 3c2d 5h4h 1c1d 2h1i 4b3c 6i5h 3b2b 3i2h 1a1b 5h4g 2b1a 4g3f 2d1c 1g1f 1c2b
+後手：佐藤天彦 九段 
+後手の持駒：
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂 ・ ・ ・v金 ・v桂v玉|一  
+| ・v飛 ・ ・v金 ・ ・v角v香|二  2022-02-23 朝日杯将棋オープン戦 準決勝
+|v歩 ・ ・v歩v歩v歩v銀v歩 ・|三
+| ・ ・v歩v銀 ・ ・v歩 ・v歩|四
+| ・v歩 ・ ・ 歩 ・ ・ ・ ・|五   手数=40,IsSenteTurn()=1  △22角
+| ・ ・ 歩 銀 ・ 歩 金 ・ 歩|六
+| 歩 歩 角 歩 ・ ・ 歩 歩 ・|七
+| ・ ・ ・ ・ ・ 飛 ・ 銀 香|八
+| 香 桂 ・ ・ ・ 金 ・ 桂 玉|九
++---------------------------+
+先手の持駒：
+先手：菅井竜也 八段 
+https://shogidb2.com/games/5f109970e9da17f28967b78b957545be258a2ee7
+
+
+△52歩でなく△52金と自爆。詰ルーチンのバグ？
+position startpos moves 2g2f 8c8d 2f2e 8d8e 6i7h 4a3b 7g7f 8e8f 8g8f 8b8f 5i5h 7a7b 2e2d 2c2d 2h2d P*2c 2d2f 8f8b P*8g 3c3d 3i4h 6c6d 3g3f 2b4d 3f3e 4d3e 2f5f 3a2b P*3f 3e2f 4h3g 2f4d 8h4d 4c4d 5f5c+ 6a5b B*7a 8b8c 7a6b+ 5a4a 5c5b 4a3a G*4a
+△52歩だと勝率95%。さすがに極端・・・。
+position startpos moves 2g2f 8c8d 2f2e 8d8e 6i7h 4a3b 7g7f 8e8f 8g8f 8b8f 5i5h 7a7b 2e2d 2c2d 2h2d P*2c 2d2f 8f8b P*8g 3c3d 3i4h 6c6d 3g3f 2b4d 3f3e 4d3e 2f5f 3a2b P*3f 3e2f 4h3g 2f4d 8h4d 4c4d 5f5c+ P*5b
+後手：AobaZero_w3883_n_p800 
+後手の持駒：角　歩二　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂 ・v金v玉 ・ ・v桂v香|一
+| ・v飛v銀 ・ ・ ・v金v銀 ・|二
+|v歩 ・v歩 ・ 龍 ・ ・v歩v歩|三
+| ・ ・ ・v歩 ・v歩v歩 ・ ・|四
+| ・ ・ ・ ・ ・ ・ ・ ・ ・|五   手数=35,IsSenteTurn()=0  ▲53飛成
+| ・ ・ 歩 ・ ・ ・ 歩 ・ ・|六
+| 歩 歩 ・ 歩 歩 歩 銀 ・ 歩|七
+| ・ ・ 金 ・ 玉 ・ ・ ・ ・|八
+| 香 桂 銀 ・ ・ 金 ・ 桂 香|九
++---------------------------+
+先手の持駒：角　歩　
+先手：coduck_oci_1c 
+
+
+大駒での素抜き
+position startpos moves 7g7f 8c8d 6g6f 3c3d 2h7h 8d8e 8h7g 1c1d 1g1f 7a6b 5i4h 5a4b 3i3h 6a5b 4h3i 2b3c 7i6h 3a3b 3i2h 4b3a 2g2f 5c5d 3g3f 2c2d 2i3g 3b2c 3h2g 4a3b 4i3h 4c4d 4g4f 5b4c 6h6g 3a2b 7f7e 3c4b 6f6e 4b7e 4f4e 6b5c 4e4d 5c4d 7g4d 4c4d 7h7e
+後手：AobaZero_w3900_n_p30k 
+後手の持駒：角　歩二　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂 ・ ・ ・ ・ ・v桂v香|一
+| ・v飛 ・ ・ ・ ・v金v玉 ・|二
+|v歩 ・v歩v歩 ・ ・ ・v銀 ・|三
+| ・ ・ ・ ・v歩v金v歩v歩v歩|四
+| ・v歩 飛 歩 ・ ・ ・ ・ ・|五   手数=45,IsSenteTurn()=0  ▲75飛
+| ・ ・ ・ ・ ・ ・ 歩 歩 歩|六
+| 歩 歩 ・ 銀 歩 ・ 桂 銀 ・|七
+| ・ ・ ・ ・ ・ ・ 金 玉 ・|八
+| 香 桂 ・ 金 ・ ・ ・ ・ 香|九
++---------------------------+
+先手の持駒：角　銀　歩　
+先手：dlshogi_HoneyWaffleBook_v100x8 
+http://wdoor.c.u-tokyo.ac.jp/shogi/view/2022/03/16/wdoor+floodgate-300-10F+dlshogi_HoneyWaffleBook_v100x8+AobaZero_w3900_n_p30k+20220316043004.csa/42
+
+▲86角(77)。歩頭に捨てる素抜きの絶妙手。
+position startpos moves 6g6f 3c3d 7g7f 8c8d 2h7h 8d8e 8h7g 1c1d 1g1f 7a6b 5i4h 5a4b 3i3h 6a5b 7i6h 3a3b 4g4f 4b3a 6i5h 2b3c 3g3f 5c5d 2i3g 2c2d 5g5f 3b2c 6h5g 4a3b 5h4g 7c7d 4f4e 8b7b 2g2f 7d7e 7f7e 7b7e 7g8f 8e8f 7h7e
+後手：AobaZero_w3900_n_p30k 
+後手の持駒：角　歩　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂 ・ ・ ・ ・v玉v桂v香|一
+| ・ ・ ・v銀v金 ・v金 ・ ・|二
+|v歩 ・ ・v歩 ・v歩v角v銀 ・|三
+| ・ ・ ・ ・v歩 ・v歩v歩v歩|四
+| ・ ・ 飛 ・ ・ 歩 ・ ・ ・|五   手数=39,IsSenteTurn()=0  ▲75飛
+| ・v歩 ・ 歩 歩 ・ 歩 歩 歩|六
+| 歩 歩 ・ ・ 銀 金 桂 ・ ・|七
+| ・ ・ ・ ・ ・ 玉 銀 ・ ・|八
+| 香 桂 ・ ・ ・ 金 ・ ・ 香|九
++---------------------------+
+先手の持駒：飛　歩　
+先手：dlshogi_HoneyWaffleBook_v100x8 
+http://wdoor.c.u-tokyo.ac.jp/shogi/view/2022/03/16/wdoor+floodgate-300-10F+dlshogi_HoneyWaffleBook_v100x8+AobaZero_w3900_n_p30k+20220316173012.csa/37
+
+
+▲55角が激痛。これを第一候補にできるか？
+position startpos moves 7g7f 3c3d 2g2f 4c4d 3i4h 8b4b 2f2e 2b3c 5i6h 5a6b 6h7h 6b7b 4i5h 7b8b 9g9f 7a7b 5g5f 3a3b 4h5g 4d4e 8h3c+ 3b3c 1g1f 1c1d 2i1g 2a1c 9f9e 1c2e 7i8h 2e1g+ 1i1g 4a5b 8h7g 9a9b 6g6f 4b2b 6i6h N*1c 2h2i 2c2d 5h6g 1c2e
+後手の持駒：角　歩　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+| ・v桂 ・v金 ・ ・ ・ ・v香|一
+|v香v玉v銀 ・v金 ・ ・v飛 ・|二
+|v歩v歩v歩v歩v歩 ・v銀 ・ ・|三
+| ・ ・ ・ ・ ・ ・v歩v歩v歩|四
+| 歩 ・ ・ ・ ・v歩 ・v桂 ・|五   手数=42,IsSenteTurn()=1  △25桂
+| ・ ・ 歩 歩 歩 ・ ・ ・ 歩|六
+| ・ 歩 銀 金 銀 歩 歩 ・ 香|七
+| ・ ・ 玉 金 ・ ・ ・ ・ ・|八
+| 香 桂 ・ ・ ・ ・ ・ 飛 ・|九
++---------------------------+
+先手の持駒：角　桂　
+
+
+▲53角の読み筋で自分の駒を動かしてる？直前に手が入れ替わった場合に、最後のinfoを送ってるせい。
+position startpos moves 2g2f 3c3d 7g7f 4a3b 2f2e 2b8h+ 7i8h 3a2b 3i3h 2b3c 3g3f 7a6b 3h3g 6c6d 3g4f 4c4d 5i6h 4d4e 4f5e 6b6c 2i3g 8b4b 4i4h 6a7b 6h7h B*3i 2h3h 3i4h+ 3h4h 5c5d 5e6f G*2g B*5c
+後手：Krist_483_473stb_1000k 
+後手の持駒：
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v桂 ・ ・v玉 ・ ・v桂v香|一
+| ・ ・v金 ・ ・v飛v金 ・ ・|二
+|v歩v歩v歩v銀 角 ・v銀v歩v歩|三
+| ・ ・ ・v歩v歩 ・v歩 ・ ・|四
+| ・ ・ ・ ・ ・v歩 ・ 歩 ・|五   手数=33,IsSenteTurn()=0  ▲53角打
+| ・ ・ 歩 銀 ・ ・ 歩 ・ ・|六
+| 歩 歩 ・ 歩 歩 歩 桂v金 歩|七
+| ・ 銀 玉 ・ ・ 飛 ・ ・ ・|八
+| 香 桂 ・ 金 ・ ・ ・ ・ 香|九
++---------------------------+
+先手の持駒：角　
+先手：AobaZero_w3923_n_p800 
+ △6八飛 (-4868HI) ▲4六歩 (+4546FU) △4六歩 (-4746FU) ▲4六飛 (+4246HI)
+
+
+△63銀の受けは▲74歩△同銀▲41角でしびれる。△52金▲74歩△92角▲38角が最善か。▲38角をPolicyで読めるか。
+position startpos moves 7g7f 8c8d 2g2f 8d8e 8h7g 3c3d 7i8h 2b7g+ 8h7g 3a2b 3i4h 2b3c 6i7h 4a3b 4g4f 1c1d 9g9f 9c9d 1g1f 7a7b 5i6h 6c6d 3g3f 7b6c 4h4g 7c7d 2i3g 5a4b 4i4h 8a7c 4g5f 6a6b 6g6f 8b8a 6h7i 6c5d 2h2i 4c4d 4f4e 4d4e 5f4e 5d4e 3g4e 3c4d S*6c 6b6a 6c7d+ P*7b 7d6c S*5d 4e5c+ 4d5c 6c5c 4b5c 7f7e 6a5b 7e7d B*9b B*3h 8a4a
+後手：AobaZero_w3923_n_p800  
+後手の持駒：角　銀　桂　
+  ９ ８ ７ ６ ５ ４ ３ ２ １
++---------------------------+
+|v香v飛 ・v金 ・ ・ ・v桂v香|一
+| ・ ・v歩 ・ ・ ・v金 ・ ・|二
+| ・ ・v桂 ・v玉 ・ ・v歩 ・|三
+|v歩 ・ ・v歩v銀 ・v歩 ・v歩|四
+| ・v歩 歩 ・ ・ ・ ・ ・ ・|五   手数=55,IsSenteTurn()=0  ▲75歩
+| 歩 ・ ・ 歩 ・ ・ 歩 歩 歩|六
+| ・ 歩 銀 ・ 歩 ・ ・ ・ ・|七
+| ・ ・ 金 ・ ・ 金 ・ ・ ・|八
+| 香 桂 玉 ・ ・ ・ ・ 飛 香|九
++---------------------------+
+先手の持駒：角　銀　歩三　
+先手：shark  
+http://wdoor.c.u-tokyo.ac.jp/shogi/view/index.cgi?csa=http%3A%2F%2Fwdoor.c.u-tokyo.ac.jp%2Fshogi%2FLATEST%2F2022%2F04%2F03%2Fwdoor%2Bfloodgate-300-10F%2Bshark%2BAobaZero_w3923_n_p800%2B20220403140007.csa&go_last=on&move_to=56
+
+
+△15香で17手詰
+position startpos moves 7g7f 8c8d 5g5f 7a6b 5f5e 6c6d 2h5h 6b6c 7i6h 3c3d 6h5g 8d8e 8h7g 7c7d 5g5f 4c4d 5i4h 3a4b 4h3h 4b4c 3h2h 4a5b 3i3h 8a7c 1g1f 1c1d 4g4f 5a4b 5h5i 4b3b 6g6f 5b4b 6i5h 6a5b 5h4g 9c9d 3g3f 5c5d 5e5d 6c5d P*5e 5d6c 2g2f 2b3a 2i3g 2a3c 3h2g 3b2a 4i3h 4b3b 4f4e 4d4e 3g4e 3c4e 5f4e P*4d 4e5d 6c5d 5e5d P*5g 5i5g N*6e 6f6e 7c6e 5d5c+ 5b5c N*3c 3b3c 5g5c+ 3a5c N*4e 5c4b 4e3c+ 4b3c 7g5e 8b5b 5e6d 5b5i+ S*4b R*2i 2h1g N*1e 1f1e 3c4b 6d4b+ 2i1i+ G*1h
+
+▲62歩成で23手詰。2008年羽生渡辺竜王戦1局変化。Policyが極端で勝率も悪くないので▲62歩成以外の手を調べない。
+position startpos moves 7g7f 3c3d 2g2f 4a3b 6i7h 2b8h+ 7i8h 3a4b 3i3h 7a6b 1g1f 1c1d 5i6h 6c6d 8h7g 6b6c 4i5h 6a5b 6h7i 7c7d 2f2e 4b3c 3h2g 8a7c 2g2f 8b8a 3g3f 3c4d 2f3g 5a6b 3g4f 8c8d 6g6f 9c9d 9g9f 5c5d 5h6g 8d8e 2i3g 6b7b 7i8h 5b6b 9i9h 2a3c 8h9i 4d5c 6g6h 4c4d 2e2d 2c2d 2h2d 6d6e B*2c 3b2c 2d2c+ 6e6f 2c3c 6f6g+ 6h6g B*6i 6g6h 6i4g+ G*4c B*6d 7f7e P*6g 6h6g 8e8f 7g8f P*6f 6g7g 4g4f 7e7d 6c7d P*7e P*7f 4c5c 6d5c 7e7d 7f7g+ 8i7g 6f6g+ P*6c 6g7h
+
+△89龍で25手詰。WCSC20_F7_BON_BNK.csa
+position startpos moves 7g7f 3c3d 2g2f 4c4d 3i4h 3a3b 5g5f 8b4b 5i6h 5a6b 6h7h 6b7b 4i5h 7b8b 9g9f 9c9d 8g8f 4a5b 7h8g 7a7b 7i7h 2b3c 2f2e 7c7d 8g9h 8c8d 8h7i 6c6d 4h5g 3b4c 5g6f 4d4e 6f7g 8a7c 6g6f 5c5d 5h6g 5b6c 2e2d 2c2d 7i2d 4b2b 2d3c+ 2b2h+ 3c4c R*4i 6g6h 4i2i+ B*4d N*5g 4c6a 7b6a S*7a 8b9c 6i5h 2h1i G*8a 8d8e 7a8b 9c8d 8a9a 6a6b 9a9b 8d8c 8b7a 8c9b L*8d 9b9c 7a6b+ 8e8f 7g8f L*8g 9h8g P*8e 6b6c
+
+▲82金で35手詰。122@18284.kif
+position startpos moves 7g7f 3c3d 2g2f 4c4d 2f2e 2b3c 3i4h 8b2b 5i6h 3a4b 6h7h 5a6b 5g5f 6b7b 3g3f 7b8b 9g9f 9c9d 4i5h 7a7b 4h5g 4a5b 7i6h 6c6d 2h3h 4b4c 5g4f 5b6c 3f3e 3d3e 4f3e 2b3b P*3d 3c5a 3e4d 4c4d 8h4d S*4i 3h3i 4i5h+ 6i5h P*3c S*4c 3b6b 3d3c+ 5a3c 4d3c+ 2a3c 3i3c+ B*2b 3c2c 2b9i+ S*8h 9i9h 2c2a G*3c B*7g 3c4c 7g1a+ L*7d 6h7g 4c5d L*9i 9h8h 7h8h 5d6e N*5e 7d7f 5e6c+ 6b6c B*4a 7f7g+ 1a7g N*7f 8h9h 6c6b 4a8e+ S*8d 8e7f 6e7f 7g7f B*2h L*8f S*6e 7f7g 2h1i+ 8f8d 8c8d 6g6f L*7d 7g6h 6e6f P*6g S*7i 6h6i L*5g 5h6h 7i6h+ 6i6h G*7h 6h8f 6f7e 8f9g 1i2i N*7g 2i1h S*5e 9d9e 9f9e P*9f 9g9f N*7f S*9g 5g5h+ 9e9d 5h6h 8g8f 6h7i G*9e 7b8c 8f8e 9a9d 8e8d 9d9e 8d8c+ 8b8c S*9d 8c9d 9f9e 9d8c P*8d 8c7b 9e9d 7b7a
+
+驚愕の曠野, 59手詰、岡村孝雄、2004年4月
+position sfen 4k4/9/9/9/9/9/9/9/9 b B4G2S9P2rb2s4n4l9p 1
+
+木星の旅, 411手詰, 高橋恭嗣, 2004年4月, 相玉
+position sfen 3pl3p/1+Pn3pk1/2+p6/4+pG3/1K3p2P/+B5l1+B/+p3pS1+ll/p+p2PN3/3S1+sSPN b 2R2P3gn2p 1
+
+
+▲74桂と王手で捨てて、▲89銀と竜を取ったときの△74桂の詰み筋を消す。
+position startpos moves 7g7f 3c3d 6g6f 3d3e 5g5f 8b3b 7i6h 3e3f 3g3f 3b3f 6h5g 3f3d 8h7g 1c1d 5i6h 3a4b 3i4h 3d7d 6h6g 7a7b 4h3g 5a6b 2g2f 6b7a 4i5h 7d3d 6g7h 4b3c 2h3h 3c4d 3g3f P*3e 3f2e 3d3b 6f6e 7a8b 9g9f 9c9d 4g4f 4a5b 6i6h 5c5d 4f4e 4d4e 7g2b+ 3b2b 3h3e 2c2d 3e3a+ 2b2c P*4f 2c3c 3a2a 3c3i+ 4f4e 2d2e 9f9e 9d9e 2a1a 3i2i N*5c N*8f 8g8f S*8g 7h8g 2i8i L*8h N*9f 9i9f B*3c B*6f 3c1a 5c6a+ 7b6a 6f1a+ 9e9f 8g7g 9f9g+ S*7h 9g8h
+
+dlshogiで負けを読み切るのに230ノード。
+position sfen lnS+N5/6Gg1/p1pp+R3p/4ppS2/1p1sk4/2P1LlP2/PP1P1+p2P/1KGS2+b2/LN1r1+n2+b w G4P 96
+その1手前。11手詰。dfpnなしで800pで解けない？
+position sfen lnS+N5/6Gg1/p1pp+R3p/4ppS2/1p1sk4/2P1glP2/PP1PL+p2P/1KGS2+b2/LN1r1+n2+b b 4P 95
+
+▲57飛打が詰めろ(1手)馬取り
+position startpos moves 7g7f 8c8d 2g2f 8d8e 8h7g 3c3d 7i7h 4a3b 2f2e 5a4a 2e2d 2c2d 2h2d 8e8f 8g8f P*8h 2d2b+ 3a2b 7g8h R*2g P*2h 2g2d+ 7h8g 3d3e 5i6h 7a6b 4i3h 7c7d 6i7h 6b7c 8h6f 7c6d 3i4h 5c5d 4g4f 2b3c 9g9f 3c4d 4f4e 4d3c 4h4g 5d5e 3g3f 3e3f 4g3f 2d3d P*3e 3d5d 3h4g P*3h 5g5f 5e5f 6h7i 8a7c 2i3g 6d5e 6f4h 3c4b 9f9e 7d7e 4h7e P*8e 8f8e 8b8e P*8f 8e7e 7f7e 5f5g+ 4g5g 7c6e R*8a P*7a B*8c B*7b 8c6e+ 5d6e 8a9a+ 5e5f 5g6f B*4f 7i8h 4f9a 6f6e 5f6e L*3d 9a3g+ 3d3b+ 4a3b N*2d 3b4a
+
+
+

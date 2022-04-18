@@ -894,7 +894,7 @@ Example:
 static void load_book_file(string file) noexcept {
 
   std::ifstream ifs(file);
-  if (!ifs) die(ERR_INT("Cannot open %s", file));
+  if (!ifs) die(ERR_INT("Cannot open %s", file.c_str()));
 
   string str;
   while (std::getline(ifs, str)) {

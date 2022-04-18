@@ -174,47 +174,6 @@ double get_spend_time(int ct1)
 	return get_diff_sec(get_clock()+1 - ct1);	// +1をつけて0にならないように。
 }
 
-#if 0
-// Ｍ系列乱数による方法（アルゴリズム辞典、奥村晴彦著より）周期 2^521 - 1 の他次元分布にも優れた方法
-#define M32(x)  (0xffffffff & (x))
-static int rnd521_count = 521;	// 初期化忘れの場合のチェック用
-static unsigned long mx521[521];
-
-void rnd521_refresh(void)
-{
-	int i;
-	for (i= 0;i< 32;i++) mx521[i] ^= mx521[i+489];
-	for (i=32;i<521;i++) mx521[i] ^= mx521[i- 32];
-}
-
-void init_rnd521(unsigned long u_seed)
-{
-	int i,j;
-	unsigned long u = 0;
-	for (i=0;i<=16;i++) {
-		for (j=0;j<32;j++) {
-			u_seed = u_seed*1566083941UL + 1;
-			u = ( u >> 1 ) | (u_seed & (1UL << 31));	// 最上位bitから32個取り出している
-		}
-		mx521[i] = u;
-	}
-	mx521[16] = M32(mx521[16] << 23) ^ (mx521[0] >> 9) ^ mx521[15];
-	for (i=17;i<=520;i++) mx521[i] = M32(mx521[i-17] << 23) ^ (mx521[i-16] >> 9) ^ mx521[i-1];
-	rnd521_refresh();	rnd521_refresh();	rnd521_refresh();	// warm up
-	rnd521_count = 520;
-}
-
-unsigned long rand_m521()
-{
-	if ( ++rnd521_count >= 521 ) { 
-		if ( rnd521_count == 522 ) init_rnd521(4357);	// 初期化してなかった場合のFail Safe
-		rnd521_refresh();
-		rnd521_count = 0;
-	}
-	return mx521[rnd521_count];
-}
-#else
-
 std::mt19937 get_mt_rand;
 
 void init_rnd521(unsigned long u_seed)
@@ -226,7 +185,6 @@ unsigned long rand_m521()
 {
 	return get_mt_rand();
 }
-#endif
 
 
 float f_rnd()
@@ -236,8 +194,6 @@ float f_rnd()
 //	PRT("f_rnd()=%f\n",f);
 	return (float)f;
 }
-
-void print_path() {}
 
 // from gen_legal_moves()
 int generate_all_move(tree_t * restrict ptree, int turn, int ply)
@@ -739,7 +695,7 @@ void clear_opening_hash()
 
 int IsOpeningHashFull()
 {
-	if ( opening_hash_use >= Opening_Hash_Size*90/100 ) {
+	if ( (float)opening_hash_use >= Opening_Hash_Size*0.9f ) {
 		static int count; if ( count++ < 1 ) PRT("opening hash full! opening_hash_use=%d\n",opening_hash_use);
 		return 1;
 	}
@@ -889,8 +845,6 @@ int is_limit_sec()
 	return 0;
 }
 
-//bool is_do_mate3() { return false; }
-//bool is_use_exact() { return false; }	// 有効だと駒落ちで最後の1手詰を見つけたら高確率でその1手だけを探索した、と扱われる
 bool is_do_mate3() { return true; }
 bool is_use_exact() { return true; }	// 有効だと駒落ちで最後の1手詰を見つけたら高確率でその1手だけを探索した、と扱われる
 
@@ -898,6 +852,7 @@ void uct_tree_loop(tree_t * restrict ptree, int sideToMove, int ply)
 {
 	ptree->sum_reached_ply = 0;
 	ptree->max_reached_ply = 0;
+	ptree->tlp_id = get_thread_id(ptree);	// for dfpn
 	for (;;) {
 		ptree->reached_ply = 0;
 		int exact_value = EX_NONE;
@@ -912,8 +867,8 @@ void uct_tree_loop(tree_t * restrict ptree, int sideToMove, int ply)
 			if ( is_limit_sec() ) set_stop_search();
 			if ( isKLDGainSmall(ptree, sideToMove) ) set_stop_search();
 		}
+		if ( is_use_exact() && (exact_value == EX_WIN || exact_value == EX_LOSS) ) set_stop_search();
 		if ( is_stop_search() ) break;
-		if ( is_use_exact() && (exact_value == EX_WIN || exact_value == EX_LOSS) ) break;
 	}
 }
 
@@ -1005,8 +960,11 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 	} SORT_LCB;
 	SORT_LCB sort_lcb[SORT_MAX];	// 勝率、LCB、ゲーム数、着手、元のindexを保存
 
+	float exact_v = 0;
+	int loss_moves = 0;
 	if ( is_use_exact() ) for (i=0;i<phg->child_num;i++) {
 		CHILD *pc = &phg->child[i];
+		if ( pc->exact_value == EX_LOSS || pc->value == ILLEGAL_MOVE ) loss_moves++;
 		if ( pc->exact_value != EX_WIN ) continue;
 		if ( pc->games == 0 ) DEBUG_PRT("");
 		max_games = pc->games;
@@ -1018,9 +976,14 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		p->lcb   = 0;
 		p->index = i;
 		sort_n++;
+		exact_v = +1.0f;
 		found_mate = true;
-		PRT("%3d(%3d)%7s,%5d,%6.3f,bias=%.10f\n",i,sort_n,str_CSA_move(pc->move),pc->games,pc->value,pc->bias);
+		PRT("MATE:%3d(%3d)%7s,%5d,%6.3f,bias=%.10f\n",i,sort_n,str_CSA_move(pc->move),pc->games,pc->value,pc->bias);
 		break;
+	}
+	if ( phg->child_num == loss_moves ) {
+		exact_v = -1.0f;
+		PRT("LOSS\n");
 	}
 
 	if ( !found_mate ) for (i=0;i<phg->child_num;i++) {
@@ -1126,6 +1089,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 			CHILD *pbest = &phg->child[max_i];
 			v = (pbest->value + 1.0) / 2.0;	// -1 <= x <= +1  -->  0 <= x <= +1
 		}
+		if ( exact_v != 0 ) v = exact_v;
 		sprintf(buf_move_count,"v=%.04f,%d",v,sum_games);
 	} else {
 		sprintf(buf_move_count,"%d",sum_games);
@@ -1332,10 +1296,9 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *phg, bool fOpeningHash)
 {
 	if ( phg->deleted == 0 ) {
-		PRT("already created? ply=%d,sideToMove=%d,games_sum=%d,child_num=%d\n",ply,sideToMove,phg->games_sum,phg->child_num); print_path();
+		PRT("already created? ply=%d,sideToMove=%d,games_sum=%d,child_num=%d\n",ply,sideToMove,phg->games_sum,phg->child_num);
 		return;
 	}
-//PRT("create_node in..   ply=%d,sideToMove=%d,games_sum=%d,child_num=%d,slot=%d\n",ply,sideToMove,phg->games_sum,phg->child_num, ptree->tlp_slot);
 
 if (0) {
 	print_board(ptree);
@@ -1395,6 +1358,7 @@ if (0) {
 		pc->games = 0;
 		pc->value = 0;
 		pc->exact_value = EX_NONE;
+		pc->mate_bit = MATE_CLEAR;
 #ifdef USE_LCB
 		pc->squared_eval_diff = 1e-4f;	// Initialized to small non-zero value to avoid accidental zero variances at low visits.
 		pc->acc_virtual_loss = 0;
@@ -1423,7 +1387,6 @@ if (0) {
 		}
 	}
 
-//PRT("create_node net.   ply=%d,sideToMove=%d,games_sum=%d,child_num=%d,slot=%d\n",ply,sideToMove,phg->games_sum,phg->child_num, ptree->tlp_slot);
 	float v = 0;
 	if ( NOT_USE_NN ) {
 		float f = f_rnd()*2.0f - 1.0f;
@@ -1462,6 +1425,8 @@ if (0) {
 
 	phg->hashcode64     = ptree->sequence_hash;
 	phg->hash64pos      = get_marge_hash(ptree, sideToMove);
+	phg->mate_bit       = 0;
+	phg->win_sum        = 0;
 	phg->games_sum      = 0;	// この局面に来た回数(子局面の回数の合計)
 	phg->col            = sideToMove;
 	phg->age            = thinking_age;
@@ -1485,16 +1450,91 @@ double uct_tree(tree_t * restrict ptree, int sideToMove, int ply, int *pExactVal
 
 	if ( phg->deleted ) {
 		if ( ply<=1 ) PRT("not created? ply=%2d,col=%d\n",ply,sideToMove);
-		if ( fClearHashAlways ) { PRT("not created Err\n"); debug(); }
+		if ( fClearHashAlways ) { DEBUG_PRT("not created Err\n"); }
 		create_node(ptree, sideToMove, ply, phg);
 	}
 
-	if ( phg->col != sideToMove ) { PRT("hash col Err. phg->col=%d,col=%d,age=%d(%d),ply=%d,nrep=%d,child_num=%d,games_sum=%d,phg->hash=%" PRIx64 "\n",phg->col,sideToMove,phg->age,thinking_age,ply,ptree->nrep,phg->child_num,phg->games_sum,phg->hashcode64); debug(); }
+	if ( phg->col != sideToMove ) { DEBUG_PRT("hash col Err. phg->col=%d,col=%d,age=%d(%d),ply=%d,nrep=%d,child_num=%d,games_sum=%d,phg->hash=%" PRIx64 "\n",phg->col,sideToMove,phg->age,thinking_age,ply,ptree->nrep,phg->child_num,phg->games_sum,phg->hashcode64); }
 
 	int child_num = phg->child_num;
 	int select = -1;
 	int loop;
 	double max_value = -10000;
+
+	double init_v = -1.0;	// 基本の勝率初期値は「負け」fpu (first play urgency)とも。
+/*
+	// 展開したい候補手の数。Progressive Windeningぽい感じにしてみたい
+	double upper = log((phg->games_sum+1)/100.0) / log(2.0);	// 800で3, 8000で6
+	if ( ply==1 && upper < 2 ) upper = 2;	// Rootは必ず2手は展開
+	int expand = 0;
+	for (loop=0; loop<child_num; loop++) {
+		CHILD *pc  = &phg->child[loop];
+		expand += (pc->games != 0);
+	}
+	if ( expand < (int)upper ) init_v = +1.0;	// 必ず展開
+*/
+	if ( phg->games_sum > 0 ) init_v = (phg->win_sum / phg->games_sum)/2.0f - 0.65f;	// 親ノードの勝率を使う
+/*	if ( phg->games_sum > 100 ) {
+		if ( phg->games_sum > 800 ) {
+			init_v = -1.0;
+		} else {	// 直線で近似
+			init_v = ((-1.0 -init_v) / 700.0) * phg->games_sum  -1.0  -((-1.0 -init_v) / 700.0) * 800.0;
+		}
+	}
+	PRT("init_v=%9f:w_sum=%7.2f,g_sum=%5d,ply=%2d\n",init_v,phg->win_sum,phg->games_sum,ply);
+*/
+	bool do_dfpn = false;
+//	if ( ply==1                   && (phg->mate_bit & MATE_3)     ==0 ) { phg->mate_bit |= MATE_3;      do_dfpn = true; }
+	if ( phg->games_sum >=     10 && (phg->mate_bit & MATE_DFPN_0)==0 ) { phg->mate_bit |= MATE_DFPN_0; do_dfpn = true; }
+	if ( phg->games_sum >=    100 && (phg->mate_bit & MATE_DFPN_1)==0 ) { phg->mate_bit |= MATE_DFPN_1; do_dfpn = true; }
+	if ( phg->games_sum >=   1000 && (phg->mate_bit & MATE_DFPN_2)==0 ) { phg->mate_bit |= MATE_DFPN_2; do_dfpn = true; }
+	if ( phg->games_sum >=  10000 && (phg->mate_bit & MATE_DFPN_3)==0 ) { phg->mate_bit |= MATE_DFPN_3; do_dfpn = true; }
+	if ( phg->games_sum >= 100000 && (phg->mate_bit & MATE_DFPN_4)==0 ) { phg->mate_bit |= MATE_DFPN_4; do_dfpn = true; }
+
+	if ( is_do_mate3() && do_dfpn ) for (;;) {
+		if ( 0 ) {
+			if ( ! is_mate_in3ply(ptree, sideToMove, ply) ) break;
+		} else {
+			UnLock(phg->entry_lock);
+			unsigned int move;
+			dfpn(ptree, sideToMove, ply, &move, phg->games_sum*1000);
+			Lock(phg->entry_lock);
+//			static int count; PRT("%2d:dfpn =%d,games=%d(%d)\n",ply,count++,phg->games_sum*1000,phg->games_sum);
+			if ( move == MOVE_NA ) break;
+			MOVE_CURR = move;
+		}
+		PRT("dfpn mate: ply=%2d,col=%d,move=%08x(%s),games=%d\n",ply,sideToMove, MOVE_CURR,string_CSA_move(MOVE_CURR).c_str(),phg->games_sum);
+		// 1手詰があるのに3手詰を選び、連続王手の千日手になるのを避ける
+		const int np = ptree->nrep + ply - 2;
+		int i;
+		for (i=np-1; i>=0; i-=2) {
+			if ( ptree->rep_board_list[i] == HASH_KEY && ptree->rep_hand_list[i] == HAND_B ) break;
+		}
+		if ( i>=0 ) {
+		 	PRT("repetition? ignore mate. ply=%d\n",ply);
+		 	break;
+		}
+
+		if ( ! is_move_valid( ptree, MOVE_CURR, sideToMove ) ) break;
+
+		for (loop=0; loop<child_num; loop++) {
+			CHILD *pc  = &phg->child[loop];
+			if ( (pc->move & MATE3_MASK) != (MOVE_CURR & MATE3_MASK) ) continue;
+			pc->value = +1;
+			pc->games++;
+			pc->exact_value = EX_WIN;
+			phg->games_sum++;
+			break;
+		}
+		if ( loop==child_num ) {
+			// position sfen l2g1R3/2ss1+P3/2ng3p1/1+Pp1p4/k3P4/NLPG1P3/g1B3P2/2KS4r/1N7 b 4P2LNSB5p 1
+			// この局面で move=00015725(8685NY),  香の空き王手が成香になり、is_move_valid() はこれを認識しない。保木さんの古いバグ？一応修正
+			DEBUG_PRT("Err. no mate move. ply=%d\n",ply);
+		}
+		UnLock(phg->entry_lock);
+		*pExactValue = EX_LOSS;
+		return +1;
+	}
 
 	if ( ply==1 && ptree->sum_reached_ply==0 && average_winrate && ptree->nrep < nVisitCount ) {
  		for (loop=0; loop<child_num; loop++) {
@@ -1507,50 +1547,12 @@ double uct_tree(tree_t * restrict ptree, int sideToMove, int ply, int *pExactVal
 		}
 	}
 
-	if ( ply==1 && is_do_mate3() && InCheck(sideToMove) == 0 && is_mate_in3ply(ptree, sideToMove, ply) ) {
-		PRT("root mate3ply: ply=%2d,col=%d,move=%08x(%s)\n",ply,sideToMove, MOVE_CURR,string_CSA_move(MOVE_CURR).c_str());
-		bool mate3 = true;
-		// 1手詰があるのに3手詰を選び、連続王手の千日手になるのを避ける
-		const int np = ptree->nrep + ply - 2;
-		int i;
-		for (i=np-1; i>=0; i-=2) {
-			if ( ptree->rep_board_list[i] == HASH_KEY && ptree->rep_hand_list[i] == HAND_B ) break;
-		}
-		if ( i>=0 ) {
-			mate3 = false;
-		 	PRT("repetition? ignore mate3\n");
-		}
-		if ( ! is_move_valid( ptree, MOVE_CURR, sideToMove ) ) mate3 = false;
-
-		if ( mate3 ) {
-			for (loop=0; loop<child_num; loop++) {
-				CHILD *pc  = &phg->child[loop];
-				if ( (pc->move & MATE3_MASK) != (MOVE_CURR & MATE3_MASK) ) continue;
-				pc->value = +1;
-				pc->games++;
-				pc->exact_value = EX_WIN;
-				phg->games_sum++;
-				break;
-			}
-			if ( loop==child_num ) {
-				mate3 = false;
-				// position sfen l2g1R3/2ss1+P3/2ng3p1/1+Pp1p4/k3P4/NLPG1P3/g1B3P2/2KS4r/1N7 b 4P2LNSB5p 1
-				// この局面で move=00015725(8685NY),  香の空き王手が成香になり、is_move_valid() はこれを認識しない。保木さんの古いバグ？一応修正
-				DEBUG_PRT("Err. no mate3 move.\n");
-			}
-			if ( mate3 ) {
-				UnLock(phg->entry_lock);
-				*pExactValue = EX_LOSS;
-				return +1;
-			}
-		}
-	}
-
 select_again:
- 	for (loop=0; loop<child_num; loop++) {
+	for (loop=0; loop<child_num; loop++) {
 		CHILD *pc  = &phg->child[loop];
 		if ( pc->value == ILLEGAL_MOVE ) continue;
 		if ( is_use_exact() && pc->exact_value == EX_LOSS ) continue;
+		if ( is_use_exact() && pc->exact_value == EX_WIN  ) { select = loop; break; }
 
 		const double cBASE = 19652.0;
 		const double cINIT = 1.25;
@@ -1563,20 +1565,20 @@ select_again:
 		double puct = c * pc->bias * std::sqrt(static_cast<double>(phg->games_sum + 1))
 			       / static_cast<double>(pc->games + 1);
 		// all values are initialized to loss value.  http://talkchess.com/forum3/viewtopic.php?f=2&t=69175&start=70#p781765
-		double mean_action_value = (pc->games == 0) ? -1.0 : pc->value;
-		
+		double mean_action_value = (pc->games == 0) ? init_v : pc->value;
+
 		// We must multiply puct by two because the range of
 		// mean_action_value is [-1, 1] instead of [0, 1].
 		double uct_value = mean_action_value + 2.0 * puct;
 
-//		if ( depth==0 && phg->games_sum==500 ) PRT("%3d:v=%5.3f,p=%5.3f,u=%5.3f,g=%4d,s=%5d\n",loop,pc->value,puct,uct_value,pc->games,phg->games_sum);
+//		if ( ply==1 ) PRT("%3d:v=%5.3f,bias=%5.3f,p=%5.3f,u=%6.3f,g=%4d/%5d\n",loop,pc->value,pc->bias,puct,uct_value,pc->games,phg->games_sum);
 		if ( uct_value > max_value ) {
 			max_value = uct_value;
 			select = loop;
 		}
 	}
 	if ( select < 0 ) {
-//		PRT("no legal move. mate? ply=%d,child_num=%d,v=%.0f\n",ply,child_num,v);
+//		PRT("no legal move. mate? ply=%d,child_num=%d\n",ply,child_num);
 		UnLock(phg->entry_lock);
 		*pExactValue = EX_WIN;	// 1手前に指された手で勝
 		return -1;
@@ -1605,9 +1607,7 @@ skip_select:
 	int flag_illegal_move = 0;
 
 	if ( InCheck(sideToMove) ) {
-		PRT("escape check err. %2d:%8s(%2d/%3d):selt=%3d,v=%.3f\n",ply,str_CSA_move(pc->move),pc->games,phg->games_sum,select,max_value);
-		flag_illegal_move = 1;
-		debug();
+		DEBUG_PRT("escape check err. %2d:%8s(%2d/%3d):selt=%3d,v=%.3f\n",ply,str_CSA_move(pc->move),pc->games,phg->games_sum,select,max_value);
 	}
 
 	int now_in_check = InCheck(Flip(sideToMove));
@@ -1686,11 +1686,26 @@ skip_select:
 		}
 	}
 
-	if ( !now_in_check && is_do_mate3() && is_mate_in3ply(ptree, Flip(sideToMove), ply+1) ) {
-		PRT("mated3ply: ply=%2d,col=%d,move=%08x(%s)\n",ply,sideToMove, MOVE_CURR,string_CSA_move(MOVE_CURR).c_str());	// str_CSA_move() は内部でstaticを持つので複数threadでは未定義
-		win = -1.0;	// 3手で詰まされる
-		pc->exact_value = EX_LOSS;
-		skip_search = 1;
+	if ( !now_in_check && is_do_mate3() && (pc->mate_bit & MATE_3)==0 ) {
+		pc->mate_bit |= MATE_3;
+		if ( is_mate_in3ply(ptree, Flip(sideToMove), ply+1) ) {
+			PRT("mated3ply: ply=%2d,col=%d,move=%08x(%s)\n",ply,sideToMove, MOVE_CURR,string_CSA_move(MOVE_CURR).c_str());	// str_CSA_move() は内部でstaticを持つので複数threadでは未定義
+			win = -1.0;	// 3手で詰まされる
+			pc->exact_value = EX_LOSS;
+			skip_search = 1;
+		}
+	}
+
+	if ( 0 && !now_in_check && is_do_mate3() && (pc->mate_bit & MATE_DFPN_0)==0 && pc->games >= 0 ) {	// ( || hasLoss)
+		pc->mate_bit |= MATE_DFPN_0;
+		unsigned int move;
+		dfpn(ptree, Flip(sideToMove), ply+1, &move, 1000);
+		if ( move != MOVE_NA ) {
+			PRT("dfpn: ply=%2d,col=%d,move=%08x(%s)\n",ply,sideToMove, move,string_CSA_move(move).c_str());
+			win = -1.0;
+			pc->exact_value = EX_LOSS;
+			skip_search = 1;
+		}
 	}
 
 	if ( nDrawMove ) {
@@ -1754,11 +1769,11 @@ skip_select:
 #endif
 				phg->games_sum -= VL_N;
 				pc->games      -= VL_N;		// gamesを減らすのは非常に危険！ あちこちで games==0 で判定してるので
-				if ( pc->games < 0 ) { PRT("Err pc->games=%d\n",pc->games); debug(); }
+				if ( pc->games < 0 ) { DEBUG_PRT("Err pc->games=%d\n",pc->games); }
 				if ( pc->games == 0 ) pc->value = 0;
 				else                  pc->value = (float)((((double)pc->games+VL_N) * pc->value - one_win*VL_N) / pc->games);
 			}
-			pc->exact_value = ex_value;
+			if ( pc->exact_value == EX_NONE ) pc->exact_value = ex_value;	// 複数スレッドだと順番によって上書きされる
 		}
 	}
 
@@ -1766,7 +1781,7 @@ skip_select:
 
 	if ( is_use_exact() && pc->exact_value == EX_WIN ) {	// この手を指せば勝
 		*pExactValue = EX_LOSS;
-		PRT("mate: ply=%2d,col=%d,move=%08x(%s)win=%.1f -> +1.0\n",ply,sideToMove, MOVE_CURR,string_CSA_move(MOVE_CURR).c_str(),win);
+		PRT("mate: ply=%2d,col=%d,move=%08x(%s)win=%5.2f -> +1.0\n",ply,sideToMove, MOVE_CURR,string_CSA_move(MOVE_CURR).c_str(),win);
 		win = +1.0;
 	}
 
@@ -1786,6 +1801,7 @@ skip_select:
 
 	pc->value = (float)win_prob;
 	pc->games++;			// この手を探索した回数
+	phg->win_sum += win;
 	phg->games_sum++;
 	phg->age = thinking_age;
 

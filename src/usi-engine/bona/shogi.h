@@ -128,7 +128,8 @@ extern unsigned char ailast_one[512];
 //#define BNZ_VER                 "28"	// 20220225 balanced_opening ply<=2 always use value
 //#define BNZ_VER                 "29"	// 20220406 policy softmax temperature 1.0 -> 1.8
 //#define BNZ_VER                 "30"	// 20220406 kldgain 0.000006, balanced_opening within +150 ELO
-#define BNZ_VER                 "31"	// 20220407 cancel balanced_opening. resign ok under 30 moves in autousi.
+//#define BNZ_VER                 "31"	// 20220407 cancel balanced_opening. resign ok under 30 moves in autousi.
+#define BNZ_VER                 "32"	// 20220418 initial winrate is adjusted(aka, first play urgency, fpu), +20 ELO. dfpn for all node visits >= 10, +40 ELO.
 #define BNZ_NAME                "AobaZero"
 
 //#define BNZ_VER                 "16"	// 20210528 komaochi, mate3
@@ -1323,7 +1324,8 @@ extern unsigned int time_last_send;
 #if defined(DFPN)
 #  define DFPNOut( ... ) if ( dfpn_sckt != SCKT_NULL ) \
                            sckt_out( dfpn_sckt, __VA_ARGS__ )
-int CONV dfpn( tree_t * restrict ptree, int turn, int ply );
+const int DFPN_NODE_LIMIT = 50000000;
+int CONV dfpn( tree_t * restrict ptree, int turn, int ply, unsigned int *pret_move, int dfpn_node_limit = DFPN_NODE_LIMIT );
 int CONV dfpn_ini_hash( void );
 extern unsigned int dfpn_hash_log2;
 extern sckt_t dfpn_sckt;
