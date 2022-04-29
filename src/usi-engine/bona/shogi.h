@@ -130,7 +130,8 @@ extern unsigned char ailast_one[512];
 //#define BNZ_VER                 "30"	// 20220406 kldgain 0.000006, balanced_opening within +150 ELO
 //#define BNZ_VER                 "31"	// 20220407 cancel balanced_opening. resign ok under 30 moves in autousi.
 //#define BNZ_VER                 "32"	// 20220418 initial winrate is adjusted(aka, first play urgency, fpu), +20 ELO. dfpn for all node visits >= 10, +40 ELO.
-#define BNZ_VER                 "33"	// 20220429 perpetual check is illegal with 3 times(bug fixed).
+//#define BNZ_VER                 "33"	// 20220429 perpetual check is illegal with 3 times(bug fixed).
+#define BNZ_VER                 "34"	// 20220429 dfpn time limit stop.
 #define BNZ_NAME                "AobaZero"
 
 //#define BNZ_VER                 "16"	// 20210528 komaochi, mate3
