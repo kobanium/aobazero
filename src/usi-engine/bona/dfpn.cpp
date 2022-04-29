@@ -210,11 +210,13 @@ mid( tree_t * restrict ptree, dfpn_tree_t * restrict pdfpn_tree, int ply )
 #if defined(TLP)
     if ( ! ptree->tlp_id )
 #endif
-      if ( node_next_signal < ++node_last_check && detect_signals( ptree ) )
-	{
-	  return DFPN_ERRNO_SIGNAL;
-	}
-  
+//    if ( node_next_signal < ++node_last_check && detect_signals( ptree ) ) { return DFPN_ERRNO_SIGNAL; }
+      if ( node_next_signal < ++node_last_check ) {
+        node_last_check = 0;
+        if ( is_limit_sec_or_stop_input() ) return DFPN_ERRNO_SIGNAL;
+      }
+  if ( (ptree->node_searched & 0x0f)==0 && is_stop_search() ) return DFPN_ERRNO_SIGNAL;
+
   if ( PLY_MAX-4 < ply ) { return DFPN_ERRNO_MAXPLY; }
   
   if ( init_children( ptree, pdfpn_tree, ply ) )
