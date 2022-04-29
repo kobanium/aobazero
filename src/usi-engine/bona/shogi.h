@@ -129,7 +129,8 @@ extern unsigned char ailast_one[512];
 //#define BNZ_VER                 "29"	// 20220406 policy softmax temperature 1.0 -> 1.8
 //#define BNZ_VER                 "30"	// 20220406 kldgain 0.000006, balanced_opening within +150 ELO
 //#define BNZ_VER                 "31"	// 20220407 cancel balanced_opening. resign ok under 30 moves in autousi.
-#define BNZ_VER                 "32"	// 20220418 initial winrate is adjusted(aka, first play urgency, fpu), +20 ELO. dfpn for all node visits >= 10, +40 ELO.
+//#define BNZ_VER                 "32"	// 20220418 initial winrate is adjusted(aka, first play urgency, fpu), +20 ELO. dfpn for all node visits >= 10, +40 ELO.
+#define BNZ_VER                 "33"	// 20220429 perpetual check is illegal with 3 times(bug fixed).
 #define BNZ_NAME                "AobaZero"
 
 //#define BNZ_VER                 "16"	// 20210528 komaochi, mate3
@@ -1496,6 +1497,9 @@ void init_state( const tree_t * restrict parent, tree_t * restrict child );
 extern int sfen_current_move_number;
 extern int nHandicap;
 extern float average_winrate;
+int is_stop_search();
+int is_limit_sec_or_stop_input();
+
 #endif
 
 #endif /* SHOGI_H */

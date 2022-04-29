@@ -844,6 +844,11 @@ int is_limit_sec()
 	if ( get_spend_time(search_start_ct) >= dLimitSec ) return 1;
 	return 0;
 }
+int is_limit_sec_or_stop_input() {
+	if ( is_limit_sec() ) set_stop_search();
+	if ( check_stop_input() ) set_stop_search();
+	return is_stop_search();
+}
 
 bool is_do_mate3() { return true; }
 bool is_use_exact() { return true; }	// 有効だと駒落ちで最後の1手詰を見つけたら高確率でその1手だけを探索した、と扱われる
@@ -862,9 +867,8 @@ void uct_tree_loop(tree_t * restrict ptree, int sideToMove, int ply)
 		int count = inc_uct_count();
 		if ( is_main_thread(ptree) ) {
 			if ( is_send_usi_info(0) ) send_usi_info(ptree, sideToMove, ply, count, (int)(count/get_spend_time(search_start_ct)));
-			if ( check_stop_input() == 1 ) set_stop_search();
 			if ( IsHashFull() ) set_stop_search();
-			if ( is_limit_sec() ) set_stop_search();
+			is_limit_sec_or_stop_input();
 			if ( isKLDGainSmall(ptree, sideToMove) ) set_stop_search();
 		}
 		if ( is_use_exact() && (exact_value == EX_WIN || exact_value == EX_LOSS) ) set_stop_search();
@@ -1604,8 +1608,6 @@ skip_select:
 
 //	PRT("%2d:tid=%d:%s(%3d/%5d):select=%3d,v=%6.3f\n",ply,get_thread_id(ptree),string_CSA_move(pc->move).c_str(),pc->games,phg->games_sum,select,max_value);
 
-	int flag_illegal_move = 0;
-
 	if ( InCheck(sideToMove) ) {
 		DEBUG_PRT("escape check err. %2d:%8s(%2d/%3d):selt=%3d,v=%.3f\n",ply,str_CSA_move(pc->move),pc->games,phg->games_sum,select,max_value);
 	}
@@ -1614,6 +1616,7 @@ skip_select:
 
 	enum { SENNITITE_NONE, SENNITITE_DRAW, SENNITITE_WIN };
 	int flag_sennitite = SENNITITE_NONE;
+	int flag_illegal_move = 0;
 
 	const int np = ptree->nrep + ply - 1;
 	// ptree->history_in_check[np] にはこの手を指す前に王手がかかっていたか、が入る
@@ -1631,7 +1634,7 @@ skip_select:
 			if ( sum == SUM_MAX ) break;
 		}
 	}
-	if ( sum > 0 ) {
+	if ( sum >= SUM_MAX-1 ) {
 //		PRT("sennnitite=%d,i=%d(%d),nrep=%d,ply=%d,%s\n",sum,i,np-i,ptree->nrep,ply,str_CSA_move(pc->move));
 		flag_sennitite = SENNITITE_DRAW;
 
@@ -1652,8 +1655,10 @@ skip_select:
 				flag_sennitite = SENNITITE_WIN;
 			}
 		}
-		if ( now_in_check ) flag_illegal_move = 1;	// 王手の同一局面は指さない。王が逃げる手で4回目、だと3回目の王手を選ぶ
-		if ( sum != SUM_MAX ) flag_sennitite = SENNITITE_NONE;
+		// 王手の同一局面は3回目で指さない。王が逃げる手で4回目で負ける場合あり
+		if ( sum != SUM_MAX && flag_illegal_move == 0 ) {
+			flag_sennitite = SENNITITE_NONE;
+		}
 	}
 
 	if ( flag_illegal_move ) {
@@ -1689,7 +1694,7 @@ skip_select:
 	if ( skip_search == 0 && !now_in_check && is_do_mate3() && (pc->mate_bit & MATE_3)==0 ) {
 		pc->mate_bit |= MATE_3;
 		if ( is_mate_in3ply(ptree, Flip(sideToMove), ply+1) ) {
-			PRT("mated3ply: ply=%2d,col=%d,move=%08x(%s)\n",ply,sideToMove, MOVE_CURR,string_CSA_move(MOVE_CURR).c_str());	// str_CSA_move() は内部でstaticを持つので複数threadでは未定義
+//			PRT("mated3ply: ply=%2d,col=%d,move=%08x(%s)\n",ply,sideToMove, MOVE_CURR,string_CSA_move(MOVE_CURR).c_str());	// str_CSA_move() は内部でstaticを持つので複数threadでは未定義
 			win = -1.0;	// 3手で詰まされる
 			pc->exact_value = EX_LOSS;
 			skip_search = 1;
