@@ -1508,18 +1508,20 @@ double uct_tree(tree_t * restrict ptree, int sideToMove, int ply, int *pExactVal
 			MOVE_CURR = move;
 		}
 		PRT("dfpn mate: ply=%2d,col=%d,move=%08x(%s),games=%d\n",ply,sideToMove, MOVE_CURR,string_CSA_move(MOVE_CURR).c_str(),phg->games_sum);
+		if ( ! is_move_valid( ptree, MOVE_CURR, sideToMove ) ) break;
+
 		// 1手詰があるのに3手詰を選び、連続王手の千日手になるのを避ける
-		const int np = ptree->nrep + ply - 2;
+		MakeMove( sideToMove, MOVE_CURR, ply );
+		const int np = ptree->nrep + ply - 1;
 		int i;
 		for (i=np-1; i>=0; i-=2) {
 			if ( ptree->rep_board_list[i] == HASH_KEY && ptree->rep_hand_list[i] == HAND_B ) break;
 		}
+		UnMakeMove( sideToMove, MOVE_CURR, ply );
 		if ( i>=0 ) {
 		 	PRT("repetition? ignore mate. ply=%d\n",ply);
 		 	break;
 		}
-
-		if ( ! is_move_valid( ptree, MOVE_CURR, sideToMove ) ) break;
 
 		for (loop=0; loop<child_num; loop++) {
 			CHILD *pc  = &phg->child[loop];
@@ -1627,15 +1629,16 @@ skip_select:
 	int i,sum = 0;
 	uint64 key  = HASH_KEY;
 //	uint64 hand = Flip(sideToMove) ? HAND_B : HAND_W;
+	int same_i = 0;	// 同一局面になった一番小さい手数
 	const int SUM_MAX = 3;		// 過去に3回同じ局面。つまり同一局面4回
 	for (i=np-1; i>=0; i-=2) {
 		if ( ptree->rep_board_list[i] == key && ptree->rep_hand_list[i] == HAND_B ) {
+			same_i = i;
 			sum++;
 			if ( sum == SUM_MAX ) break;
 		}
 	}
 	if ( sum >= SUM_MAX-1 ) {
-//		PRT("sennnitite=%d,i=%d(%d),nrep=%d,ply=%d,%s\n",sum,i,np-i,ptree->nrep,ply,str_CSA_move(pc->move));
 		flag_sennitite = SENNITITE_DRAW;
 
 		// 連続王手か？。王手をかけた場合と王が逃げた場合、の2通りあり
@@ -1643,15 +1646,15 @@ skip_select:
 		if ( now_in_check==0 ) start_j = np;
 		int flag_consecutive_check = 1;
 //		for (int j=0; j<=np; j++) PRT("%d",(ptree->history_in_check[j]!=0)); PRT("\n");
-		for (int j=start_j; j>=i; j-=2) {
+		for (int j=start_j; j>=same_i; j-=2) {
 			if ( ptree->history_in_check[j]==0 ) { flag_consecutive_check = 0; break; }
 		}
 		if ( flag_consecutive_check ) {
 			if ( now_in_check ) {
-//				PRT("perpetual check! delete this move.  %d -> %d (%d)\n",start_j,i,(start_j-i)+1);
+//				PRT("perpetual check! delete this move.  %d -> %d (%d)\n",start_j,same_i,(start_j-same_i)+1);
 				flag_illegal_move = 1;
 			} else {
-//				PRT("perpetual check escape! %d -> %d (%d)\n",start_j,i,(start_j-i)+1);
+//				PRT("perpetual check escape! %d -> %d (%d)\n",start_j,same_i,(start_j-same_i)+1);
 				flag_sennitite = SENNITITE_WIN;
 			}
 		}
@@ -1659,6 +1662,7 @@ skip_select:
 		if ( sum != SUM_MAX && flag_illegal_move == 0 ) {
 			flag_sennitite = SENNITITE_NONE;
 		}
+//		PRT("sum=%d,i=%d(%d),nrep=%d,ply=%d,%s,flag=%d,now_in_check=%d,i=%d,np=%d,start_j=%d\n",sum,i,np-i,ptree->nrep,ply,str_CSA_move(pc->move),flag_sennitite,now_in_check,i,np,start_j);
 	}
 
 	if ( flag_illegal_move ) {
