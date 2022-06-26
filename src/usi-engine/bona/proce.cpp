@@ -640,6 +640,7 @@ usi_go( tree_t * restrict ptree, char **lasts )
       
   if ( get_elapsed( &time_turn_start ) < 0 ) { return -1; }
 */
+// PRT("iterate()=%d\n",iterate(ptree));
 //  iret = com_turn_start( ptree, 0 );
   iret = YssZero_com_turn_start( ptree );
   if ( iret < 0 ) {

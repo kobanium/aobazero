@@ -87,10 +87,104 @@ eval_material( const tree_t * restrict ptree )
   return material;
 }
 
+//  piece value from AobaZero kifu. https://524.teacup.com/yss/bbs/3946
+int aoba_piece_v[13] = {
+// FU  KY  KE  GI  KI  KA  HI    TO  NK  NG  NG   UM   RY
+  100,198,367,562,674,775,871,  496,364,459,649,1133,1408
+};
+int aoba_hand_v[7] = {
+  106,351,403,663,889,924,1257
+};
+
+int CONV
+eval_aoba_material( const tree_t * restrict ptree )
+{
+  int material, itemp;
+
+  itemp     = PopuCount( BB_BPAWN );
+  itemp    -= PopuCount( BB_WPAWN );
+  material  = itemp * aoba_piece_v[0];
+  itemp     = (int)I2HandPawn( HAND_B );
+  itemp    -= (int)I2HandPawn( HAND_W );
+  material += itemp * aoba_hand_v[0];
+
+  itemp     = PopuCount( BB_BLANCE );
+  itemp    -= PopuCount( BB_WLANCE );
+  material += itemp * aoba_piece_v[1];
+  itemp     = (int)I2HandLance( HAND_B );
+  itemp    -= (int)I2HandLance( HAND_W );
+  material += itemp * aoba_hand_v[1];
+
+  itemp     = PopuCount( BB_BKNIGHT );
+  itemp    -= PopuCount( BB_WKNIGHT );
+  material += itemp * aoba_piece_v[2];
+  itemp     = (int)I2HandKnight( HAND_B );
+  itemp    -= (int)I2HandKnight( HAND_W );
+  material += itemp * aoba_hand_v[2];
+
+  itemp     = PopuCount( BB_BSILVER );
+  itemp    -= PopuCount( BB_WSILVER );
+  material += itemp * aoba_piece_v[3];
+  itemp     = (int)I2HandSilver( HAND_B );
+  itemp    -= (int)I2HandSilver( HAND_W );
+  material += itemp * aoba_hand_v[3];
+
+  itemp     = PopuCount( BB_BGOLD );
+  itemp    -= PopuCount( BB_WGOLD );
+  material += itemp * aoba_piece_v[4];
+  itemp     = (int)I2HandGold( HAND_B );
+  itemp    -= (int)I2HandGold( HAND_W );
+  material += itemp * aoba_hand_v[4];
+
+  itemp     = PopuCount( BB_BBISHOP );
+  itemp    -= PopuCount( BB_WBISHOP );
+  material += itemp * aoba_piece_v[5];
+  itemp     = (int)I2HandBishop( HAND_B );
+  itemp    -= (int)I2HandBishop( HAND_W );
+  material += itemp * aoba_hand_v[5];
+
+  itemp     = PopuCount( BB_BROOK );
+  itemp    -= PopuCount( BB_WROOK );
+  material += itemp * aoba_piece_v[6];
+  itemp     = (int)I2HandRook( HAND_B );
+  itemp    -= (int)I2HandRook( HAND_W );
+  material += itemp * aoba_hand_v[6];
+
+  itemp     = PopuCount( BB_BPRO_PAWN );
+  itemp    -= PopuCount( BB_WPRO_PAWN );
+  material += itemp * aoba_piece_v[7];
+
+  itemp     = PopuCount( BB_BPRO_LANCE );
+  itemp    -= PopuCount( BB_WPRO_LANCE );
+  material += itemp * aoba_piece_v[8];
+
+  itemp     = PopuCount( BB_BPRO_KNIGHT );
+  itemp    -= PopuCount( BB_WPRO_KNIGHT );
+  material += itemp * aoba_piece_v[9];
+
+  itemp     = PopuCount( BB_BPRO_SILVER );
+  itemp    -= PopuCount( BB_WPRO_SILVER );
+  material += itemp * aoba_piece_v[10];
+
+  itemp     = PopuCount( BB_BHORSE );
+  itemp    -= PopuCount( BB_WHORSE );
+  material += itemp * aoba_piece_v[11];
+
+  itemp     = PopuCount( BB_BDRAGON );
+  itemp    -= PopuCount( BB_WDRAGON );
+  material += itemp * aoba_piece_v[12];
+
+  return material;
+}
 
 int CONV
 evaluate( tree_t * restrict ptree, int ply, int turn )
 {
+if (1) {
+  int score = eval_aoba_material(ptree);
+  score = turn ? -score : score;
+  return score;
+}
   int list0[52], list1[52];
   int nlist, score, sq_bk, sq_wk, k0, k1, l0, l1, i, j, sum;
 
