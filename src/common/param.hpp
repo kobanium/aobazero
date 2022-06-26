@@ -3,9 +3,9 @@
 #pragma once
 namespace Ver {
   constexpr unsigned char major       = 3;	// 2...komaochi, 3...Swish
-  constexpr unsigned char minor       = 4;	// 
+  constexpr unsigned char minor       = 5;	// 
   // usi_engine is no use. MUST increase "minor" for kicking old engine by server. Only major and minor are sent to client.
-  constexpr unsigned short usi_engine = 35;	// 1...18 AobaZero, 16...26 komaochi, 27...Swish AobaZero
+  constexpr unsigned short usi_engine = 36;	// 1...18 AobaZero, 16...26 komaochi, 27...Swish AobaZero
 }
 
 #define AOBA_UNIQUE ".oeWK7ZhnLN"

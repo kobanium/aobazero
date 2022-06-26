@@ -43,6 +43,7 @@ typedef struct hash_shogi {
 	int deleted;	//
 	int mate_bit;
 	float win_sum;
+	float squared_eval;			// variance for Dynamic Variance-Scaled cPUCT
 	int games_sum;	// sum of children selected
 	int col;		// color 1 or 2
 	int age;		//

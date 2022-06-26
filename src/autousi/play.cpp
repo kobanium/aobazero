@@ -254,7 +254,8 @@ public:
 
     char opt_kld[]       = "-kldgain";
 //  char opt_kld_value[] = "0.0000013";
-    char opt_kld_value[] = "0.000006";
+//  char opt_kld_value[] = "0.000006";
+    char opt_kld_value[] = "0.000005";
     argv[argc++] = opt_kld;
     argv[argc++] = opt_kld_value;
 #endif
