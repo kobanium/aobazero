@@ -89,7 +89,7 @@ static string addup_result(const NodeType &type_term, const Color &turn,
 			   uint result[][NodeType::ok_size][3]) noexcept;
 static string result_out(Color turn, uint result[][NodeType::ok_size][3],
 			 double &se) noexcept;
-static void start_engine(USIEngine & c) noexcept;
+static void start_engine(USIEngine & c, int i) noexcept;
 static void start_newgame(Game &game, uint nplay, const Color &turn0) noexcept;
 static int get_options(int argc, const char * const *argv) noexcept;
 static void child_out(USIEngine &c, const char *fmt, ...) noexcept;
@@ -167,7 +167,6 @@ int main(int argc, char **argv) {
   for (uint u = 0; u < static_cast<uint>(num_P); ++u)
     games.emplace_back(new Game(u, cmd0, cmd1));
 
-  //bool is_first = true;
   Color turn0 = SAux::black;
   uint nplay  = 0;
   uint latest = 0;
@@ -177,23 +176,11 @@ int main(int argc, char **argv) {
 
   OSI::handle_signal(on_signal);
   for (auto &ptr : games) {
-    start_engine(ptr->engine0);
-    start_engine(ptr->engine1);
-
-    for (int i=0;i<2;i++) {
-      FILE *fp = fopen(fname_option[i].get_fname(),"r");
-      if ( !fp ) continue;
-      for (;;) {
-        char line[256];
-        if ( fgets( line, 256, fp ) == NULL ) break;
-        if (i==0) child_out(ptr->engine0, line);
-        if (i==1) child_out(ptr->engine1, line);
-      }
-      fclose(fp);
-    }
-
+    start_engine(ptr->engine0,0);
+    start_engine(ptr->engine1,1);
     start_newgame(*ptr, nplay++, turn0);
-    if (! flag_f) turn0 = turn0.to_opp(); }
+    if (! flag_f) turn0 = turn0.to_opp();
+  }
 
   // main loop
   map<uint, RowResult> row_results;
@@ -600,7 +587,7 @@ static void start_newgame(Game &game, uint nplay, const Color &turn0) noexcept {
   else             child_out(game.engine1, str_go_visit[go_visit]);
 }
 
-static void start_engine(USIEngine &c) noexcept {
+static void start_engine(USIEngine &c, int i) noexcept {
   assert(c.ok());
   char line[65536];
   char a0[shell.get_len_fname() + 1];
@@ -617,19 +604,33 @@ static void start_engine(USIEngine &c) noexcept {
     while (true) {
       if (c.getline_in(line, sizeof(line)) == 0) throw EoF();
       log_out(c, "%s", line);
-      if (strcmp(line, "usiok") == 0) break; }
+      if (strcmp(line, "usiok") == 0) break;
+    }
+
+    FILE *fp = fopen(fname_option[i].get_fname(),"r");
+    if ( fp ) {
+      for (;;) {
+        char line[256];
+        if ( fgets( line, 256, fp ) == NULL ) break;
+        child_out(c, line);
+      }
+      fclose(fp);
+    }
 
     child_out(c, "isready");
     while (true) {
       if (c.getline_in(line, sizeof(line)) == 0) throw EoF();
       log_out(c, "%s", line);
-      if (strcmp(line, "readyok") == 0) break; } }
+      if (strcmp(line, "readyok") == 0) break;
+    }
+  }
   catch (const EoF &e) {
     while (0 < c.getline_err(line, sizeof(line))) log_out(c, "%s", line);
     while (0 < c.getline_in (line, sizeof(line))) log_out(c, "%s", line);
-    die(ERR_INT("Player %u of game %u terminates.",
-		c.get_player_id(), c.get_game_id())); }
-  catch (...) { terminate(); } }
+    die(ERR_INT("Player %u of game %u terminates.", c.get_player_id(), c.get_game_id()));
+  }
+  catch (...) { terminate(); }
+}
 
 static void child_out(USIEngine &c, const char *fmt, ...) noexcept {
   assert(c.ok() && fmt);
