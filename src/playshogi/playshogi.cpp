@@ -119,6 +119,7 @@ static int num_H[2]         = {  0,  0};
 static int num_T[2]         = { -1, -1};
 static NNet::Impl impl_I[2] = { NNet::opencl, NNet::opencl };
 static FName fname_W[2];
+static FName fname_option[2];
 
 static FName shell("/bin/sh");
 static string cmd0, cmd1;
@@ -178,6 +179,19 @@ int main(int argc, char **argv) {
   for (auto &ptr : games) {
     start_engine(ptr->engine0);
     start_engine(ptr->engine1);
+
+    for (int i=0;i<2;i++) {
+      FILE *fp = fopen(fname_option[i].get_fname(),"r");
+      if ( !fp ) continue;
+      for (;;) {
+        char line[256];
+        if ( fgets( line, 256, fp ) == NULL ) break;
+        if (i==0) child_out(ptr->engine0, line);
+        if (i==1) child_out(ptr->engine1, line);
+      }
+      fclose(fp);
+    }
+
     start_newgame(*ptr, nplay++, turn0);
     if (! flag_f) turn0 = turn0.to_opp(); }
 
@@ -710,7 +724,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
   uint num;
 
   while (! flag_err) {
-    int opt = Opt::get(argc, argv, "0:1:c:m:d:P:I:B:U:H:W:T:o:frsubv");
+    int opt = Opt::get(argc, argv, "0:1:c:m:d:P:I:B:U:H:W:T:o:i:frsubv");
     if (opt < 0) break;
 
     switch (opt) {
@@ -800,7 +814,21 @@ static int get_options(int argc, const char * const *argv) noexcept {
 	if (*endptr != ':') break;
 	if (2U <= ++num) { flag_err = true; break; } }
       break;
-    default: flag_err = true; break; } }
+    case 'i':
+      strncpy(buf, Opt::arg, sizeof(buf));
+      buf[sizeof(buf) - 1U] = '\0';
+      num = 0;
+      for (char *str = buf;; str = nullptr) {
+        const char *token = OSI::strtok(str, ":", &endptr);
+        if (!token) break;
+        if (2U <= num) { flag_err = true; break; }
+        fname_option[num++].reset_fname(token);
+      }
+      break;
+
+    default: flag_err = true; break;
+    }
+  }
 
   if (!flag_err && 0 < cmd0.size() && 0 < cmd1.size()) {
     cout << "'-------------------------------------------------------------\n";
@@ -883,6 +911,8 @@ Other options:
   -T STR   Specifies the number of threads for CPU BLAS computation. STR can
            contain two numbers separated by ':'. The default is -1 (means an
            upper bound of the number).
+  -i STR   usi option file paths. STR can contain two
+           sizes separated by ':'. The default size is 1.
 Example:
   )" << Opt::cmd << R"( -0 "~/aobaz -w ~/w0.txt" -1 "~/aobaz -w ~/w1.txt"
            Generate a gameplay between 'w0.txt' (black) and 'w1.txt' (white)
