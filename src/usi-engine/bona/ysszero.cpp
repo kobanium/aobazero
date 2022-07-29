@@ -2651,9 +2651,9 @@ bool isKLDGainSmall(tree_t * restrict ptree, int sideToMove) {
 
 	double min_kld;
 	if ( ptree->nrep < 4 ) {
-		min_kld = MinimumKLDGainPerNode*2;	// 初手から4手目までは深く読まない
-	} else if ( phg->games_sum < 500 ) {
-		min_kld = 0.000001;	// 少ないノード数では厳しい条件の方が強い。総playout数の増加もそれほどなし。
+		min_kld = MinimumKLDGainPerNode*6;	// 初手から4手目までは深く読まない
+//	} else if ( phg->games_sum < 500 ) {
+//		min_kld = 0.000001;	// 少ないノード数では厳しい条件の方が強い。総playout数の増加もそれほどなし。
 	} else {
 		min_kld = MinimumKLDGainPerNode;
 	}

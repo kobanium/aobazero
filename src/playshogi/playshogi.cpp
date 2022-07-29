@@ -89,7 +89,7 @@ static string addup_result(const NodeType &type_term, const Color &turn,
 			   uint result[][NodeType::ok_size][3]) noexcept;
 static string result_out(Color turn, uint result[][NodeType::ok_size][3],
 			 double &se) noexcept;
-static void start_engine(USIEngine & c) noexcept;
+static void start_engine(USIEngine & c, int i) noexcept;
 static void start_newgame(Game &game, uint nplay, const Color &turn0) noexcept;
 static int get_options(int argc, const char * const *argv) noexcept;
 static void child_out(USIEngine &c, const char *fmt, ...) noexcept;
@@ -119,6 +119,7 @@ static int num_H[2]         = {  0,  0};
 static int num_T[2]         = { -1, -1};
 static NNet::Impl impl_I[2] = { NNet::opencl, NNet::opencl };
 static FName fname_W[2];
+static FName fname_option[2];
 
 static FName shell("/bin/sh");
 static string cmd0, cmd1;
@@ -166,7 +167,6 @@ int main(int argc, char **argv) {
   for (uint u = 0; u < static_cast<uint>(num_P); ++u)
     games.emplace_back(new Game(u, cmd0, cmd1));
 
-  //bool is_first = true;
   Color turn0 = SAux::black;
   uint nplay  = 0;
   uint latest = 0;
@@ -176,10 +176,11 @@ int main(int argc, char **argv) {
 
   OSI::handle_signal(on_signal);
   for (auto &ptr : games) {
-    start_engine(ptr->engine0);
-    start_engine(ptr->engine1);
+    start_engine(ptr->engine0, 0);
+    start_engine(ptr->engine1, 1);
     start_newgame(*ptr, nplay++, turn0);
-    if (! flag_f) turn0 = turn0.to_opp(); }
+    if (! flag_f) turn0 = turn0.to_opp();
+  }
 
   // main loop
   map<uint, RowResult> row_results;
@@ -586,7 +587,7 @@ static void start_newgame(Game &game, uint nplay, const Color &turn0) noexcept {
   else             child_out(game.engine1, str_go_visit[go_visit]);
 }
 
-static void start_engine(USIEngine &c) noexcept {
+static void start_engine(USIEngine &c, int i) noexcept {
   assert(c.ok());
   char line[65536];
   char a0[shell.get_len_fname() + 1];
@@ -603,19 +604,33 @@ static void start_engine(USIEngine &c) noexcept {
     while (true) {
       if (c.getline_in(line, sizeof(line)) == 0) throw EoF();
       log_out(c, "%s", line);
-      if (strcmp(line, "usiok") == 0) break; }
+      if (strcmp(line, "usiok") == 0) break;
+    }
+
+    FILE *fp = fopen(fname_option[i].get_fname(),"r");
+    if ( fp ) {
+      for (;;) {
+        char line[256];
+        if ( fgets( line, 256, fp ) == NULL ) break;
+        child_out(c, line);
+      }
+      fclose(fp);
+    }
 
     child_out(c, "isready");
     while (true) {
       if (c.getline_in(line, sizeof(line)) == 0) throw EoF();
       log_out(c, "%s", line);
-      if (strcmp(line, "readyok") == 0) break; } }
+      if (strcmp(line, "readyok") == 0) break;
+    }
+  }
   catch (const EoF &e) {
     while (0 < c.getline_err(line, sizeof(line))) log_out(c, "%s", line);
     while (0 < c.getline_in (line, sizeof(line))) log_out(c, "%s", line);
-    die(ERR_INT("Player %u of game %u terminates.",
-		c.get_player_id(), c.get_game_id())); }
-  catch (...) { terminate(); } }
+    die(ERR_INT("Player %u of game %u terminates.", c.get_player_id(), c.get_game_id()));
+  }
+  catch (...) { terminate(); }
+}
 
 static void child_out(USIEngine &c, const char *fmt, ...) noexcept {
   assert(c.ok() && fmt);
@@ -710,7 +725,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
   uint num;
 
   while (! flag_err) {
-    int opt = Opt::get(argc, argv, "0:1:c:m:d:P:I:B:U:H:W:T:o:frsubv");
+    int opt = Opt::get(argc, argv, "0:1:c:m:d:P:I:B:U:H:W:T:o:i:frsubv");
     if (opt < 0) break;
 
     switch (opt) {
@@ -800,7 +815,21 @@ static int get_options(int argc, const char * const *argv) noexcept {
 	if (*endptr != ':') break;
 	if (2U <= ++num) { flag_err = true; break; } }
       break;
-    default: flag_err = true; break; } }
+    case 'i':
+      strncpy(buf, Opt::arg, sizeof(buf));
+      buf[sizeof(buf) - 1U] = '\0';
+      num = 0;
+      for (char *str = buf;; str = nullptr) {
+        const char *token = OSI::strtok(str, ":", &endptr);
+        if (!token) break;
+        if (2U <= num) { flag_err = true; break; }
+        fname_option[num++].reset_fname(token);
+      }
+      break;
+
+    default: flag_err = true; break;
+    }
+  }
 
   if (!flag_err && 0 < cmd0.size() && 0 < cmd1.size()) {
     cout << "'-------------------------------------------------------------\n";
@@ -883,6 +912,8 @@ Other options:
   -T STR   Specifies the number of threads for CPU BLAS computation. STR can
            contain two numbers separated by ':'. The default is -1 (means an
            upper bound of the number).
+  -i STR   usi option file paths. STR must contain two
+           sizes separated by ':'.
 Example:
   )" << Opt::cmd << R"( -0 "~/aobaz -w ~/w0.txt" -1 "~/aobaz -w ~/w1.txt"
            Generate a gameplay between 'w0.txt' (black) and 'w1.txt' (white)
