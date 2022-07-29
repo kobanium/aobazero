@@ -176,8 +176,8 @@ int main(int argc, char **argv) {
 
   OSI::handle_signal(on_signal);
   for (auto &ptr : games) {
-    start_engine(ptr->engine0,0);
-    start_engine(ptr->engine1,1);
+    start_engine(ptr->engine0, 0);
+    start_engine(ptr->engine1, 1);
     start_newgame(*ptr, nplay++, turn0);
     if (! flag_f) turn0 = turn0.to_opp();
   }
@@ -912,8 +912,8 @@ Other options:
   -T STR   Specifies the number of threads for CPU BLAS computation. STR can
            contain two numbers separated by ':'. The default is -1 (means an
            upper bound of the number).
-  -i STR   usi option file paths. STR can contain two
-           sizes separated by ':'. The default size is 1.
+  -i STR   usi option file paths. STR must contain two
+           sizes separated by ':'.
 Example:
   )" << Opt::cmd << R"( -0 "~/aobaz -w ~/w0.txt" -1 "~/aobaz -w ~/w1.txt"
            Generate a gameplay between 'w0.txt' (black) and 'w1.txt' (white)

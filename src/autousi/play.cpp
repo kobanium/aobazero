@@ -248,14 +248,16 @@ public:
     argv[argc++] = opt_p_value;
 #else
     char opt_p[]       = "-p";
-    char opt_p_value[] = "3200";
+//    char opt_p_value[] = "3200";
+    char opt_p_value[] = "6400";
     argv[argc++] = opt_p;
     argv[argc++] = opt_p_value;
 
     char opt_kld[]       = "-kldgain";
 //  char opt_kld_value[] = "0.0000013";
 //  char opt_kld_value[] = "0.000006";
-    char opt_kld_value[] = "0.000005";
+//    char opt_kld_value[] = "0.000005";
+    char opt_kld_value[] = "0.00000075";
     argv[argc++] = opt_kld;
     argv[argc++] = opt_kld_value;
 #endif
