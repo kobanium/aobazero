@@ -36,6 +36,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('hcpe3')
 parser.add_argument('csa')
 parser.add_argument('--range')
+parser.add_argument('--nyugyoku', action='store_true')
 parser.add_argument('--aoba', action='store_true')
 parser.add_argument('--out_v', action='store_true')
 parser.add_argument('--sort_visits', action='store_true')
@@ -68,6 +69,8 @@ else:
 
 board = Board()
 csa = CSA.Exporter(args.csa)
+v_pos_sum = 0
+move_sum = 0
 p = 0
 while p < end:
     data = f.read(HuffmanCodedPosAndEval3.itemsize)
@@ -78,17 +81,20 @@ while p < end:
     assert board.is_ok()
     move_num = hcpe['moveNum']
     result = hcpe['result']
-
-    if p >= start:
-        csa.info(board, comments=[f"moveNum={move_num},result={result},opponent={hcpe['opponent']}"])
-
+    move_sum += move_num
+    need_output = p >= start and (not args.nyugyoku or result & 8 != 0)
+    if need_output:
+#        csa.info(board, comments=[f"moveNum={move_num},result={result},opponent={hcpe['opponent']}"])
+         print ("'move_num=" +str(move_num) +",result=" +str(result)+ ",opponent=" + str(hcpe['opponent']))
+    print (board)
     for i in range(move_num):
         move_info = np.frombuffer(f.read(MoveInfo.itemsize), MoveInfo, 1)[0]
         candidate_num = move_info['candidateNum']
         move_visits = np.frombuffer(f.read(MoveVisits.itemsize * candidate_num), MoveVisits, candidate_num)
         move = board.move_from_move16(move_info['selectedMove16'])
-        if p >= start:
+        if need_output:
             if candidate_num > 0:
+                v_pos_sum += 1
                 if args.aoba:
                     if args.out_v:
                         v = 1.0 / (1.0 + math.exp(-move_info['eval'] * 0.0013226))
@@ -104,12 +110,24 @@ while p < end:
                     comment = '** ' + str(move_info['eval'] * (1 - board.turn * 2))
             else:
                 if args.aoba or move_info['eval'] == 0:
-                    comment = None
+#                    comment = None
+                    comment = ""
                 else:
                     comment = '** ' + str(move_info['eval'] * (1 - board.turn * 2))
-            csa.move(move, comment=comment, sep=sep)
+#            csa.move(move, comment=comment, sep=sep)
+#            csa.move(move, sep=sep)
+            if (board.turn) == 0:
+                sen = "+"
+            else:
+                sen = "-"
+            print (sen + move_to_csa(move) + ",'" + comment)
         board.push(move)
         assert board.is_ok()
-    if p >= start:
-        csa.endgame(ENDGAME_SYMBOLS[hcpe['result']])
+    if need_output:
+        print (ENDGAME_SYMBOLS[hcpe['result']])
+        print ("/")
+#        csa.endgame(ENDGAME_SYMBOLS[hcpe['result']])
     p += 1
+print (p,move_sum,v_pos_sum)
+
+
