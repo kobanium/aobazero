@@ -256,6 +256,7 @@ void on_terminate_aobaz() {	// clean up shared memory
   
   try { OSI::MMap::cleanup(); }
   catch (std::exception &e) { std::cerr << e.what() << std::endl; }
+  kill_usi_child();
 
   abort();
 }
@@ -308,6 +309,7 @@ void debug() {
 		on_terminate_aobaz();
 	}
 #endif
+	kill_usi_child();
 	exit(0);
 }
 
@@ -470,6 +472,7 @@ void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *
 	int loop;
 #ifdef USE_POLICY2187
 	const int T_STEP = 6;
+//	const int T_STEP = 1;
 #else
 	const int T_STEP = 8;
 #endif
@@ -559,6 +562,7 @@ void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *
 		}
 	}
 
+//	if ( T_STEP == 1 ) base += (28 + 14 + 3) * (6 - 1);
 
 #ifdef USE_POLICY2187
 /* nnet.cpp で入力特徴がfillとそれ以外で最適化されてるので、それに合わせる。最初の28が通常、残り17がfill。合計45。28+10=38が通常。1+6=7 がfill

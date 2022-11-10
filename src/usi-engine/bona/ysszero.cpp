@@ -1515,6 +1515,20 @@ if (0) {
 				if ( pc->bias < b ) pc->bias = b;
 			}
 		}
+		
+		if ( 0 ) {
+//			print_board(ptree);
+			unsigned int best_usi = get_best_move_alphabeta_usi( ptree, sideToMove, ply);
+			for (i = 0; i < phg->child_num; i++) {
+				CHILD *pc = &phg->child[i];
+				if ( pc->move != (int)best_usi ) continue;
+				PRT("found best_usi:ply=%2d,col=%d:%3d:%s,bias=%.5f,max_bias=%.5f\n",ply,sideToMove,i, string_CSA_move(best_usi).c_str(),pc->bias,max_bias);
+				float b = max_bias / 3.0;
+				if ( pc->bias < b ) pc->bias = b;
+				break;
+			}
+		}
+
 	}
 
 	if ( 0 ) {	// 1手の静止探索を

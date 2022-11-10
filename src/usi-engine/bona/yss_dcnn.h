@@ -145,5 +145,10 @@ int count_square_attack(tree_t * restrict ptree, int sideToMove, int square );
 void kiki_count_indirect(tree_t * restrict ptree, int kiki_count[][81], int kiki_bit[][2][81], bool fKikiBit);
 void update_HandicapRate(const char *token);
 void update_AverageWinrate(const char *token);
+int get_motigoma(int m, int hand);
+
+// pipe.cpp
+unsigned int get_best_move_alphabeta_usi(tree_t * restrict ptree, int sideToMove, int ply);
+void kill_usi_child();
 
 #endif	//]] INCLUDE__GUARD
