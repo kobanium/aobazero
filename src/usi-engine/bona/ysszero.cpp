@@ -50,7 +50,8 @@ bool fLCB = true;
 double MinimumKLDGainPerNode = 0;	//0.000002;	0で無効, lc0は 0.000005
 bool fResetRootVisit = false;
 bool fDiffRootVisit = false;
-bool fSkipOneReply = false;	// 王手を逃げる手が1手の局面は評価せずに木を降りる
+bool fSkipOneReply  = false;	// 王手を逃げる手が1手の局面は評価せずに木を降りる
+bool fSkipKingCheck = false;	// 王手がかかってる局面では評価せずに木を降りる
  
 int nLimitUctLoop = 100;
 double dLimitSec = 0;
@@ -1428,6 +1429,8 @@ if (0) {
 			// get_network_policy_value() は常に先手が勝で(+1)、先手が負けで(-1)を返す。sideToMove は無関係
 			v = -1;
 			if ( sideToMove==white ) v = +1;	// 後手番で可能手がないなら先手の勝
+		} else if ( fSkipKingCheck && InCheck(sideToMove) ) {
+			v = 0;
 		} else {
 			v = get_network_policy_value(ptree, sideToMove, ply, phg);
 
@@ -1606,7 +1609,7 @@ if (0) {
 	phg->deleted        = 0;
 
 //	if ( ! is_main_thread(ptree) && ply==3 ) { PRT("create_node(),ply=%2d,c=%3d,v=%.5f,seqhash=%" PRIx64 "\n",ply,move_num,v,ptree->sequence_hash); print_board(ptree); }
-//PRT("create_node done...ply=%d,sideToMove=%d,games_sum=%d,child_num=%d,slot=%d\n",ply,sideToMove,phg->games_sum,phg->child_num, ptree->tlp_slot);
+//PRT("create_node done...ply=%d,sideToMove=%d,games_sum=%d,child_num=%d,slot=%d,v=%5.2f\n",ply,sideToMove,phg->games_sum,phg->child_num, ptree->tlp_slot,v);
 
 	if ( fOpeningHash ) {
 	} else {
@@ -1954,12 +1957,20 @@ skip_select:
 //				static int count; PRT("has come already? ply=%d,%d\n",ply,++count); //debug();	// 手順前後? 複数スレッドの場合
 				if ( force_do_playout == 0 ) down_tree = 1;
 			}
-			if ( fSkipOneReply && phg2->child_num == 1 ) down_tree = 1;
+			if ( fSkipOneReply && phg2->child_num == 1 ) {
+//				PRT("down_tree:ply=%d\n",ply);
+				down_tree = 1;
+			}
+			if ( fSkipKingCheck && now_in_check ) {
+				down_tree = 1;
+			}
+
 			win = -phg2->net_value;
 
 			UnLock(phg2->entry_lock);
 			Lock(phg->entry_lock);
 		}
+//		PRT("down_tree=%d,do_playout=%d,ply=%d\n",down_tree,do_playout,ply);
 		if ( down_tree ) {
 			// down tree
 			const int fVirtualLoss = 1;
@@ -1979,6 +1990,7 @@ skip_select:
 			win = -uct_tree(ptree, Flip(sideToMove), ply+1, &ex_value);
 			Lock(phg->entry_lock);
 
+//			PRT("down_tree:ply=%d:child_num=%3d,win=%5.2f\n",ply,phg->child_num,win);
 			if ( fVirtualLoss ) {
 #ifdef USE_LCB
 				pc->acc_virtual_loss -= VL_N;
