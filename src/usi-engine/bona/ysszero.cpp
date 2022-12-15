@@ -50,7 +50,8 @@ bool fLCB = true;
 double MinimumKLDGainPerNode = 0;	//0.000002;	0で無効, lc0は 0.000005
 bool fResetRootVisit = false;
 bool fDiffRootVisit = false;
-
+bool fSkipOneReply = false;	// 王手を逃げる手が1手の局面は評価せずに木を降りる
+ 
 int nLimitUctLoop = 100;
 double dLimitSec = 0;
 int nDrawMove = 0;		// 引き分けになる手数。0でなし。floodgateは256, 選手権は321
@@ -1386,6 +1387,11 @@ if (0) {
 	}
 	phg->child_num      = move_num;
 
+	if ( fSkipOneReply ) {
+		static int count, all; all++;
+		if ( move_num==1 ) PRT("move_num=1,ply=%d,%d/%d\n",ply,++count,all);
+	}
+
 	if ( NOT_USE_NN ) {
 		// softmax
 		const float temperature = 1.0f;
@@ -1414,7 +1420,11 @@ if (0) {
 //		{ static double va[2]; static int count[2]; va[sideToMove] += v; count[sideToMove]++; PRT("va[]=%10f,%10f\n",va[0]/(count[0]+1),va[1]/(count[1]+1)); }
 //		PRT("f=%10f,tanh()=%10f\n",f,v);
 	} else {
-		if ( move_num == 0 ) {
+		if ( fSkipOneReply && move_num == 1 ) {
+			v = 0;
+			CHILD *pc = &phg->child[0];
+			pc->bias = 1.0;
+		} else if ( move_num == 0 ) {
 			// get_network_policy_value() は常に先手が勝で(+1)、先手が負けで(-1)を返す。sideToMove は無関係
 			v = -1;
 			if ( sideToMove==white ) v = +1;	// 後手番で可能手がないなら先手の勝
@@ -1944,6 +1954,7 @@ skip_select:
 //				static int count; PRT("has come already? ply=%d,%d\n",ply,++count); //debug();	// 手順前後? 複数スレッドの場合
 				if ( force_do_playout == 0 ) down_tree = 1;
 			}
+			if ( fSkipOneReply && phg2->child_num == 1 ) down_tree = 1;
 			win = -phg2->net_value;
 
 			UnLock(phg2->entry_lock);
