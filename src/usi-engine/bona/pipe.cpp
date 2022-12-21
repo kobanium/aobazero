@@ -1,5 +1,6 @@
 // 2022 Team AobaZero
 // This source code is in the public domain.
+#include "../config.h"
 #include <ctype.h>
 #include <limits.h>
 #include <math.h>
@@ -23,10 +24,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#else
 #include <sysexits.h>
 #include <unistd.h>
 #include <time.h>
 #include <sys/time.h>
+#endif
 
 const int CHILD_MAX = 1;
 int pid_child[CHILD_MAX];
@@ -48,7 +52,10 @@ void kill_usi_child() {
 	for (i=0; i<CHILD_MAX; i++)	{
 		if ( pid_child[i] == 0 ) continue;
 		std::cerr << "kill pid " << pid_child[i] << std::endl;
+#ifdef _WIN32
+#else
 		kill(pid_child[i], sig);
+#endif
 		pid_child[i] = 0;
 	}
 }
@@ -60,7 +67,7 @@ void error(const char *msg) {
 
 void send_wait(int n, const char *usi_commnad_line, const char *wait)
 {
-	int nLen = strlen(usi_commnad_line);
+	int nLen = (int)strlen(usi_commnad_line);
 	if ( nLen <= 0 ) error("nLen err");
 	char sSend[USI_BUF_SIZE];
 	strcpy(sSend,usi_commnad_line);
@@ -92,6 +99,8 @@ void send_wait(int n, const char *usi_commnad_line, const char *wait)
 
 void run_usi_engine()
 {
+#ifdef _WIN32
+#else
 	setbuf(stdout, NULL);
 	setbuf(stderr, NULL);
 
@@ -119,6 +128,7 @@ void run_usi_engine()
 		to_engine_stream[i]   = fdopen(pfd_a[i][1], "w");	// Attach pipe a to to_gnugo_stream
 		from_engine_stream[i] = fdopen(pfd_b[i][0], "r");	// Attach pipe b to from_gnugo_stream
 	}
+#endif
 }
 /*
 void CsaLoop()
