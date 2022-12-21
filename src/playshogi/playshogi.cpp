@@ -442,14 +442,21 @@ static void node_update(USIEngine &myself, USIEngine &opponent,
     char *endptr;
     float value = strtof(str_value+2, &endptr);
     if (endptr == str_value+2 || *endptr != '\0' || value < 0.0f || value == HUGE_VALF) die(ERR_INT("cannot interpret value %s (engine)", str_value+2));
+
+    str_value = strtok(nullptr, " ,");
+    if (!str_value || str_value[0] != 'r' || str_value[1] != '=') die(ERR_INT("cannot read raw value %s (engine)",str_value));
+    float raw_value = strtof(str_value+2, &endptr);
+    if (endptr == str_value+2 || *endptr != '\0' || raw_value < 0.0f || raw_value == HUGE_VALF) die(ERR_INT("cannot interpret raw_value %s (engine)", str_value+2));
+
     const char *str_count = strtok(nullptr, " ,");
     if (!str_count) die(ERR_INT("cannot read count (engine)"));
+
     long int num = strtol(str_count, &endptr, 10);
     if (endptr == str_count || *endptr != '\0' || num < 1 || num == LONG_MAX) die(ERR_INT("cannot interpret visit count %s (engine)", str_count));
     int num_all = num;
     {
       char buf[256];
-      sprintf(buf, "v=%.3f,%ld", value, num);
+      sprintf(buf, "v=%.3f,r=%.3f,%ld", value, raw_value, num);
       new_info += buf;
     }
     // read candidate moves
@@ -470,11 +477,13 @@ static void node_update(USIEngine &myself, USIEngine &opponent,
       if (!str_count) die(ERR_INT("cannot read count (engine)"));
 
       num = strtol(str_count, &endptr, 10);
-      if (endptr == str_count || *endptr != '\0' || num < 1 || num == LONG_MAX) die(ERR_INT("cannot interpret a visit count %s (engine)", str_count));
+      char c = *endptr;
+      bool hasPolicy = ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z');
+      if (endptr == str_count || hasPolicy == false || num < 1 || num == LONG_MAX) die(ERR_INT("cannot interpret a visit count %s (engine)", str_count));
 
       num_tot  += num;
       new_info += ",";
-      new_info += to_string(num);
+      new_info += to_string(num) + c;
     }
     if (num_all < num_tot) die(ERR_INT("bad counts (engine)"));
 

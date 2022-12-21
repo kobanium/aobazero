@@ -938,6 +938,15 @@ int shogi::LoadCSA()
 			ZERO_DB *pz = &zdb_one;
 			pz->handicap = get_handicap_from_board();
 			if ( pz->handicap && fGotekara==0 ) DEBUG_PRT("pz->handiacp=%d\n",pz->handicap);
+#if (GCT_SELF==1)
+			if ( pz->handicap != 0 ) DEBUG_PRT("");
+			for (int y=0;y<9;y++) for (int x=0;x<9;x++) {
+				pz->v_init_pos.push_back(init_ban[(y+1)*16+(x+1)]);
+			}
+			for (int i=0;i<7;i++) pz->v_init_pos.push_back(mo_m[i+1]);
+			for (int i=0;i<7;i++) pz->v_init_pos.push_back(mo_c[i+1]);
+			pz->v_init_pos.push_back(fGotekara);
+#endif
 		}
 
 		// csa形式のコメントを取り込む
@@ -1006,7 +1015,7 @@ int shogi::LoadCSA()
 							b0 = b1 = 0;
 						} else {
 							if ( getMoveFromCsaStr(&bz, &az, &tk, &nf, str)==0 ) DEBUG_PRT("");
-							int c = (tesuu+(pz->handicap!=0))&1;
+							int c = (tesuu + fGotekara)&1;
 							if ( is_pseudo_legalYSS((Move)pack_te(bz,az,tk,nf), (Color)(c==1) ) == false ) {
 								DEBUG_PRT("move Err %3d:%s\n",tesuu,str);
 							}
@@ -1167,7 +1176,7 @@ PI82HI22KA11KY91KY21KE81KE  6枚落ち
 			pz->moves = tesuu;
 			pz->result = ZD_DRAW;
 			pz->result_type = RT_NONE;
-			int is_gote_turn = (tesuu + (pz->handicap!=0))& 1;
+			int is_gote_turn = (tesuu + fGotekara) & 1;
 
 			if ( strstr(lpLine,"TORYO") ) {
 				if ( is_gote_turn ) {

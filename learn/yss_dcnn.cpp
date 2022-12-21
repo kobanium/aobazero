@@ -1118,12 +1118,14 @@ void shogi::set_dcnn_channels(Color sideToMove, const int ply, float *p_data, in
 	int x,y;
 	int flip = (ply + (nHandicap!=0)) & 1;	// 後手の時は全部ひっくり返す
 	int current_t = ply;	// 現局面の手数。棋譜＋探索深さ
-
+	if ( GCT_SELF ) flip = (ply + fGotekara) & 1;
+	if ( GCT_SELF && ply != 0 ) DEBUG_PRT("");	// for AI_book2, hcpe does not have ply.
 	if ( flip && sideToMove != BLACK ) DEBUG_PRT("");
 	// move_hit_kif[], move_hit_hashcode[] に棋譜+探索深さの棋譜とハッシュ値を入れること 
 
 	int loop,back_num=0;
 	const int T_STEP = 6;
+//	const int T_STEP = 1;
 	for (loop=0; loop<T_STEP; loop++) {
 		add_base = 28;
 		for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
@@ -1224,6 +1226,8 @@ void shogi::set_dcnn_channels(Color sideToMove, const int ply, float *p_data, in
 			move_hit_hash(bz,az,tk,nf);
 		}
 	}
+
+	if ( T_STEP == 1 ) base += (28 + 14 + 3) * (6 - 1);
 
 #if 1
 //	int prev_base = base;
@@ -1464,8 +1468,51 @@ void shogi::set_dcnn_channels(Color sideToMove, const int ply, float *p_data, in
 	}
 	base += add_base;
 
-//	if ( t==215 ) { hyouji(); int i; for (i=0;i<base;i++) prt_dcnn_data(stock_num,i,-1); DEBUG_PRT("t=%d,tesuu=%d\n",t,tesuu); }
-//	if ( t==8 ) { hyouji(); int i; for (i=0;i<base;i++) prt_dcnn_data(data,i,-1); DEBUG_PRT("t=%d,tesuu=%d\n",t,tesuu); }
+//	if ( 1 || t==8 ) { hyouji(); int i; for (i=0;i<base;i++) prt_dcnn_data(data,i,-1); DEBUG_PRT("ply=%d,tesuu=%d\n",ply,tesuu); }
+	if ( 0 && ply==152 ) {
+		hyouji();
+		int i;
+		for (i=0;i<base;i++) prt_dcnn_data(data,i,-1);
+
+		for (i=0; i<ply; i++) {
+			if ( ply-1-i < 0 ) DEBUG_PRT("");
+			int m = move_hit_kif[ply-1-i];
+			int bz,az,tk,nf;
+			unpack_te(&bz,&az,&tk,&nf, m);
+			remove_hit_hash(bz,az,tk,nf);
+		}
+		hyouji();
+		PRT("PI\n+\n");
+		for (i=0;i<ply;i++) {
+			int m = move_hit_kif[i];
+			int bz,az,tk,nf;
+			unpack_te(&bz,&az,&tk,&nf, m);
+
+			if ( (i)&1 ) PRT("-");
+			else         PRT("+");
+			int k = 0,b=0,a=0;
+			if ( bz == 0xff ) {
+				b = 0x00;
+				k = tk & 0x07;
+			} else {
+				k = init_ban[bz] & 0x0f;
+				x = 10 - (bz & 0x0f);
+				b = (bz>>4) + (x<<4);
+				if ( nf ) k += 8;
+			}
+			int x = 10 - (az & 0x0f);
+			a = (az>>4) + (x<<4);
+			if ( 0 ) {
+				if ( b ) b = 0xaa - b;
+				a = 0xaa - a;
+			}
+			PRT("%02X%02X%s\n",b,a,koma[k]);
+
+			move_hit_hash(bz,az,tk,nf);
+		}
+		DEBUG_PRT("ply=%d,tesuu=%d,flip=%d\n",ply,tesuu,flip);
+	}
+
 	if ( DCNN_CHANNELS != base ) { DEBUG_PRT("Err. DCNN_CHANNELS != base %d\n",base); }
 }
 
@@ -2707,29 +2754,42 @@ void free_zero_db_struct(ZERO_DB *p)
 	std::vector<unsigned short>().swap(p->v_playouts_sum);
 	vector< vector<unsigned int> >().swap(p->vv_move_visit); 
 	std::vector<unsigned short>().swap(p->v_score_x10k);
+#if ( GCT_SELF==1)
+	std::vector<unsigned char>().swap(p->v_init_pos);
+#endif
+
 }
 
-//const int ZERO_DB_SIZE = 500000;	// 100000,  500000
-const int ZERO_DB_SIZE = 1000000;	// 100000,  500000
+//const int ZERO_DB_SIZE = 267000000;	// AI_book2
+//const int ZERO_DB_SIZE = 20000000;	// gct001-075
+//const int ZERO_DB_SIZE = 1000000;	// 100000,  500000
+const int ZERO_DB_SIZE = 2190000;	// 100000,  500000
 const int MAX_ZERO_MOVES = 513;	// 512手目を後手が指して詰んでなければ。513手目を先手が指せば無条件で引き分け。
 ZERO_DB zdb_one;
 
-ZERO_DB zdb[ZERO_DB_SIZE];
+ZERO_DB *zdb;
+//ZERO_DB zdb[ZERO_DB_SIZE];
 int *pZDBsum = NULL;
 unsigned char *pZDBmove;
 unsigned char *pZDBmaxmove;
 unsigned short *pZDBplayouts_sum;
 unsigned short *pZDBscore_x10k;
-const int ZDB_POS_MAX = ZERO_DB_SIZE * 256;	// 128 = average moves.
+const int ZDB_POS_MAX = ZERO_DB_SIZE * 128;	// 128 = average moves. 64 = gct001-075
+//const int ZDB_POS_MAX = ZERO_DB_SIZE * 1;	// AI book2
 
 int zdb_count = 0;
-int zdb_count_start = 51420000;//51370000;//1000000;//48300000;//18000000;// 10000000;//11600000; //10300000; //9500000;//8500000; //7400000; //5220000; //3200000; //2100000; //390000;//130000;//460000;//29700000; //18200000;//23400000; //20300000; //18800000; //16400000;	//10300000; //5200000;	// 400万棋譜から読み込む場合は4000000
-int zero_kif_pos_num = 0;
+int zdb_count_start = 59020000;//58410000;//51000000;//1000000; //53920000; 52320000;48000000;1000000;48300000;18000000; 10000000;11600000; 10300000; 9500000;8500000; 7400000; //5220000; //3200000; //2100000; //390000;//130000;//460000;//29700000; //18200000;//23400000; //20300000; //18800000; //16400000;	//10300000; //5200000;	// 400万棋譜から読み込む場合は4000000
+uint64_t zero_kif_pos_num = 0;
 int zero_kif_games = 0;
-const int MINI_BATCH = 128;	// aoba_zero.prototxt の cross_entroy_scale も同時に変更すること！layerのnameも要変更
+int zero_pos_over250;
+const int MINI_BATCH = 256;	// aoba_zero.prototxt の cross_entroy_scale も同時に変更すること！layerのnameも要変更
+//const int MINI_BATCH = 32;	// aoba_zero.prototxt の cross_entroy_scale も同時に変更すること！layerのnameも要変更
 const int ONE_SIZE = DCNN_CHANNELS*B_SIZE*B_SIZE;	// 362*9*9; *4= 117288 *64 = 7506432,  7MBにもなる mini_batch=64
+int nGCT_files;	// 1つの selfplay_gct-00*.csa に入ってる棋譜数
+int gct_csa = 1;	// ファイル番号
+int sum_gct_loads = 0; // 1ファイルの全棋譜を読み込んだ後に加算される
 
-const int fReplayLearning = 0;	// すでに作られた棋譜からWindowをずらせて学習させる
+const int fReplayLearning = 1;	// すでに作られた棋譜からWindowをずらせて学習させる
 const int fWwwSample = 0;		// fReplayLearning も同時に1
 
 
@@ -2741,6 +2801,8 @@ void init_zero_kif_db()
 	pZDBmaxmove      = (unsigned char*) malloc( ZDB_POS_MAX * sizeof(char) );
 	pZDBplayouts_sum = (unsigned short*)malloc( ZDB_POS_MAX * sizeof(short) );
 	pZDBscore_x10k   = (unsigned short*)malloc( ZDB_POS_MAX * sizeof(short) );
+	zdb              = (ZERO_DB*)       malloc(ZERO_DB_SIZE * sizeof(ZERO_DB));
+	if ( zdb == NULL ) DEBUG_PRT("");
 
 	memset(pZDBsum,0,ZERO_DB_SIZE * sizeof(int));
 	int i;
@@ -2751,8 +2813,14 @@ void init_zero_kif_db()
 }
 
 // 最後に調べたarchiveのみキャッシュする
+#if ( GCT_SELF==1)
+//const int ONE_FILE_KIF_NUM = 350000;
+const int ONE_FILE_KIF_NUM = 9375100;
+#else
+const int ONE_FILE_KIF_NUM = 10000;
+#endif
 static char recent_arch_file[TMP_BUF_LEN];
-static uint64_t recent_arch_table[10000];	// n番目の棋譜の開始位置
+static uint64_t recent_arch_table[ONE_FILE_KIF_NUM];	// n番目の棋譜の開始位置
 static char *p_recent_arch = NULL;
 static uint64_t recent_arch_size;
 
@@ -2760,7 +2828,7 @@ const int USE_XZ_NONE      = 0;
 const int USE_XZ_POOL_ONLY = 1;
 const int USE_XZ_BOTH      = 2;
 
-const int USE_XZ = USE_XZ_BOTH;	//  1...poolのみ xz で。2...poolもarchiveも xz で
+int USE_XZ = USE_XZ_BOTH;	//  1...poolのみ xz で。2...poolもarchiveも xz で
 
 // archiveから棋譜番号=n の棋譜を取り出す。KifBuf[] に入る。速度無視。fpでは100番目以降が遅すぎて無理。
 int find_kif_from_archive(int search_n)
@@ -2774,16 +2842,37 @@ int find_kif_from_archive(int search_n)
 //	char dir_arch[] = "/home/yss/tcp_backup/archive20201207/";
 //	char dir_arch[] = "/home/yss/prg/komaochi/archive/";
 //	char dir_arch[] = "/home/yss/koma_syn/archive/";
-//	char dir_arch[] = "/home/yss/tcp_backup/archive20201207/";
-	char dir_arch[] = "/home/yss/tcp_backup/archive/";
-
+	char dir_arch[] = "/home/yss/tcp_backup/archive20201207/";
 	int arch_n = (search_n/10000) * 10000;	// 20001 -> 20000
+
+	if ( GCT_SELF ) {
+		USE_XZ = USE_XZ_NONE;
+		if ( search_n - sum_gct_loads == nGCT_files && nGCT_files != 0 ) {
+			sum_gct_loads = zdb_count;
+			gct_csa++;
+			nGCT_files = 0;
+			PRT("next gct_csa=%d,zdb_count=%d\n",gct_csa,zdb_count);
+		}
+		if ( gct_csa == 24*3+1 ) { PRT("stop memory.\n"); return 0; }
+//		if ( gct_csa >= 2 ) { PRT("stop memory.\n"); return 0; }
+	}
 
 	char filename[TMP_BUF_LEN];
 	if ( USE_XZ==USE_XZ_BOTH ) {
 		sprintf(filename,"%sarch%012d.csa.xz",dir_arch,arch_n);
 	} else {
 		sprintf(filename,"%sarch%012d.csa",dir_arch,arch_n);
+		if ( GCT_SELF ) {
+//			sprintf(filename,"/home/yss/prg/learn/selfplay_gct-%03d.csa",gct_csa);
+//			sprintf(filename,"/home/yss/shogi/dlshogi_hcpe/20210506/selfplay_gct-%03d.csa",gct_csa);
+			if ( gct_csa < 25 ) {
+				sprintf(filename,"/home/yss/shogi/dlshogi_hcpe/dlshogi_with_gct-%03d.csa",gct_csa);
+			} else if ( gct_csa < 49 ) {
+				sprintf(filename,"/home/yss/shogi/dlshogi_hcpe/suisho3kai-%03d.csa",gct_csa - 24);
+			} else {
+				sprintf(filename,"/home/yss/shogi/dlshogi_hcpe/floodgate_2019-2021_r3500-%03d.csa",gct_csa - 48);
+			}
+		}
 	}
 //	PRT("try open %s\n",filename);
 	if ( strcmp(filename, recent_arch_file) != 0 ) {
@@ -2796,7 +2885,7 @@ int find_kif_from_archive(int search_n)
 				PRT("not found. %s\n",filename);
 				return 0;
 			}
-			PRT("%s, size=%d\n",filename,size);
+			PRT("%s, size=%lu\n",filename,size);
 			if ( p_recent_arch ) free(p_recent_arch);
 			p_recent_arch = (char *)malloc(size);
 			if ( p_recent_arch==NULL ) { PRT("fail malloc size=%d\n",size); exit(0); }
@@ -2812,7 +2901,7 @@ int find_kif_from_archive(int search_n)
 			stat(filename, &st);
 			size = st.st_size;
 
-			PRT("%s, size=%d\n",filename,size);
+			PRT("%s, size=%lu\n",filename,size);
 			if ( p_recent_arch ) free(p_recent_arch);
 			p_recent_arch = (char *)malloc(size);
 			if ( p_recent_arch==NULL ) { PRT("fail malloc size=%d\n",size); exit(0); }
@@ -2829,46 +2918,45 @@ int find_kif_from_archive(int search_n)
 			if ( c!='\n' ) continue;
 			lines++;
 			if ( i<size-2 && p_recent_arch[i+1]=='/' ) {
+				if ( g >= ONE_FILE_KIF_NUM ) DEBUG_PRT("");
 				g++;
 				recent_arch_table[g] = i+2;
 			}
 		}
 		strcpy(recent_arch_file, filename);
 		recent_arch_size = size;
-		if ( g != 10000 - 1 ) PRT("Err g=%d\n",g);
+		nGCT_files = g;
+		if ( GCT_SELF == 0 && g != ONE_FILE_KIF_NUM - 1 ) PRT("Err g=%d\n",g);
 		PRT("lines=%d,g=%d,%.3f sec\n",lines,g,get_spend_time(ct1));	// 100で36秒。1回0.36秒
 //		for (i=0;i<10;i++) PRT("%d:%d\n",i,recent_arch_table[i]); exit(0);
 	}
 
 	int n = search_n - arch_n;
-	if ( n < 0 || n >= 10000 ) { PRT("err\n"); exit(0); }
-	
+	if ( GCT_SELF==0 && (n < 0 || n >= 10000) ) DEBUG_PRT("err\n");
+	if ( GCT_SELF ) n = search_n - sum_gct_loads;
+
 	KifBuf[0] = 0;
 	nKifBufNum = 0;
 	nKifBufSize = 0;
 
-	uint64_t start_i = recent_arch_table[n];
-	uint64_t next_i  = recent_arch_size;
-	if ( n < 9999 ) next_i = recent_arch_table[n+1] - 1;	// '/' を入れない
+	uint64_t start_i = recent_arch_table[n  ];
+	uint64_t next_i  = recent_arch_table[n+1] - 1;	// '/' を入れない
+	if ( GCT_SELF==0 && n >= 9999 ) next_i = recent_arch_size;
 	uint64_t one_size = next_i - start_i;
 
-	if ( one_size > KIF_BUF_MAX-256 || one_size == 0 ) {
-		DEBUG_PRT("Err one csa kif is too big\n");	
-	}
+	if ( one_size > KIF_BUF_MAX-256 || one_size <= 0 ) DEBUG_PRT("Err one csa kif is too big, n=%d,%lu\n",n,one_size);
 	strncpy(KifBuf, p_recent_arch+start_i, one_size);
 	KifBuf[one_size] = 0;
 	nKifBufSize = strlen(KifBuf);
-	if ( nKifBufSize == 0 ) { PRT("Err size=0, search_n=%d\n",search_n); exit(0); }
+	if ( nKifBufSize == 0 ) DEBUG_PRT("Err size=0, search_n=%d\n",search_n);
 //	for (int i=0;KifBuf[i]!=0;i++) PRT("%c",KifBuf[i]); PRT("\n");
-//	PRT("size=%d\n",nKifBufSize);
+//	PRT("size=%d,n=%d,one_size=%d,search_n=%d,nGCT_files=%d\n",nKifBufSize,n,one_size,search_n,nGCT_files);
 	return 1;
 }
 
 int find_kif_from_pool(int search_n)
 {
-//	char dir_pool[] = "/home/yss/koma_syn/pool";
-	char dir_pool[] = "/home/yss/tcp_backup/pool";
-
+	char dir_pool[] = "/home/yss/koma_syn/pool";
 	char filename[TMP_BUF_LEN];
 	if ( USE_XZ ) {
 		sprintf(filename,"%s/no%012d.csa.xz",dir_pool,search_n);
@@ -2935,6 +3023,10 @@ void shogi::add_one_kif_to_db()
 	ZERO_DB *pdb = &zdb[zdb_count % ZERO_DB_SIZE];	// 古いのは上書き
 	ZERO_DB *p   = &zdb_one;
 	free_zero_db_struct(pdb);
+#if (GCT_SELF==1)
+        if ( zdb_count >= ZERO_DB_SIZE ) DEBUG_PRT("ZERO_DB_SIZE is not enoght!\n");
+        if ( p->moves <= 0 ) DEBUG_PRT("zdb_count=%d,p->moves=%d",zdb_count,p->moves);
+#endif
 	if ( 0 ) {	// 投了を実装した場合のテスト。投了手数を予想して最後の数手を削る
 		int t = get_guess_resign_moves(p->moves);
 		int t2 = t & 0xfffe;	// 偶数に
@@ -2956,6 +3048,9 @@ void shogi::add_one_kif_to_db()
 	pdb->handicap       = p->handicap;
 //	copy(p->v_kif.begin(), p->v_kif.end(), back_inserter(pdb->v_kif));
 //	copy(p->v_playouts_sum.begin(), p->v_playouts_sum.end(), back_inserter(pdb->v_playouts_sum));
+#if ( GCT_SELF==1)
+	pdb->v_init_pos     = p->v_init_pos;
+#endif
 	pdb->v_kif          = p->v_kif;
 	pdb->v_playouts_sum = p->v_playouts_sum;
 	pdb->vv_move_visit  = p->vv_move_visit;
@@ -2989,8 +3084,7 @@ int is_exist_kif_file(int search_n)
 int nHandicapLastID[HANDICAP_TYPE];
 int nHandicapRate[HANDICAP_TYPE];
 const char HANDICAP_ID_FILE[] = "handicap_rate.txt";
-//const char HANDICAP_SYN[] = "/home/yss/koma_syn/handicap/handicap.txt";
-const char HANDICAP_SYN[] = "/home/yss/tcp_backup/handicap/handicap.txt";
+const char HANDICAP_SYN[] = "/home/yss/koma_syn/handicap/handicap.txt";
 
 void load_handicap_rate()
 {
@@ -3110,7 +3204,7 @@ void update_pZDBsum()
 	const int G1000 = 1000*H;
 	const int WR_OK_GAMES = 8000;	// 直近のこの対局数の勝率でレートを変動
 
-	load_handicap_rate();
+	if ( GCT_SELF==0 ) load_handicap_rate();
 	const int MAX_GAMES = (WR_OK_GAMES*12/10)*H;
 	int i;
 	for (i=0;i<H;i++) {
@@ -3119,6 +3213,7 @@ void update_pZDBsum()
 
 	zero_kif_pos_num = 0;
 	zero_kif_games   = 0;
+	zero_pos_over250 = 0;
 	int loop = zdb_count;
 	if ( loop > ZERO_DB_SIZE ) loop = ZERO_DB_SIZE;
 	for (i=0;i<loop;i++) {
@@ -3129,7 +3224,7 @@ void update_pZDBsum()
 		if ( p->moves == 0 ) { PRT("Err. p->moves=0\n"); exit(0); }
 		if ( p->result < 0 || p->result > 2 ) DEBUG_PRT("");
 
-		if ( zero_kif_pos_num + p->moves >= ZDB_POS_MAX ) DEBUG_PRT("ZDB_POS_MAX!");
+		if ( zero_kif_pos_num + p->moves >= ZDB_POS_MAX ) DEBUG_PRT("ZDB_POS_MAX! %d/%d,%lu,%d",i,loop,zero_kif_pos_num,p->moves);
 		for (int j=0;j<p->moves;j++) {
 			int n = zero_kif_pos_num + j;
 			int m0 = j;
@@ -3138,10 +3233,12 @@ void update_pZDBsum()
 			if ( m1 > 255 ) m1 = 255;
 			pZDBmove[n]    = m0;
 			pZDBmaxmove[n] = m1;
-			pZDBplayouts_sum[n] = p->v_playouts_sum[j];
+			if ( GCT_SELF==0 ) pZDBplayouts_sum[n] = p->v_playouts_sum[j];
+			if ( GCT_SELF==1 ) pZDBplayouts_sum[n] = 0;
 			pZDBscore_x10k[n]   = p->v_score_x10k[j];
+			if ( m0 >= 250 ) zero_pos_over250++;
 		}
-
+//		PRT("%d/%d,%lu,",i,loop,zero_kif_pos_num);
 		zero_kif_pos_num += p->moves;
 		pZDBsum[i] = zero_kif_pos_num;
 		zero_kif_games += (p->moves != 0);
@@ -3246,8 +3343,8 @@ void update_pZDBsum()
 	}
 //	if ( fUpdate ) save_handicap_rate();
 
-	float ave_winrate = (float)(res_total_sum[0][1] + res_total_sum[0][0]/2.0)/(res_total_sum[0][0]+res_total_sum[0][1]+res_total_sum[0][2]);
-	save_average_winrate(ave_winrate);
+//	float ave_winrate = (float)(res_total_sum[0][1] + res_total_sum[0][0]/2.0)/(res_total_sum[0][0]+res_total_sum[0][1]+res_total_sum[0][2]);
+//	save_average_winrate(ave_winrate);
 
 //	PRT("H:"); for (i=0;i<H;i++) { PRT("%8d %4d(%3d)",nHandicapLastID[i], nHandicapRate[i], hand_diff[i]); } PRT("\n");
 }
@@ -3279,7 +3376,7 @@ void shogi::load_exist_all_kif()
 
 	update_pZDBsum();
 
-	PRT("zdb_count=%d(count=%d),games=%d,pos_num=%d, %.3f sec\n",zdb_count,count,zero_kif_games,zero_kif_pos_num,get_spend_time(ct1));
+	PRT("zdb_count=%d(count=%d),games=%d,pos_num=%lu, %.3f sec\n",zdb_count,count,zero_kif_games,zero_kif_pos_num,get_spend_time(ct1));
 	if ( zdb_count_start != 0 && count < ZERO_DB_SIZE ) { DEBUG_PRT("Err. replay buf is not filled.\n"); }
 }
 
@@ -3307,7 +3404,7 @@ int shogi::wait_and_get_new_kif(int next_weight_n)
 		PRT("%s\n",str);
 //		int ret = system(str);	// fail all system() 20190817?
 		sleep(sleep_sec);
-		int ret = system("/home/yss/tcp_backup/rsync_one.sh");
+		int ret = system("/home/yss/koma_syn/rsync_one.sh");
 		PRT("ret=%d\n",ret);
 		// 新規に追加されたファイルを調べる
 		for (;;) {
@@ -3349,7 +3446,7 @@ int shogi::add_a_little_from_archive()
     }
     update_pZDBsum();
     PRT("add_kif_sum=%d,",add_kif_sum);
-    PRT("zdb_count=%d,games=%d,pos_num=%d\n",zdb_count,zero_kif_games,zero_kif_pos_num);
+    PRT("zdb_count=%d,games=%d,pos_num=%d(over250=%d)\n",zdb_count,zero_kif_games,zero_kif_pos_num,zero_pos_over250);
     return add_kif_sum;
 }
 
@@ -3585,6 +3682,88 @@ void rand_check_test()
 	// loop=  58850000,dsum=0.999956,sqrt()=0.999978
 }
 */
+
+
+// 駒得だけの評価関数を学習
+// Assessing Game Balance with AlphaZero: Exploring Alternative Rule Sets in Chess
+// https://arxiv.org/abs/2009.04374
+// 盤上の駒の数の差(自分 - 相手)を d1,d2, ... ,d20 とする。
+// (歩、香、桂、銀、金、角、飛、と、成香、成桂、成銀、龍、馬、 持駒：歩、香、桂、銀、金、角、飛)
+// d0 = 1 は固定。w0,w1,w2, ... w20 が求めたい重み。d0=1 は先手勝率が0.55など偏りを吸収するためか。
+// 評価関数は g(s) = tanh(w T d)
+// 対局結果を z (-1,0,+1)  とすると
+// [z - g(s)]^2
+// がすべての局面 s に対して最小になるように最適化。
+// tanh(x) の微分は 4/(e^x+e^-x)^2
+// x = w T d = w0*d0 + w1*d1 + ... w20*d20 とすると
+// w0 に対する偏微分は 2(z-tanh(x))*(-1)*d0*( 4/(e^x+e^-x)^2 )
+
+const int PIECE_LEARN = 0;
+const int MAX_PVW = 21;
+double piece_w[MAX_PVW] = {0};
+double piece_d_sum[MAX_PVW] = {0};
+
+void shogi::get_piece_num_diff(bool bGoteTurn, int d[])
+{
+	int i;
+	for (i=0;i<MAX_PVW;i++) d[i] = 0;
+	d[0] = 1;
+	for (int y=0;y<B_SIZE;y++) for (int x=0;x<B_SIZE;x++) {
+		int z = make_z(x+1,y+1);
+		int k = init_ban[z];
+		if ( k==0 ) continue;
+		int m = k & 0x0f;
+		if ( m==0x08 ) continue;
+		if ( m>=0x0e ) m--;	// m = 1...14
+		if ( m>=0x08 ) m--;	// m = 1...13
+		if ( k < 0x80 ) {
+			d[m]++;
+		} else {
+			d[m]--;
+		}
+	}
+	for (i=1;i<8;i++) {
+		d[13+i] = mo_m[i] - mo_c[i];
+	}
+	if ( bGoteTurn ) for (i=1;i<MAX_PVW;i++) d[i] = -d[i];
+}
+
+void shogi::sum_pwv(double z, bool bGoteTurn, double sumd[])
+{
+	int d[MAX_PVW];
+	get_piece_num_diff(bGoteTurn, d);
+
+	double x = 0;
+	int i;
+	for (i=0;i<MAX_PVW;i++) x += piece_w[i] * d[i];
+	for (i=0;i<MAX_PVW;i++) {
+		double e = exp(x) + exp(-x);
+		sumd[i] += 2.0*(z-tanh(x))*(-1.0)*d[i]*( 4/(e*e) );
+	}
+}
+void update_piece_w()
+{
+	static double add = 0.01;
+	static int count;
+	if ( (++count % 40)==0 ) {
+		PRT("ADD=%.10f\n",add);
+		double fu = piece_w[1];
+		if ( fu <=0 ) fu = 1.0;
+		for (int i=0;i<MAX_PVW;i++) {
+			if ( piece_d_sum[i] > 0 ) piece_w[i] -= add;
+			if ( piece_d_sum[i] < 0 ) piece_w[i] += add;
+//			piece_w[i] += -piece_d_sum[i]*add;	// unstable
+			piece_d_sum[i] = 0;
+			PRT("%f(%f),",piece_w[i],piece_w[i]/fu);
+		}
+		PRT("\n");
+	}
+	if ( (count%800)==0 ) { add /= 1.5; PRT("DIV:ADD=%.10f\n",add); }
+}
+
+static uint64_t rand_try = 0;
+static uint64_t rand_batch = 0;
+
 #ifdef F2187
 void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_policy, float *label_value, float label_policy_visit[][MOVE_2187_MAX])
 #else
@@ -3600,22 +3779,42 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 
 	// pos_sum の中から64個ランダムで選ぶ
 	int *ri = new int[mini_batch];
+	int *ri_moves = new int[mini_batch];
 	int i;
 	for (i=0;i<mini_batch;i++) {
 		int r = rand_m521() % zero_kif_pos_num;	// 0 <= r < zero_kif_pos_num, 最初に右辺がunsigned longで評価されるようで、マイナスにはならない。gccでも
-
+		rand_try++;
 		// 40手までで投了してる棋譜は10分の1
 		// 0手目から30手目は 0手目は10分の1、30手目で1,  n * 9/300 + 30/300
-		if ( 0 ) {
+		ri_moves[i] = pZDBmove[r];
+		if ( 0 && GCT_SELF ) {
+			int n = pZDBmove[r];
+			if ( n < 4 ) { i--; continue; }	// 最初の4手には乱数？で分布なし
+			if ( pZDBscore_x10k[r] == NO_ROOT_SCORE ) { i--; continue; }
+		}
+		if ( 1 ) {
 			int m = pZDBmaxmove[r];
 			int n = pZDBmove[r];
-			if ( m <= 40 && (rand_m521() % 10) != 0 ) { i--; continue; }
-			if ( n < 30 && (int)(rand_m521() % 300) > (n*9+30) ) { i--; continue; }
+//			if ( m <= 40 && (rand_m521() % 10) != 0 ) { i--; continue; }
+			if ( m <= 40 && (rand_m521() % 4) != 0 ) { i--; continue; }
+//			if ( n < 30 && (int)(rand_m521() % 300) > (n*9+30) ) { i--; continue; }
+			if ( n < 30 && (float)(rand_m521() % 3000) > exp(8.0*(30-n)/30) ) { i--; continue; }
+//			if ( n < 30 && (float)(rand_m521() % 1000) > pow(2.0,n) ) { i--; continue; }
+//			if ( n < 24 ) { i--; continue; }
+//			double x = 1.0 + abs(n-60) / 10.0;// from policy weight surprize. around 60 moves is most difficult.
+//			if ( x > 6 ) x = 6;
+//			double y = 0.003*x*x*x - 0.058*x*x + 0.141*x + 0.896;
+//			if ( (double)(rand_m521() % 1000) > y*1000 )  { i--; continue; }
+//			if ( n < 250 ) { i--; continue; } 
 		}
 		if ( 1 ) {
 			int s = pZDBplayouts_sum[r];
 			int x = pZDBscore_x10k[r];
 			if ( s < 50 && (x==0 || x==10000) ) { i--; continue; }
+//			if ( x < 1000 ) { i--; continue; }
+//			if ( x < 2000 && (rand_m521() % 10) != 0  ) { i--; continue; }
+//			if ( x < 2000 && (int)(rand_m521() % 200) > (x/10)  ) { i--; continue; }
+//			if ( x < 1000 && (int)(rand_m521() % 100) > (x/10)  ) { i--; continue; }
 		}
 
 		int j;
@@ -3625,6 +3824,7 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 		if ( j != i ) { i--; continue; }
 		ri[i] = r;
 	}
+	rand_batch += mini_batch;
 
 	for (i=0;i<mini_batch;i++) {
 		int r = ri[i];
@@ -3649,16 +3849,28 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 //		mb_count[bi]++;
 
 		copy_restore_dccn_init_board(p->handicap, false);
-
+		fGotekara = (p->handicap!=0);
+#if ( GCT_SELF==1)
+		if ( GCT_SELF ) {
+			for (int y=0;y<9;y++) for (int x=0;x<9;x++) {
+				init_ban[(y+1)*16+(x+1)] = p->v_init_pos[y*9+x];
+			}
+			for (int i=0;i<7;i++) mo_m[i+1] = p->v_init_pos[81+0+i];
+			for (int i=0;i<7;i++) mo_c[i+1] = p->v_init_pos[81+7+i];
+			fGotekara = p->v_init_pos[81+7*2];
+			ban_saikousei_without_kiki();
+		}
+#endif
 		int fSymmetry = rand_m521() % 2;	// 乱数で左右反転
 		fSymmetry = 0;	// 左右反転なし
+//		if ( ri_moves[i] < 240 ) fSymmetry = 0;
 
 		for (j=0;j<t;j++) {
 			int bz,az,tk,nf;
 			// 棋泉形式の2バイトを4バイトに変換。numは現在の手数。num=0から始まる。
-			trans_4_to_2_KDB( p->v_kif[j]>>8, p->v_kif[j]&0xff, (j+(p->handicap!=0))&1, &bz, &az, &tk, &nf);
+			trans_4_to_2_KDB( p->v_kif[j]>>8, p->v_kif[j]&0xff, (j+fGotekara)&1, &bz, &az, &tk, &nf);
 
-			move_hit_hash(bz,az,tk,nf);
+			move_hit_hash(bz,az,tk,nf);				// 利きは駒の種類ごとに作り直してるので不要
 			move_hit_kif[j] = pack_te( bz,az,tk,nf );
 			move_hit_hashcode[j][0] = hash_code1;	// 指した後の局面のハッシュ値を入れる
 			move_hit_hashcode[j][1] = hash_code2;
@@ -3667,14 +3879,15 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 		if ( j >= p->moves || j!=t ) { DEBUG_PRT("no next move? t=%d(%d) err.j=%d,r=%d\n",t,p->moves,j,r); }
 		if ( 1 ) {
 			int s = p->v_playouts_sum[t];
-            int x = p->v_score_x10k[t];
-            if ( s < 50 && (x==0 || x==10000) ) DEBUG_PRT("r=%8d,t=%3d,s=%5d,x=%d\n",r,t,s,x);
+			int x = p->v_score_x10k[t];
+			if ( s < 50 && (x==0 || x==10000) ) { static int count; PRT("r=%8d,t=%3d,s=%5d,x=%5d,count=%d\n",r,t,s,x,count++); }
+//			if ( s < 50 ) PRT("r=%8d,t=%3d,s=%5d,x=%d\n",r,t,s,x);
 		}
 
 		int bz,az,tk,nf;
-		bool bGoteTurn = (t+(p->handicap!=0)) & 1;
+		bool bGoteTurn = (t+fGotekara) & 1;
 		trans_4_to_2_KDB( p->v_kif[j]>>8, p->v_kif[j]&0xff, bGoteTurn, &bz, &az, &tk, &nf);
-		
+
 		int win_r = 0;
 		if ( p->result == ZD_S_WIN ) win_r = +1;
 		if ( p->result == ZD_G_WIN ) win_r = -1;
@@ -3695,9 +3908,15 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 
 		// 実際の勝敗と探索値の平均を学習。https://tadaoyamaoka.hatenablog.com/entry/2018/07/01/121411
 		float ave_r = ((float)win_r + score) / 2.0;
+//		float ave_r = ((float)win_r*0 + score*10) / 10.0;
+
+//		float m = pZDBmaxmove[r];
+//		float n = pZDBmove[r];
+//		float b = n/m;
+//		float ave_r = (float)win_r*b + score*(1-b);
 		if ( score_x10k == NO_ROOT_SCORE ) ave_r = win_r;
-		ave_r = win_r;	// not use average
-//		PRT("(%.3f,%.3f)",(float)win_r,score);
+//		ave_r = win_r;	// not use average
+//		PRT("(%6.3f,%6.3f,%6.3f,%3.0f/%3.0f,%.3f)",(float)win_r,score,ave_r,n,m,b);
 
 		int playmove_id = 0;
 		if ( f2187 ) {
@@ -3720,7 +3939,9 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 			for (k=0; k<move_max; k++) {
 				label_policy_visit[i][k] = 0.0f;
 			}
-			int playout_sum = p->v_playouts_sum[j];
+			int playout_sum = 1;
+			if ( p->v_playouts_sum.size() > 0 ) playout_sum = p->v_playouts_sum[j];
+			if ( playout_sum <= 0 ) DEBUG_PRT("");
 			label_policy_visit[i][playmove_id] = 1.0f / (float)playout_sum;		// 存在しない場合は1回探索した、とする
 
 			int found = 0;
@@ -3746,7 +3967,7 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 //				PRT("r=%5d:b0=%3d,b1=%3d,[%3d][%3d] (%02x,%02x,%02x,%02x)id=%5d,v=%3d,%6.4f\n",r,b0,b1,j,k,bz,az,tk,nf,id,visit,label_policy_visit[i][id]);
 				if ( id==playmove_id ) found = 1;
 			}
-			if ( found==0 ) { static int count=0; if ( count++==0 ) PRT("no best move visit. id=%d\n",playmove_id); }
+			if ( found==0 ) { static int count=0; if ( count++<=10 ) { PRT("\nno best move visit. i=%d,id=%d,bi=%d,t=%d/%d,visit_size=%d\n",i,playmove_id,bi,t,p->moves,p->vv_move_visit[j].size()); hyouji(); } }
 		}
 
 		float *pd = (float *)data + ONE_SIZE * i;
@@ -3764,6 +3985,8 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 		sum_t +=t;
 		sum_diff_win_r +=fabs(win_r - ave_r);
 
+		if ( PIECE_LEARN ) sum_pwv(win_r, bGoteTurn, piece_d_sum);
+
 		if ( fPW ) PRT("%3d ",p->weight_n);
 //		if ( fPW ) PRT("%d(%3d) ",bi,p->weight_n);
 		static int tc[MAX_ZERO_MOVES],tc_all;
@@ -3777,37 +4000,29 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 		,sum_handicap[0],sum_handicap[1],sum_handicap[2],sum_handicap[3],sum_handicap[4],sum_handicap[5],sum_handicap[6]
 		,sum_result[0],sum_result[1],sum_result[2], sum_turn[0],sum_turn[1], sum_t/mini_batch, sum_diff_win_r/mini_batch	);
 //	PRT("%.2f sec, mini_batch=%d,%8d,%8.1f,%6.3f\n",get_spend_time(ct1), mini_batch, ri[0], label_policy[0], label_value[0]);
-
+	if ( PIECE_LEARN ) update_piece_w();
 	delete [] ri;
+	delete [] ri_moves;
 }
 
 void convert_caffemodel(int iteration, int weight_number)
 {
 	print_time();
 	PRT(",convert_caffemodel. weight_number=%4d,zdb_count=%10d,iteration=%d\n",weight_number,zdb_count,iteration);
-	FILE *fp = fopen("/home/yss/test/extract/aoba.sh","w");
+	FILE *fp = fopen("/home/yss/test/koma_ext/aoba.sh","w");
 	if ( fp==NULL ) DEBUG_PRT("");
 	fprintf(fp,"#!/bin/bash\n");
-	fprintf(fp,"cd /home/yss/test/extract/\n");
-	fprintf(fp,"export LD_LIBRARY_PATH=/home/yss/caffe_cpu/build/lib:\n");
-	fprintf(fp,"export PYTHONPATH=/home/yss/caffe_cpu/python:$PYTHONPATH\n");
-//	fprintf(fp,"python ep_del_bn_scale_factor_version_short_auto.py /home/yss/shogi/yssfish/snapshots/_iter_%d.caffemodel\n",iteration);
-	fprintf(fp,"python ep_del_bn_scale_factor_version_short_auto.py /home/yss/shogi/learn/snapshots/_iter_%d.caffemodel\n",iteration);
-#if 0
-	fprintf(fp,"hash=`sha256sum binary.txt | awk '{print $1}'`\n");
-	fprintf(fp,"mv binary.txt ${hash}_w%012d.txt\n",weight_number);
-	fprintf(fp,"xz -z -k ${hash}_w%012d.txt\n",weight_number);
-	fprintf(fp,"mv ${hash}_w%012d.txt.xz  ../../tcp_backup/weight/\n",weight_number);
-#else 
+	fprintf(fp,"cd /home/yss/test/koma_ext/\n");
+	fprintf(fp,"export LD_LIBRARY_PATH=/home/yss/caffe_cpu/build/lib:/home/yss/cuda/cuda-11.2/lib64:\n");
+	fprintf(fp,"python3 ep_short_auto_py3.py /home/yss/shogi/learn/snapshots/_iter_%d.caffemodel\n",iteration);
 	fprintf(fp,"mv binary.txt w%012d.txt\n",weight_number);
 	fprintf(fp,"xz -9 -z -k w%012d.txt\n",weight_number);
-	fprintf(fp,"mv w%012d.txt.xz  ../../tcp_backup/weight/\n",weight_number);
-#endif
+	fprintf(fp,"mv w%012d.txt.xz  ../../koma_syn/weight/\n",weight_number);
 	fclose(fp);
-	int ret = system("bash /home/yss/test/extract/aoba.sh");
+	int ret = system("bash /home/yss/test/koma_ext/aoba.sh");
 
 	ret = system("sleep 10");
-	ret = system("/home/yss/tcp_backup/rsync_weight_only.sh");
+	ret = system("/home/yss/koma_syn/rsync_weight_only.sh");
 	(void)ret;
 }
 
@@ -4016,7 +4231,6 @@ void start_zero_train(int *p_argc, char ***p_argv )
 	GlobalInit(p_argc, p_argv);
 
 	PS->init_prepare_kif_db();
-//exit(0);
 	if ( fWwwSample ) { PS->make_www_samples(); return; }
 
 	// MemoryDataLayerはメモリ上の値を出力できるDataLayer．
@@ -4031,7 +4245,7 @@ void start_zero_train(int *p_argc, char ***p_argv )
 	// Solverの設定をテキストファイルから読み込む
 	SolverParameter solver_param;
 	if ( ITER_SIZE==1 ) {
-		ReadProtoFromTextFileOrDie("aoba_zero_solver.prototxt", &solver_param);
+		ReadProtoFromTextFileOrDie("aoba_solver.prototxt", &solver_param);
 	} else if ( ITER_SIZE==64 ) {
 		if ( MINI_BATCH!=64 ) DEBUG_PRT("MINI_BATCH err\n");
 		ReadProtoFromTextFileOrDie("aoba_zero_solver_mb64_is64.prototxt", &solver_param);
@@ -4046,35 +4260,43 @@ void start_zero_train(int *p_argc, char ***p_argv )
 
 	//評価用のデータを取得
 	const auto net      = solver->net();
-//	const char sNet[] = "20190419replay_lr001_wd00002_100000_1018000/_iter_36000.caffemodel";	// w449
-//	const char sNet[] = "/home/yss/shogi/yssfish/snapshots/_iter_300376.caffemodel";
-//	const char sNet[] = "/home/yss/shogi/yssfish/snapshots/_iter_3160000.caffemodel";	// w627
-//	const char sNet[] = "/home/yss/shogi/yssfish/snapshots/20190817/_iter_1080000.caffemodel";	// w681
-//	const char sNet[] = "/home/yss/shogi/yssfish/snapshots/20190907/_iter_540000.caffemodel";	// w708
-//	const char sNet[] = "/home/yss/shogi/yssfish/snapshots/20191001/_iter_580000.caffemodel";	// w737
-//	const char sNet[] = "/home/yss/shogi/yssfish/snapshots/20191002/_iter_20000.caffemodel";	// w738
-//	const char sNet[] = "/home/yss/shogi/yssfish/snapshots/20191010/_iter_220000.caffemodel";	// w749
-//	const char sNet[] = "/home/yss/shogi/yssfish/snapshots/20191021/_iter_300000.caffemodel";	// w764 bug fix
-//	const char sNet[] = "/home/yss/shogi/yssfish/snapshots/20191029/_iter_200000.caffemodel";	// w774
-//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20191029/_iter_312.caffemodel";	// w775
-//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20191107/_iter_3432.caffemodel";	// w786
-//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20200328/_iter_1370000.caffemodel";	// w923
-//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20200708/_iter_5260000.caffemodel";	// w1449
-//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20200928/_iter_5970000.caffemodel";	// w2046
-//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20201027/_iter_2440000.caffemodel";	// w2290
-//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20201109/_iter_1520000.caffemodel";	// w2442
-//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20201206/_iter_3070000.caffemodel";	// w2749
-//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20201228/_iter_2720000.caffemodel";	// w3021
-//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210111/_iter_1760000.caffemodel";	// w3076
-//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210131/_iter_2272000.caffemodel";	// w3147
-//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210311/_iter_4832000.caffemodel";	// w3298
-//	const char sNet[] = "/home/yss/shogi/learn/40b_8x_39770000_games_iter_3870190.caffemodel";	// 40b,  next = w3460
-//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210426/_iter_5152000.caffemodel";	// w3459 = w3703
-//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20211225/_iter_2112000.caffemodel";	// w3769
-//	const char sNet[] = "/home/yss/shogi/learn/20220222_125600_256x20b_swish_no_ave_no_30_from_20220218_071436_iter_600000.caffemodel";
-	const char sNet[] = "/home/yss/shogi/learn/snapshots/20220226/_iter_64000.caffemodel";		// w3883
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210604/_iter_10000.caffemodel";	// w0001
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210607/_iter_60000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210610/_iter_90000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210615_lr0001/_iter_400000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210722_lr0001/_iter_1730000.caffemodel";	// w213
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210805_lr0001/_iter_1070000.caffemodel";	// w320
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210828_lr00001/_iter_2030000.caffemodel";// w523
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210922_kldgain/_iter_2380000.caffemodel";// w761
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20210922_kldgain/_iter_2210000.caffemodel";// w744 巻き戻し
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20211002/_iter_1150000.caffemodel";	// w859 雷で停電
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20211014/_iter_950000.caffemodel";		// w954
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20211023/_iter_760000.caffemodel";		// w1030
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/20211118/_iter_1390000.caffemodel";	// w1169
+//	const char sNet[] = "/home/yss/shogi/learn/20220112_191203_256x20b_swish/_iter_1976875.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20220120_161939_256x20b_swish_from_20220112_191203/_iter_620000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20220124_121016_256x20b_swish_from_20220120_161939/_iter_630000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20220209_014645_256x20b_swish_no_ave_no_30_cos/_iter_1899620.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20220216_205552_256x20b_swish_no_ave_no_30_cos_from_20220209_014645/_iter_230000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20220218_071436_256x20b_swish_no_ave_no_30_from_20220216_205552/_iter_810000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20220328_iter_1248000.caffemodel";	// w3922
+//	const char sNet[] = "/home/yss/shogi/learn/snapshots/_iter_90000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20220505_234024_256x20b_swish_ave_no_30_from_5392k_games_x3/_iter_800000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20220509_125939_256x20b_ave_no_30_from_1000k_games_from_20220505_234024/_iter_782130.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20220515_105749_256x20b_ave_no_30_from_53930k_games_from_20220509_125939/_iter_367135.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/w3969_iter_2752000.caffemodel";	// w3969
+//	const char sNet[] = "/home/yss/shogi/learn/20220601_005103_256x20b_ave_exp_8_30_30_x_m40_4_loop_div4_from_51000k/_iter_600000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20220810_014249_256x20b_ave_gct_001_025/_iter_800000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20220813_134309_256x20b_ave_gct_026_050_from_20220810_014249/_iter_800000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20220819_225132_256x20b_ave_gct_001_025_T1/_iter_800000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20220823_120232_256x20b_ave_gct_001_025_T1_from_20220819_225132/_iter_800000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20220831_152345_256x20b_ave_book_softmax/_iter_800000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20220904_061307_256x20b_ave_book_softmax_from_20220831_152345/_iter_1600000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20220712_111426_256x20b_ave_exp_8_30_30_x_m40_4_loop_div4_from_51000k_20220601_005103/_iter_800000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20221105_181114_256x20b_ave_exp_8_30_30_x_m40_4_cos_from_58410k_20220712_111426/_iter_480000.caffemodel";
+	const char sNet[] = "/home/yss/shogi/learn/20221107_170923_ave_exp_8_30_30_x_m40_4_cos_from_58410k_20221105_181114/_iter_400000.caffemodel";
 
-	int next_weight_number = 3884;	// 現在の最新の番号 +1
+	int next_weight_number = 1170;	// 現在の最新の番号 +1
 
 	net->CopyTrainedLayersFrom(sNet);	// caffemodelを読み込んで学習を再開する場合
 //	load_aoba_txt_weight( net, "/home/yss/w000000000689.txt" );	// 既存のw*.txtを読み込む。*.caffemodelを何か読み込んだ後に
@@ -4087,7 +4309,8 @@ void start_zero_train(int *p_argc, char ***p_argv )
 	int iter_weight = 0;
 
 wait_again:
-	if ( fReplayLearning ) {
+	if ( GCT_SELF ) {
+	} else if ( fReplayLearning ) {
 		add = PS->add_a_little_from_archive();
 		if ( add < 0 ) { PRT("done..\n"); solver->Snapshot(); return; }
 		if ( zdb_count <=  ZERO_DB_SIZE ) goto wait_again;
@@ -4095,18 +4318,16 @@ wait_again:
 //		if ( zdb_count >  13000000 ) { PRT("done...\n"); solver->Snapshot(); return; }
 //		if ( iteration >= 100000*1 ) { PRT("done...\n"); solver->Snapshot(); return; }
 //		if ( iteration > 1000 ) solver_param.set_base_lr(0.01);
-
 	} else {
-		if ( 1 && iteration==0 && next_weight_number==3884 ) {
+		if ( 0 && iteration==0 && next_weight_number==1170 ) {
 			add = 200;	// 初回のみダミーで10000棋譜追加したことにする
 		} else {
 			add = PS->wait_and_get_new_kif(next_weight_number);
 		}
 	}
 
-	const float ADJUST = 1.07142857;
 	const int AVE_MOVES = 128;	// 1局の平均手数
-	float add_mul = ADJUST * (float)AVE_MOVES / MINI_BATCH;
+	float add_mul = (float)AVE_MOVES / MINI_BATCH;
 	int nLoop = (int)((float)add*add_mul); // MB=64でadd*2, MB=128でadd*1, MB=180でadd*0.711
 	// (ITER_SIZE*MINI_BATCH)=4096 なら最低でも32棋譜必要(32*128=4096)
 	int min_n = ITER_SIZE*MINI_BATCH / AVE_MOVES;
@@ -4116,7 +4337,7 @@ wait_again:
 		remainder = add - nLoop * min_n;
 	}
 
-	const int ITER_WEIGHT_BASE = 32000*AVE_MOVES / (ITER_SIZE*MINI_BATCH);	// 10000棋譜(平均128手)ごとにweightを作成
+	const int ITER_WEIGHT_BASE = 10000*AVE_MOVES / (ITER_SIZE*MINI_BATCH);	// 10000棋譜(平均128手)ごとにweightを作成
 	int iter_weight_limit = ITER_WEIGHT_BASE;
 	float reduce = 1.0;	// weightは10000棋譜ごとで学習回数を10000から8000などに減らす。棋譜生成速度が速すぎるため
 	FILE *fp = fopen("reduce.txt","r");
@@ -4134,9 +4355,15 @@ wait_again:
 		fclose(fp);
 	}
 
-//nLoop /= 2;
+//nLoop /= 4;
+//nLoop *= 0.602;	// *= 2.66 ... 800000 iteration / ((600000 kifu/ 2000) * 1000 Loop) = 2.66
+//nLoop = (int)((float)nLoop * 0.029755f);
+//nLoop = (int)((float)nLoop * 0.72727f);
+//nLoop = (int)((float)nLoop * 0.701);
+	if ( GCT_SELF ) nLoop = 800000*1;
+nLoop = 800000*1;
 
-	PRT("nLoop=%d,add=%d,add_mul=%.3f,MINI_BATCH=%d,kDataSize=%d,remainder=%d,iteration=%d(%d/%d)\n",nLoop,add,add_mul,MINI_BATCH,kDataSize,remainder,iteration,iter_weight,iter_weight_limit);
+	PRT("nLoop=%d,add=%d,add_mul=%.3f,MINI_BATCH=%d,kDataSize=%d,remainder=%d,iteration=%d(%d/%d),rand=%lu/%lu(%lf)\n",nLoop,add,add_mul,MINI_BATCH,kDataSize,remainder,iteration,iter_weight,iter_weight_limit, rand_try,rand_batch,(double)rand_try/(double)rand_batch);
 	int loop;
 	for (loop=0;loop<nLoop;loop++) {
 		static array<float, kDataSize * ONE_SIZE> input_data;	// 大きいのでstaticで
@@ -4183,7 +4410,9 @@ wait_again:
 		}
 
 	}
-//	solver->Snapshot();
+return;
+	if ( GCT_SELF ) return;
 	goto wait_again;
 }
 #endif
+

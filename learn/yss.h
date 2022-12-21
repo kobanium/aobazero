@@ -385,7 +385,8 @@ public:
 	void clear_init_ban();
 	void hirate_ban_init(int n);/*** 盤面を初期状態に戻す（駒落ち付き） ***/
 	int get_handicap_from_board();
-	void ban_saikousei(void);	// 現在の持ち駒、盤面の状態(ban_init)を元に盤面状態を再構成する。
+	void ban_saikousei();	// 現在の持ち駒、盤面の状態(ban_init)を元に盤面状態を再構成する。
+	void ban_saikousei_without_kiki();
 	int is_hirate_ban();	// 平手の盤面か判定する
 	void hanten_with_hash_kifu();
 
@@ -440,7 +441,8 @@ public:
 	int wait_and_get_new_kif(int next_weight_n);
 	int add_a_little_from_archive();
 	int make_www_samples();
-
+	void get_piece_num_diff(bool bGoteTurn, int d[]);
+	void sum_pwv(double z, bool bGoteTurn, double sumd[]);
 
 
 	// fish関連

@@ -475,23 +475,31 @@ public:
       float value = strtof(str_value+2, &endptr);
       if (endptr == str_value+2 || *endptr != '\0' || value < 0.0f
 	  || value == HUGE_VALF)
-	die(ERR_INT("cannot interpret value %s (engine %s)",
-		    str_value+2, get_fp()));
-    if (value < th_resign) flag_resign = true;
+	die(ERR_INT("cannot interpret value %s (engine %s)", str_value+2, get_fp()));
+      if (value < th_resign) flag_resign = true;
 //    if (value < th_resign && _nmove > 30) flag_resign = true;
+
+      str_value = OSI::strtok(nullptr, " ,", &saveptr);
+      if (!str_value || str_value[0] != 'r' || str_value[1] != '=')
+	die(ERR_INT("cannot read raw value (engine %s)", get_fp()));
+      float raw_value = strtof(str_value+2, &endptr);
+      if (endptr == str_value+2 || *endptr != '\0' || raw_value < 0.0f
+	  || raw_value == HUGE_VALF)
+	die(ERR_INT("cannot interpret raw_value %s (engine %s)", str_value+2, get_fp()));
+
 
       const char *str_count = OSI::strtok(nullptr, " ,", &saveptr);
       if (!str_count) die(ERR_INT("cannot read count (engine %s)", get_fp()));
-    
+
       long int num = strtol(str_count, &endptr, 10);
       if (endptr == str_count || *endptr != '\0' || num < 1 || num == LONG_MAX)
 	die(ERR_INT("cannot interpret visit count %s (engine %s)",
 		    str_count, get_fp()));
-    
+
       num_best = num;
       {
 	char buf[256];
-	sprintf(buf, "v=%.3f,%ld", value, num);
+	sprintf(buf, "v=%.3f,r=%.3f,%ld", value, raw_value, num);
 	new_info += buf;
       }
 
@@ -505,20 +513,22 @@ public:
 	  die(ERR_INT("bad candidate %s (engine %s)", str_move_usi, get_fp()));
 	new_info += ",";
 	new_info += action.to_str(SAux::csa);
-    
+
 	str_count = OSI::strtok(nullptr, " ,", &saveptr);
 	if (!str_count)
 	  die(ERR_INT("cannot read count (engine %s)", get_fp()));
 
 	num = strtol(str_count, &endptr, 10);
-	if (endptr == str_count || *endptr != '\0'
+	char c = *endptr;
+	bool hasPolicy = ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z');
+	if (endptr == str_count || hasPolicy == false
 	    || num < 1 || num == LONG_MAX)
 	  die(ERR_INT("cannot interpret a visit count %s (engine %s)",
 		      str_count, get_fp()));
 
 	num_tot  += num;
 	new_info += ",";
-	new_info += to_string(num); } }
+	new_info += to_string(num) + c; } }
 
     if (num_best < num_tot) die(ERR_INT("bad counts (engine %s)", get_fp()));
     _node.take_action(actionPlay);

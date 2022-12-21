@@ -244,6 +244,14 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
       if (value < value_min_white) value_min_white = value; }
 
     token = strtok_r(nullptr, ",\'", &saveptr_token);
+    if (!token || token[0] != 'r' || token[1] != '=') return false;
+    token += 2;
+    float raw_value = strtof(token, &endptr);
+    if (endptr == token || *endptr != '\0' || raw_value < 0.0f
+	|| raw_value == HUGE_VALF) return false;
+
+
+    token = strtok_r(nullptr, ",\'", &saveptr_token);
     if (!token) return false;
 
     num = strtol(token, &endptr, 10);
@@ -260,7 +268,9 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
       token = strtok_r(nullptr, ",\'", &saveptr_token);
       if (!token) return false;
       num = strtol(token, &endptr, 10);
-      if (endptr == token || *endptr != '\0' || num < 1 || num == LONG_MAX)
+      char c = *endptr;
+      bool hasPolicy = ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z');
+      if (endptr == token || hasPolicy == false || num < 1 || num == LONG_MAX)
 	return false;
       tot_nchild += 1U; }
 
