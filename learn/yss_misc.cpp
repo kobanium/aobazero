@@ -246,9 +246,15 @@ int shogi::get_handicap_from_board()
 void shogi::ban_saikousei()
 {
 	clear_kb_kiki_kn();
-
 	init();			/** kn[] ni kakikomu **/
 	allkaku();
+	tesuu = all_tesuu = 0;
+}
+
+void shogi::ban_saikousei_without_kiki()
+{
+	clear_kb_kiki_kn();
+	init();			/** kn[] ni kakikomu **/
 	tesuu = all_tesuu = 0;
 }
 

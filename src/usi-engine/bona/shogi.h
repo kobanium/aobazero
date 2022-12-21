@@ -134,7 +134,9 @@ extern unsigned char ailast_one[512];
 //#define BNZ_VER                 "34"	// 20220429 dfpn time limit stop.
 //#define BNZ_VER                 "35"	// 20220430 perpetual check bug fixed(again).
 //#define BNZ_VER                 "36"	// 20220626 pawn ,rook, bishop are always promoted. discovered attack moves have 30% of best policy. safe LCB, kldgain 0.000005.
-#define BNZ_VER                 "37"	// 20220626 kldgain 000000075. ave playouts is 1568/move.
+//#define BNZ_VER                 "37"	// 20220626 kldgain 000000075. ave playouts is 1568/move.
+//#define BNZ_VER                 "38"	// 20221110 test get_best_move_alphabeta_usi().
+#define BNZ_VER                 "39"	// 20221221 raw value and policy are recorded in *.csa. Dynamic Variance-Scaled cPUCT. NN is not called for one reply king escape position.
 #define BNZ_NAME                "AobaZero"
 
 //#define BNZ_VER                 "16"	// 20210528 komaochi, mate3

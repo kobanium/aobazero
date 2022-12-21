@@ -41,6 +41,8 @@ const int MOVE_C_Y_X_ID_MAX = 3781;
 const int MOVE_C_Y_X_ID_MAX = 11259;	// 3781;
 #endif
 
+#define GCT_SELF 0	// GCTの棋譜 selfplay_gct-???.hcpe3.xz を使う場合。 https://tadaoyamaoka.hatenablog.com/entry/2021/05/06/223701
+
 typedef struct ZERO_DB {
 	uint64 hash;	// 棋譜を示すハッシュ
 	uint64 date;	// 棋譜の日付(新しいものから順に)
@@ -50,6 +52,9 @@ typedef struct ZERO_DB {
 	int result_type;// 投了、千日手、中断(513手)、宣言勝ち、連続王手の王逃げによる反則勝、
 	int moves;		// 手数(棋譜のサイズと同じ)
 	int handicap;	// 駒落ち
+#if ( GCT_SELF==1)
+	vector <unsigned char> v_init_pos;		// 開始局面＋手番 81+7*2+1、ハフマンで256bit(32byte)で表現できるので圧縮は可能
+#endif
 	vector <unsigned short> v_kif;			// 棋譜
 	vector <unsigned short> v_playouts_sum;	// Rootの探索数。通常は800固定
 	vector < vector<unsigned int> > vv_move_visit;		// (手+選択回数)のペア

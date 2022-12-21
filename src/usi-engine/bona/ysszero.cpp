@@ -50,7 +50,10 @@ bool fLCB = true;
 double MinimumKLDGainPerNode = 0;	//0.000002;	0で無効, lc0は 0.000005
 bool fResetRootVisit = false;
 bool fDiffRootVisit = false;
-
+bool fSkipOneReply  = true;		// 王手を逃げる手が1手の局面は評価せずに木を降りる
+bool fSkipKingCheck = false;	// 王手がかかってる局面では評価せずに木を降りる
+bool fRawValuePolicy = true;
+ 
 int nLimitUctLoop = 100;
 double dLimitSec = 0;
 int nDrawMove = 0;		// 引き分けになる手数。0でなし。floodgateは256, 選手権は321
@@ -251,7 +254,7 @@ int is_drop_pawn_mate(tree_t * restrict ptree, int turn, int ply)
 	return 1;
 }
 
-const int USI_BESTMOVE_LEN = MAX_LEGAL_MOVES*(8+5)+10;
+const int USI_BESTMOVE_LEN = MAX_LEGAL_MOVES*(8+1+5)+10+10;
 
 int YssZero_com_turn_start( tree_t * restrict ptree )
 {
@@ -906,9 +909,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 	}
 	const bool fPolicyRealization = false;
 	float keep_root_policy[MAX_LEGAL_MOVES];
-	if ( fPolicyRealization ) {
-		for (int i=0; i<phg->child_num; i++) keep_root_policy[i] = phg->child[i].bias;
-	}
+	for (int i=0; i<phg->child_num; i++) keep_root_policy[i] = phg->child[i].bias;
 
 	const float epsilon = 0.25f;	// epsilon = 0.25
 	const float alpha   = 0.15f;	// alpha ... Chess = 0.3, Shogi = 0.15, Go = 0.03
@@ -1102,7 +1103,11 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 			best_v01 = (pbest->value + 1.0) / 2.0;	// -1 <= x <= +1  -->  0 <= x <= +1
 		}
 		if ( exact_v != ILLEGAL_MOVE ) best_v01 = exact_v;
-		sprintf(buf_move_count,"v=%.04f,%d",best_v01,sum_games);
+		if ( fRawValuePolicy ) {
+			sprintf(buf_move_count,"v=%.04f,r=%.04f,%d",best_v01,(phg->net_value + 1.0) / 2.0,sum_games);
+		} else {
+			sprintf(buf_move_count,"v=%.04f,%d",best_v01,sum_games);
+		}
 	} else {
 		sprintf(buf_move_count,"%d",sum_games);
 	}
@@ -1113,7 +1118,51 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		if ( 0 ) strcpy(buf,str_CSA_move(p->move));
 //		PRT("%s,%d,",str_CSA_move(p->move),p->games);
 		char str[TMP_BUF_LEN];
-		sprintf(str,",%s,%d",buf,p->games);
+		if ( fRawValuePolicy ) {
+//			static int p_count[301],p_sum = 0;
+			int j;
+			for (j=0;j<phg->child_num;j++) {
+				if ( p->move != phg->child[j].move ) continue;
+				float f = keep_root_policy[j];
+				int min_c = -1;
+				float min_diff = 10.0;
+				int c;
+				for (c=0;c<52;c++) {
+					double k = 1.144;	// 52段階で0.001から0.99 までに分布するように
+					double min = 0.001;
+					double p = pow(k,c) * min;
+					if ( fabs(p - f) < min_diff ) { min_c = c; min_diff = fabs(p - f); }
+//					PRT("%d:p=%f\n",c,p);
+				}
+				if ( min_c < 0 ) DEBUG_PRT("");
+				c = 'A' + min_c + (min_c >= 26)*6;	// A=0.001,Z=0.028,a=0.033,z=0.954
+//				sprintf(str,",%s,%d,%.3f",buf,p->games,f);
+				sprintf(str,",%s,%d%c",buf,p->games,c);
+/*
+				if ( f >= 0.01 ) p_count[(int)(f*100)]++;
+				else if ( f >= 0.001 ) p_count[(int)(100+f*1000)]++;
+				else if ( f >= 0.0001 ) p_count[(int)(200+f*10000)]++;
+				else p_count[300]++;
+				p_sum++;
+*/
+				break;
+			}
+			if ( j == phg->child_num ) DEBUG_PRT("");
+/*
+			if ( (p_sum%10)==0 && p_sum>0 ) {
+				PRT("\np_sum=%d\n",p_sum);
+				for (int j=0;j<301;j++) {
+					PRT("%d,",p_count[j]);
+				}
+				PRT("\n");
+				for (int j=0;j<301;j++) {
+					PRT("%.4f,",(float)p_count[j]/p_sum);
+				}
+			}
+*/
+		} else {
+			sprintf(str,",%s,%d",buf,p->games);
+		}
 		strcat(buf_move_count,str);
 //		PRT("%s",str);
 	}
@@ -1386,6 +1435,11 @@ if (0) {
 	}
 	phg->child_num      = move_num;
 
+	if ( fSkipOneReply ) {
+//		static int count, all; all++;
+//		if ( move_num==1 ) PRT("move_num=1,ply=%d,%d/%d\n",ply,++count,all);
+	}
+
 	if ( NOT_USE_NN ) {
 		// softmax
 		const float temperature = 1.0f;
@@ -1414,10 +1468,16 @@ if (0) {
 //		{ static double va[2]; static int count[2]; va[sideToMove] += v; count[sideToMove]++; PRT("va[]=%10f,%10f\n",va[0]/(count[0]+1),va[1]/(count[1]+1)); }
 //		PRT("f=%10f,tanh()=%10f\n",f,v);
 	} else {
-		if ( move_num == 0 ) {
+		if ( fSkipOneReply && move_num == 1 ) {
+			v = 0;
+			CHILD *pc = &phg->child[0];
+			pc->bias = 1.0;
+		} else if ( move_num == 0 ) {
 			// get_network_policy_value() は常に先手が勝で(+1)、先手が負けで(-1)を返す。sideToMove は無関係
 			v = -1;
 			if ( sideToMove==white ) v = +1;	// 後手番で可能手がないなら先手の勝
+//		} else if ( fSkipKingCheck && InCheck(sideToMove) ) {	// Policyは必要か
+//			v = 0;
 		} else {
 			v = get_network_policy_value(ptree, sideToMove, ply, phg);
 
@@ -1515,6 +1575,20 @@ if (0) {
 				if ( pc->bias < b ) pc->bias = b;
 			}
 		}
+		
+		if ( 0 ) {
+//			print_board(ptree);
+			unsigned int best_usi = get_best_move_alphabeta_usi( ptree, sideToMove, ply);
+			for (i = 0; i < phg->child_num; i++) {
+				CHILD *pc = &phg->child[i];
+				if ( pc->move != (int)best_usi ) continue;
+				PRT("found best_usi:ply=%2d,col=%d:%3d:%s,bias=%.5f,max_bias=%.5f\n",ply,sideToMove,i, string_CSA_move(best_usi).c_str(),pc->bias,max_bias);
+				float b = max_bias / 3.0;
+				if ( pc->bias < b ) pc->bias = b;
+				break;
+			}
+		}
+
 	}
 
 	if ( 0 ) {	// 1手の静止探索を
@@ -1582,7 +1656,7 @@ if (0) {
 	phg->deleted        = 0;
 
 //	if ( ! is_main_thread(ptree) && ply==3 ) { PRT("create_node(),ply=%2d,c=%3d,v=%.5f,seqhash=%" PRIx64 "\n",ply,move_num,v,ptree->sequence_hash); print_board(ptree); }
-//PRT("create_node done...ply=%d,sideToMove=%d,games_sum=%d,child_num=%d,slot=%d\n",ply,sideToMove,phg->games_sum,phg->child_num, ptree->tlp_slot);
+//PRT("create_node done...ply=%d,sideToMove=%d,games_sum=%d,child_num=%d,slot=%d,v=%5.2f\n",ply,sideToMove,phg->games_sum,phg->child_num, ptree->tlp_slot,v);
 
 	if ( fOpeningHash ) {
 	} else {
@@ -1689,19 +1763,32 @@ double uct_tree(tree_t * restrict ptree, int sideToMove, int ply, int *pExactVal
 	}
 
 	double cINIT = 1.25;
-	const bool fDynamicPUCT = false;
-	if ( fDynamicPUCT ) {	// Dynamic Variance-Scaled cPUCT
+	const bool fDynamicPUCT = true;
+	if ( fDynamicPUCT ) {	// Dynamic Variance-Scaled cPUCT  https://github.com/lightvector/KataGo/blob/master/docs/KataGoMethods.md#dynamic-variance-scaled-cpuct
 		int visits = phg->games_sum;
 		if (visits >= 2) {
+//			static double stddev_sum = 0;
+//			static double stddev_min = 1;
+//			static double stddev_max = 0;
+//			static int    count = 0;
 			float eval_variance = visits > 1 ? phg->squared_eval / (visits - 1) : 1.0f;
 			auto stddev = std::sqrt(eval_variance / visits);
-			double k = sqrt(stddev) * 4.0;//stddev * 5.0;	//sqrt(stddev) * 4.0;
-			if ( k == 0 ) k = 1.0;
-			cINIT *= k;// += k - 0.2;	// *= k;
-			PRT("%3d:%2d:games=%4d,mean=%7.4f,squared_eval=%8.2f,stddev=%7.4f,%7.4f,cINIT=%7.4f\n",ptree->nrep,ply,visits,phg->win_sum / visits,phg->squared_eval,stddev,k,cINIT);
+			double k = sqrt(stddev) * 4.0;	//stddev * 5.0;	// 根拠なしの式
+//			const double AVG_STDDEV = 0.024; // 0.031;
+//			double k = stddev / AVG_STDDEV;
+			if ( k < 0.5 ) k = 0.5;
+			if ( k > 1.4 ) k = 1.4;
+			if ( 0 && ply==1 ) k = 1.0;
+			double a = 1.0f / (1.0f+sqrt((double)visits/10000.0f));	// 1 -> 0
+			k = a*k + (1.0f-a)*1.0f;	// visitsが大きいと1に近づく
+			cINIT *= k;
+//			stddev_sum += stddev;
+//			if ( stddev > stddev_max ) stddev_max = stddev;
+//			if ( stddev < stddev_min ) stddev_min = stddev;
+//			count++;
+//			PRT("%3d:%2d:games=%4d,mean=%7.4f,squared_eval=%6.2f,stddev=%7.4f,%7.4f,cINIT=%7.4f,ave_stddev=%6.4f(%6.4f,%6.4f)\n",ptree->nrep,ply,visits,phg->win_sum / visits,phg->squared_eval,stddev,k,cINIT,stddev_sum/count,stddev_min,stddev_max);
 		}
 	}
-	if ( 0 && ply==1 ) cINIT = 1.30;
 /*
 	double c_bias[MAX_LEGAL_MOVES];
 	if (1) {
@@ -1930,11 +2017,28 @@ skip_select:
 //				static int count; PRT("has come already? ply=%d,%d\n",ply,++count); //debug();	// 手順前後? 複数スレッドの場合
 				if ( force_do_playout == 0 ) down_tree = 1;
 			}
+			if ( fSkipOneReply && phg2->child_num == 1 ) {
+//				PRT("down_tree:ply=%d\n",ply);
+				down_tree = 1;
+			}
+			if ( fSkipKingCheck && now_in_check ) {
+				down_tree = 1;
+			}
+			if (0) {
+				static int count;
+				if ( count++ >= 1 ) {
+					count = 0;
+				} else {
+					down_tree = 1;	// 無理やり1手先で評価する(1 thread でのテスト)
+				}
+			}
+	
 			win = -phg2->net_value;
 
 			UnLock(phg2->entry_lock);
 			Lock(phg->entry_lock);
 		}
+//		PRT("down_tree=%d,do_playout=%d,ply=%d\n",down_tree,do_playout,ply);
 		if ( down_tree ) {
 			// down tree
 			const int fVirtualLoss = 1;
@@ -1954,6 +2058,7 @@ skip_select:
 			win = -uct_tree(ptree, Flip(sideToMove), ply+1, &ex_value);
 			Lock(phg->entry_lock);
 
+//			PRT("down_tree:ply=%d:child_num=%3d,win=%5.2f\n",ply,phg->child_num,win);
 			if ( fVirtualLoss ) {
 #ifdef USE_LCB
 				pc->acc_virtual_loss -= VL_N;
