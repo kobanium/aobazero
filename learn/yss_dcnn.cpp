@@ -10,6 +10,7 @@
 #include <vector>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <random>
 
 #include "yss_ext.h"     /**  load extern **/
 #include "yss_prot.h"    /**  load prototype function **/
@@ -2763,7 +2764,8 @@ void free_zero_db_struct(ZERO_DB *p)
 //const int ZERO_DB_SIZE = 267000000;	// AI_book2
 //const int ZERO_DB_SIZE = 20000000;	// gct001-075
 //const int ZERO_DB_SIZE = 1000000;	// 100000,  500000
-const int ZERO_DB_SIZE = 2190000;	// 100000,  500000
+//const int ZERO_DB_SIZE = 2190000;	// 100000,  500000
+const int ZERO_DB_SIZE = 500000;	// 100000,  500000
 const int MAX_ZERO_MOVES = 513;	// 512手目を後手が指して詰んでなければ。513手目を先手が指せば無条件で引き分け。
 ZERO_DB zdb_one;
 
@@ -2778,11 +2780,11 @@ const int ZDB_POS_MAX = ZERO_DB_SIZE * 128;	// 128 = average moves. 64 = gct001-
 //const int ZDB_POS_MAX = ZERO_DB_SIZE * 1;	// AI book2
 
 int zdb_count = 0;
-int zdb_count_start = 59020000;//58410000;//51000000;//1000000; //53920000; 52320000;48000000;1000000;48300000;18000000; 10000000;11600000; 10300000; 9500000;8500000; 7400000; //5220000; //3200000; //2100000; //390000;//130000;//460000;//29700000; //18200000;//23400000; //20300000; //18800000; //16400000;	//10300000; //5200000;	// 400万棋譜から読み込む場合は4000000
+int zdb_count_start = 61300000; //59020000;//58410000;//51000000;//1000000; //53920000; 52320000;48000000;1000000;48300000;18000000; 10000000;11600000; 10300000; 9500000;8500000; 7400000; //5220000; //3200000; //2100000; //390000;//130000;//460000;//29700000; //18200000;//23400000; //20300000; //18800000; //16400000;	//10300000; //5200000;	// 400万棋譜から読み込む場合は4000000
 uint64_t zero_kif_pos_num = 0;
 int zero_kif_games = 0;
 int zero_pos_over250;
-const int MINI_BATCH = 256;	// aoba_zero.prototxt の cross_entroy_scale も同時に変更すること！layerのnameも要変更
+const int MINI_BATCH = 128;	// aoba_zero.prototxt の cross_entroy_scale も同時に変更すること！layerのnameも要変更
 //const int MINI_BATCH = 32;	// aoba_zero.prototxt の cross_entroy_scale も同時に変更すること！layerのnameも要変更
 const int ONE_SIZE = DCNN_CHANNELS*B_SIZE*B_SIZE;	// 362*9*9; *4= 117288 *64 = 7506432,  7MBにもなる mini_batch=64
 int nGCT_files;	// 1つの selfplay_gct-00*.csa に入ってる棋譜数
@@ -2791,6 +2793,111 @@ int sum_gct_loads = 0; // 1ファイルの全棋譜を読み込んだ後に加算される
 
 const int fReplayLearning = 1;	// すでに作られた棋譜からWindowをずらせて学習させる
 const int fWwwSample = 0;		// fReplayLearning も同時に1
+
+
+// Sum-Tree用
+// Prioritized Experience Replayのsum-treeの実装
+// https://tadaoyamaoka.hatenablog.com/entry/2019/08/18/154610
+// https://github.com/jaromiru/AI-blog/blob/master/SumTree.py
+
+const bool fSumTree = true;
+
+const int LEAVES = 41352794;	// 棋譜の数ではない。局面数。ZERO_DB_SIZE;
+const int SUMTREE_SIZE = 2*LEAVES - 1;
+int sumtree[SUMTREE_SIZE];
+int add_n = 0;
+int capacity = LEAVES;
+std::mt19937 get_mt_rand;
+
+void stree_propagate(int idx, int change) {
+    int parent = (idx - 1) / 2;
+    sumtree[parent] += change;
+    if ( sumtree[parent] > INT_MAX/2 ) DEBUG_PRT("sumtree:too big =%d\n",sumtree[parent]);
+    if ( parent != 0 ) stree_propagate(parent, change);
+}
+int stree_retrieve(int idx, int s) {
+    int left = 2 * idx + 1;
+    int right = left + 1;
+//	if ( left >= len(st) ) return idx;
+    if ( left >= SUMTREE_SIZE ) return idx;
+    if ( s <= sumtree[left] ) {
+        return stree_retrieve(left, s);
+    } else {
+        return stree_retrieve(right, s - sumtree[left]);
+	}
+}
+void stree_update(int idx, int p) {
+    int change = p - sumtree[idx];
+	if ( p <= 0 ) DEBUG_PRT("idx=%d,change=%d,p=%d\n",idx,change,p);
+    sumtree[idx] = p;
+    stree_propagate(idx, change);
+}
+int stree_total() {
+	return sumtree[0];
+}
+void stree_add(int p) {
+	if ( p <= 0 ) DEBUG_PRT("");
+    int idx = add_n + capacity - 1;
+    stree_update(idx, p);
+
+    add_n += 1;
+	if ( add_n >= capacity ) add_n = 0;
+}
+// 要素が10個なら idx = 9...18 となる。idx - (LEAVES-1) が求めたい値
+int stree_get(int s) {
+	if ( s <= 0 ) DEBUG_PRT("");
+    int idx = stree_retrieve(0, s);
+    return idx; // sumtree[idx]
+}
+int stree_get_i(int s) {	// 0 <= i <= LEAVES-1
+    int i = stree_get(s) - (LEAVES-1);
+    if ( i < 0 || i >= LEAVES ) DEBUG_PRT("");
+    return i;
+}
+void init_stree() {
+	std::random_device rd;
+	get_mt_rand.seed(rd());
+	for (int i=0; i<LEAVES; i++) stree_add(1);	// 全部1で初期化する。実際の値はreplace()を使って更新
+}
+void stree_replace(int n, int p) {
+	if ( n < 0 || n >= LEAVES ) DEBUG_PRT("n=%d,p=%d",n,p);
+	int idx = n + (LEAVES-1);
+	if ( idx >= SUMTREE_SIZE ) DEBUG_PRT("");
+	stree_update(idx, p);
+}
+
+
+#if 0
+void stree_test()
+{
+	std::random_device rd;
+	std::mt19937 get_mt_rand(rd());
+//	get_mt_rand.seed(time(NULL));
+
+	PRT("total=%d\n",stree_total());
+
+//	int P[LEAVES] = { 6, 48, 31, 26, 49, 43, 93, 74, 79, 13 };
+//	int P[LEAVES] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+	int P[LEAVES] = { 2, 1, 1, 1, 1, 3, 1, 1, 1, 2 };
+	int i;
+	for (i=0; i<LEAVES; i++) stree_add(P[i]);
+//	stree_update((LEAVES-1)+4, 8);	// 1個のデータのみを更新テスト
+	int t = stree_total();
+	PRT("total=%d,add_n=%d\n",t,add_n);
+	std::uniform_int_distribution<> dist(0, t-1);	// 0からt-1までの一様乱数
+	int p_sum[SUMTREE_SIZE] = {0};
+	for (i=0;i<10000;i++) {
+//	    int s = (get_mt_rand() % t)+1;	// +1 が必要。% はやや不正確
+		int s = dist(get_mt_rand) + 1;	// +1 が必要。一様乱数
+		int idx = stree_get(s);
+		p_sum[idx]++;
+    }
+	for (i=0;i<SUMTREE_SIZE;i++) {
+		PRT("%2d:%3d:%5d,%6.3f(%6.3f)\n",i,sumtree[i],p_sum[i], (float)p_sum[i]/10000,(float)sumtree[i]/t);
+	}
+}
+#endif
+
 
 
 void init_zero_kif_db()
@@ -3211,6 +3318,7 @@ void update_pZDBsum()
 		if ( zdb_count - nHandicapLastID[i] > MAX_GAMES ) nHandicapLastID[i] = zdb_count - MAX_GAMES;
 	}
 
+	static int s_sum[101];
 	zero_kif_pos_num = 0;
 	zero_kif_games   = 0;
 	zero_pos_over250 = 0;
@@ -3237,6 +3345,24 @@ void update_pZDBsum()
 			if ( GCT_SELF==1 ) pZDBplayouts_sum[n] = 0;
 			pZDBscore_x10k[n]   = p->v_score_x10k[j];
 			if ( m0 >= 250 ) zero_pos_over250++;
+
+			if ( fSumTree ) {
+//				int s = pZDBplayouts_sum[n];
+				int s = pZDBscore_x10k[n];
+				int k = 10;			// 20 20 20 20 10 10 20 20 20 20
+				if ( s < 3900 || s > 6100 ) k = 20;
+				if ( s < 3000 || s > 7000 ) k = 30;
+//				if ( s < 2500 || s > 7500 ) k = 20;
+//				if ( s <  100 || s >  990 ) k = 5;
+				stree_replace(n, k);
+//				s_sum[s/100]++;
+				int prev_s = 0;
+				if ( j > 0 ) prev_s = pZDBscore_x10k[n-1];
+				if (j&1) s = 10000 - s;
+				else prev_s = 10000 - prev_s;
+				if ( j==0 ) prev_s = s;
+				s_sum[abs(s - prev_s)/100]++;
+			}
 		}
 //		PRT("%d/%d,%lu,",i,loop,zero_kif_pos_num);
 		zero_kif_pos_num += p->moves;
@@ -3347,6 +3473,8 @@ void update_pZDBsum()
 //	save_average_winrate(ave_winrate);
 
 //	PRT("H:"); for (i=0;i<H;i++) { PRT("%8d %4d(%3d)",nHandicapLastID[i], nHandicapRate[i], hand_diff[i]); } PRT("\n");
+	if ( fSumTree ) { for (i=0;i<101;i++) PRT("%3d:%7d(%.3f)\n",i,s_sum[i],(float)s_sum[i]/zero_kif_pos_num); }
+
 }
 
 void shogi::load_exist_all_kif()
@@ -3429,6 +3557,8 @@ int shogi::wait_and_get_new_kif(int next_weight_n)
 
 int shogi::add_a_little_from_archive()
 {
+	if ( fSumTree ) return 0;
+
     int new_kif_n = zdb_count;
     int add_kif_sum = 0;
     int add = 2000;
@@ -3607,6 +3737,8 @@ void shogi::init_prepare_kif_db()
 		hirate_ban_init(i);
 		copy_restore_dccn_init_board(i, true);
 	}
+
+	if ( fSumTree ) init_stree();
 }
 
 int binary_search_kif_db(int r)
@@ -3777,12 +3909,20 @@ void shogi::prepare_kif_db(int fPW, int mini_batch, float *data, float *label_po
 	double sum_t = 0;
 	double sum_diff_win_r = 0;
 
+	std::uniform_int_distribution<> dist(0, stree_total()-1);
+
 	// pos_sum の中から64個ランダムで選ぶ
 	int *ri = new int[mini_batch];
 	int *ri_moves = new int[mini_batch];
 	int i;
 	for (i=0;i<mini_batch;i++) {
 		int r = rand_m521() % zero_kif_pos_num;	// 0 <= r < zero_kif_pos_num, 最初に右辺がunsigned longで評価されるようで、マイナスにはならない。gccでも
+
+		if ( fSumTree ) {
+			int s = dist(get_mt_rand) + 1;	// +1 が必要。一様乱数
+			r = stree_get_i(s);
+		}
+
 		rand_try++;
 		// 40手までで投了してる棋譜は10分の1
 		// 0手目から30手目は 0手目は10分の1、30手目で1,  n * 9/300 + 30/300
@@ -4294,11 +4434,11 @@ void start_zero_train(int *p_argc, char ***p_argv )
 //	const char sNet[] = "/home/yss/shogi/learn/20220904_061307_256x20b_ave_book_softmax_from_20220831_152345/_iter_1600000.caffemodel";
 //	const char sNet[] = "/home/yss/shogi/learn/20220712_111426_256x20b_ave_exp_8_30_30_x_m40_4_loop_div4_from_51000k_20220601_005103/_iter_800000.caffemodel";
 //	const char sNet[] = "/home/yss/shogi/learn/20221105_181114_256x20b_ave_exp_8_30_30_x_m40_4_cos_from_58410k_20220712_111426/_iter_480000.caffemodel";
-	const char sNet[] = "/home/yss/shogi/learn/20221107_170923_ave_exp_8_30_30_x_m40_4_cos_from_58410k_20221105_181114/_iter_400000.caffemodel";
+//	const char sNet[] = "/home/yss/shogi/learn/20221107_170923_ave_exp_8_30_30_x_m40_4_cos_from_58410k_20221105_181114/_iter_400000.caffemodel";
 
 	int next_weight_number = 1170;	// 現在の最新の番号 +1
 
-	net->CopyTrainedLayersFrom(sNet);	// caffemodelを読み込んで学習を再開する場合
+//	net->CopyTrainedLayersFrom(sNet);	// caffemodelを読み込んで学習を再開する場合
 //	load_aoba_txt_weight( net, "/home/yss/w000000000689.txt" );	// 既存のw*.txtを読み込む。*.caffemodelを何か読み込んだ後に
 	LOG(INFO) << "Solving ";
 	PRT("fReplayLearning=%d\n",fReplayLearning);
@@ -4361,7 +4501,7 @@ wait_again:
 //nLoop = (int)((float)nLoop * 0.72727f);
 //nLoop = (int)((float)nLoop * 0.701);
 	if ( GCT_SELF ) nLoop = 800000*1;
-nLoop = 800000*1;
+nLoop = 100000*1;
 
 	PRT("nLoop=%d,add=%d,add_mul=%.3f,MINI_BATCH=%d,kDataSize=%d,remainder=%d,iteration=%d(%d/%d),rand=%lu/%lu(%lf)\n",nLoop,add,add_mul,MINI_BATCH,kDataSize,remainder,iteration,iter_weight,iter_weight_limit, rand_try,rand_batch,(double)rand_try/(double)rand_batch);
 	int loop;

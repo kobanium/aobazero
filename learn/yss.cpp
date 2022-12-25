@@ -998,6 +998,11 @@ int shogi::LoadCSA()
 							if ( s < 0 || s > 10000 ) DEBUG_PRT("Err s=%d,v=%s\n",s,str);
 							pz->v_score_x10k.push_back((unsigned short)s);
 							has_root_score = true;
+						} else if ( strstr(str,"r=") ) {
+							count--;
+							float score = atof(str+2);
+							int s = (int)(score * 10000);
+							if ( s < 0 || s > 10000 ) DEBUG_PRT("Err s=%d,v=%s\n",s,str);
 						} else {
 							all_visit = atoi(str);
 							pz->v_playouts_sum.push_back(all_visit);
@@ -1007,6 +1012,7 @@ int shogi::LoadCSA()
 						if ( (count&1)== 0 ) {
 							if ( b0==0 && b1==0 ) DEBUG_PRT("");
 							int v = atoi(str);
+							if ( v==0 ) DEBUG_PRT("v=0,%s\n",str);
 							if ( v > 0xffff ) v = 0xffff;
 							sum_visit += v;
 							unsigned short m = (((unsigned char)b0) << 8) | ((unsigned char)b1); 
