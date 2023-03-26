@@ -57,8 +57,10 @@ typedef struct ZERO_DB {
 #endif
 	vector <unsigned short> v_kif;			// 棋譜
 	vector <unsigned short> v_playouts_sum;	// Rootの探索数。通常は800固定
-	vector < vector<unsigned int> > vv_move_visit;		// (手+選択回数)のペア
+	vector < vector<unsigned int> > vv_move_visit;	// (手+選択回数)のペア。上位16bitが手、下位16bitが回数
 	vector <unsigned short> v_score_x10k;	// Rootの評価値。自分から見た勝率。1.0で勝ち。0.0で負け。1万倍されている。
+	vector <unsigned short> v_rawscore_x10k;// Networkのその局面の勝率
+	vector < vector<char> > vv_raw_policy;
 } ZERO_DB;
 
 extern ZERO_DB zdb_one;	// 棋譜読み込みで使用

@@ -974,6 +974,8 @@ int shogi::LoadCSA()
 				if ( pz->vv_move_visit.size() != (size_t)tesuu ) {
 					DEBUG_PRT("pz->vv_move_visit.size()=%d,tesuu=%d Err\n",pz->vv_move_visit.size(),tesuu);
 				}
+				vector <char> vc;
+				pz->vv_raw_policy.push_back(vc);
 				back_move();
 				char *p = lpLine + 1;
 				int count = 0, all_visit = 0, sum_visit = 0;
@@ -1003,8 +1005,10 @@ int shogi::LoadCSA()
 							float score = atof(str+2);
 							int s = (int)(score * 10000);
 							if ( s < 0 || s > 10000 ) DEBUG_PRT("Err s=%d,v=%s\n",s,str);
+							pz->v_rawscore_x10k.push_back((unsigned short)s);
 						} else {
 							all_visit = atoi(str);
+							if ( all_visit > 0xffff ) all_visit = 0xffff;
 							pz->v_playouts_sum.push_back(all_visit);
 							if ( has_root_score == false ) pz->v_score_x10k.push_back(NO_ROOT_SCORE);
 						}
@@ -1017,8 +1021,19 @@ int shogi::LoadCSA()
 							sum_visit += v;
 							unsigned short m = (((unsigned char)b0) << 8) | ((unsigned char)b1); 
 							int move_visit = (m << 16) | v;
-							pz->vv_move_visit[tesuu].push_back(move_visit); 
+							pz->vv_move_visit[tesuu].push_back(move_visit);
 							b0 = b1 = 0;
+							int len = strlen(str);
+							if ( len > 0 ) {
+								char c = str[len-1];
+								if ( ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') ) {
+									if ( c >= 'a' ) c = c - 'a' + 26;
+									else c = c - 'A';
+									if ( c < 0 || c > 51 ) DEBUG_PRT("str=%s\n",str);
+									pz->vv_raw_policy[tesuu].push_back(c);
+								}
+							}
+
 						} else {
 							if ( getMoveFromCsaStr(&bz, &az, &tk, &nf, str)==0 ) DEBUG_PRT("");
 							int c = (tesuu + fGotekara)&1;
@@ -1221,6 +1236,7 @@ PI82HI22KA11KY91KY21KE81KE  6ËçÍî¤Á
 			for (i=0;i<(int)pz->vv_move_visit.size();i++) {
 				sum += pz->vv_move_visit[i].size();
 			}
+			if ( pz->vv_move_visit.size() != pz->vv_raw_policy.size() ) DEBUG_PRT("pz->vv_raw_policy.size()=%d\n",pz->vv_raw_policy.size());
 			PRT("handicap=%d,moves=%d,result=%d, mv_sum=%d,%.1f\n",pz->handicap,pz->moves,pz->result,sum, (double)sum/(tesuu+0.00001f));
 			if ( pz->result_type == RT_NONE ) DEBUG_PRT("");
 #endif
