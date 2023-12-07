@@ -1134,8 +1134,11 @@ void shogi::set_dcnn_channels(Color sideToMove, const int ply, float *p_data, in
 	// move_hit_kif[], move_hit_hashcode[] に棋譜+探索深さの棋譜とハッシュ値を入れること 
 
 	int loop,back_num=0;
-	const int T_STEP = 6;
-//	const int T_STEP = 1;
+//	const int T_STEP = 6;
+	const int T_STEP = 1;
+	const int PREV_AZ = 0;
+	const int TWO_HOT = 1;	// 自分の歩は +1、相手の歩は -1 で同じ面にエンコード
+
 	for (loop=0; loop<T_STEP; loop++) {
 		add_base = 28;
 		for (y=0;y<B_SIZE;y++) for (x=0;x<B_SIZE;x++) {
@@ -1145,7 +1148,7 @@ void shogi::set_dcnn_channels(Color sideToMove, const int ply, float *p_data, in
 			int m = k & 0x0f;
 			if ( m>=0x0e ) m--;	// m = 1...14
 			m--;
-			// 先手の歩、香、桂、銀、金、角、飛、王、と、杏、圭、全、馬、竜 ... 14種類、+先手の駒が全部1、で15種類
+			// 先手の歩、香、桂、銀、金、角、飛、王、と、杏、圭、全、馬、竜 ... 14種類
 			if ( k > 0x80 ) m += 14;
 			int yy = y, xx = x;
 			if ( flip ) {
@@ -1153,8 +1156,17 @@ void shogi::set_dcnn_channels(Color sideToMove, const int ply, float *p_data, in
 				xx = B_SIZE - x -1;
 				m -= 14;
 				if ( m < 0 ) m += 28;	// 0..13 -> 14..27
-			} 
-			set_dcnn_data(stock_num, data, base+m, yy,xx);
+			}
+
+			if ( TWO_HOT ) {
+				if ( m < 14 ) {
+					set_dcnn_data(stock_num, data, base+m   , yy,xx, +1.0);
+				} else {
+					set_dcnn_data(stock_num, data, base+m-14, yy,xx, -1.0);
+				}
+			} else {
+				set_dcnn_data(stock_num, data, base+m, yy,xx);
+			}
 		}
 		base += add_base;
 
@@ -1218,6 +1230,22 @@ void shogi::set_dcnn_channels(Color sideToMove, const int ply, float *p_data, in
 			unpack_te(&bz,&az,&tk,&nf, m);
 			remove_hit_hash(bz,az,tk,nf);
 			current_t--;
+
+			if ( T_STEP == 1 && PREV_AZ ) {
+				if ( bz == 0 || az == 0 ) DEBUG_PRT("");
+				int x = (az & 0x0f) - 1;
+				int y = (az & 0xf0) >> 4;
+				y = y - 1;
+				int yy = y, xx = x;
+				if ( flip ) {
+					yy = B_SIZE - y -1;
+					xx = B_SIZE - x -1;
+				}
+				if ( 0<=xx && xx<=8 && 0<=yy && yy<=8 ) ;
+				else DEBUG_PRT("");
+				set_dcnn_data(stock_num, data, base, yy,xx);
+			}
+
 		}
 
 		back_num++;
@@ -1237,7 +1265,10 @@ void shogi::set_dcnn_channels(Color sideToMove, const int ply, float *p_data, in
 		}
 	}
 
-	if ( T_STEP == 1 ) base += (28 + 14 + 3) * (6 - 1);
+	if ( T_STEP == 1 ) {
+		base += (28 + 14 + 3) * (6 - 1);
+		base += PREV_AZ;
+	}
 
 #if 1
 //	int prev_base = base;

@@ -1020,6 +1020,7 @@ Network::Netresult_old Network::get_output_internal(
 */
     std::vector<scored_node> result;
     for (auto idx = size_t{0}; idx < outputs.size(); idx++) {
+//      myprintf("%5.3f,",idx,outputs[idx]); if ( ((idx+1)%9)==0 && ((idx+1+81-9)%81)==0 ) myprintf("  ch=%d",idx/81); if ( ((idx+1)%9)==0 ) myprintf("\n");  if ( ((idx+1)%81)==0 ) myprintf("\n");
 //      if ( idx < 100 ) myprintf("%3d:%f\n",idx,outputs[idx]);
 //    myprintf("done tanh....%d,outputs.size()=%d\n",__LINE__,outputs.size());
 //		float v = outputs[idx];
@@ -1027,6 +1028,7 @@ Network::Netresult_old Network::get_output_internal(
 //        result.emplace_back(v, idx);
         result.emplace_back(outputs[idx], idx);
     }
+//  myprintf("winrate_sig=%5.3f\n",winrate_sig);
 //  myprintf("done net calc\n");
 
     return std::make_pair(result, winrate_sig);

@@ -132,11 +132,11 @@ dfpn( tree_t * restrict ptree, int turn, int ply, unsigned int *pret_move, int d
 //    const char *str = str_CSA_move(pnode->children[i].move);
       *pret_move = pnode->children[i].move;
       std::string s = string_CSA_move(*pret_move);
-      if ( fView ) PRT( "RESULT: WIN %s\n", s.c_str());
+      if ( fView ) PRT( "RESULT: WIN %s,", s.c_str());
       DFPNOut( "WIN %s\n", s.c_str());
     }
   else {
-    if ( fView ) PRT( "RESULT: LOSE\n" );
+    if ( fView ) PRT( "RESULT: LOSE," );
     DFPNOut( "LOSE\n" );
   }
 
@@ -165,11 +165,11 @@ dfpn( tree_t * restrict ptree, int turn, int ply, unsigned int *pret_move, int d
   if ( !fView ) return iret;
 
   PRT( "n=%" PRIu64 " sat=%3.1f%%", ptree->node_searched, fsat );
-  PRT( " age=%u sum_phi=%u", dfpn_hash_age, pdfpn_tree->sum_phi_max );
+  PRT( " age=%u,phi=%u", dfpn_hash_age, pdfpn_tree->sum_phi_max );
   PRT( " time=%.2f cpu=%.1f%% nps=%.2fK,ply=%d,limit=%d\n",
        (float)( elapse1 - elapse0 + 1U ) / 1000.0F,
        fcpu_percent, fnps / 1e3F, ply, dfpn_node_limit );
-  PRT( "\n" );
+//PRT( "\n" );
 
 //  return 1;
   return iret;

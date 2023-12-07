@@ -48,6 +48,7 @@ int fClearHashAlways = 0;
 int fUsiInfo = 0;
 bool fLCB = true;
 double MinimumKLDGainPerNode = 0;	//0.000002;	0で無効, lc0は 0.000005
+int    KLDGainAverageInterval = 100;
 bool fResetRootVisit = false;
 bool fDiffRootVisit = false;
 bool fSkipOneReply  = true;		// 王手を逃げる手が1手の局面は評価せずに木を降りる
@@ -259,13 +260,16 @@ const int USI_BESTMOVE_LEN = MAX_LEGAL_MOVES*(8+1+5)+10+10;
 int YssZero_com_turn_start( tree_t * restrict ptree )
 {
 	if ( 0 ) {
-		if ( ptree->nrep > 180 ) {
-			dLimitSec = 1.8;
-		} else {
-			dLimitSec = 4.8;
+		dLimitSec = 1.7;
+		if ( ptree->nrep < 144 ) {
+			if ( root_turn == 1 ) {	// denryu-sen, sente 300-2f, gote 600-2f, first 4 moves is dummy
+				dLimitSec = 10;
+			} else {
+				dLimitSec = 6;
+			}
 		}
 	}
-
+        
 	if ( 0 ) {
 		int ct1 = get_clock();
 		int i;
@@ -454,7 +458,7 @@ void inti_rehash()
 
 int IsHashFull()
 {
-	if ( hash_shogi_use >= Hash_Shogi_Table_Size*90/100 ) {
+	if ( (uint64)hash_shogi_use >= (uint64)Hash_Shogi_Table_Size*90/100 ) {
 		PRT("hash full! hash_shogi_use=%d,Hash_Shogi_Table_Size=%d\n",hash_shogi_use,Hash_Shogi_Table_Size);
 		return 1;
 	}
@@ -915,11 +919,16 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 	const float alpha   = 0.15f;	// alpha ... Chess = 0.3, Shogi = 0.15, Go = 0.03
 	if ( fAddNoise ) add_dirichlet_noise(epsilon, alpha, phg);
 //{ void test_dirichlet_noise(float epsilon, float alpha);  test_dirichlet_noise(0.25f, 0.03f); }
-	PRT("root phg->hash=%" PRIx64 ", child_num=%d\n",phg->hashcode64,phg->child_num);
+	PRT("root phg->sequence_hash=%" PRIx64 ",pos=%" PRIx64 ", child_num=%d\n",phg->hashcode64,phg->hash64pos,phg->child_num);
 
 	init_KLDGain_prev_dist_visits_total(phg->games_sum);
 
 	search_start_ct = get_clock();
+
+	int book_move = get_book_move(ptree,phg);
+	if ( book_move ) {
+		return book_move;
+	}
 
 	int thread_max = cfg_num_threads;
 	std::vector<std::thread> ths(thread_max);
@@ -1321,7 +1330,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		static int playouts_dist[M] = { 0 };
 		search_sum++;
 		playouts_sum += playouts;
-		int m = playouts / 100;
+		int m = playouts / KLDGainAverageInterval;
 		if ( m > M-1 ) m = M-1;
 		playouts_dist[m]++;
 		FILE *fp = fopen("playouts_dist.log","a");
@@ -1356,8 +1365,8 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 	}
 
 
-	PRT("%.2f sec, c=%d,net_v=%.6f,h_use=%d,po=%d,%.0f/s,ave_ply=%.1f/%d (%d/%d),Noise=%d,g=%d,mt=%d,b=%d\n",
-		ct,phg->child_num,phg->net_value,hash_shogi_use,playouts,(double)playouts/ct,ave_reached_ply,max_r_ply,ptree->nrep,nVisitCount,fAddNoise,default_gpus.size(),thread_max,cfg_batch_size );
+	PRT("%.2f sec, c=%d,net_v=%6.2f%%(%.6f),h_use=%d,po=%d,%.0f/s,ave_ply=%.1f/%d (%d/%d),Noise=%d,g=%d,mt=%d,b=%d\n",
+		ct,phg->child_num,(phg->net_value+1.0)*50.0,phg->net_value,hash_shogi_use,playouts,(double)playouts/ct,ave_reached_ply,max_r_ply,ptree->nrep,nVisitCount,fAddNoise,default_gpus.size(),thread_max,cfg_batch_size );
 
 	return best_move;
 }
@@ -1440,6 +1449,44 @@ if (0) {
 //		if ( move_num==1 ) PRT("move_num=1,ply=%d,%d/%d\n",ply,++count,all);
 	}
 
+
+	// 静止探索で空き王手、飛角の移動で好手になりうる手を
+	if (0) {
+//		static tree_t copy_tree;
+//		copy_tree = *ptree;
+		int alpha = -30000, beta = +30000;
+//		ptree->move_last[ply] = ptree->move_last[0];
+		for (i=2;i<=ply;i++) ptree->move_last[i] = ptree->move_last[1];
+		for (i=0; i<move_num; i++) {
+			CHILD *pc = &phg->child[i];
+			MakeMove( sideToMove, pc->move, ply );
+			MOVE_CURR = pc->move;
+//			ptree->path[ply] = pc->move;
+			if ( InCheck(sideToMove) ) DEBUG_PRT("escape check err. %2d:%8s(%2d/%3d):selt=%3d\n",ply,str_CSA_move(pc->move),pc->games,phg->games_sum,i);
+			int now_in_check = InCheck(Flip(sideToMove));
+			if ( now_in_check ) {
+				ptree->nsuc_check[ply+1] = (unsigned char)( ptree->nsuc_check[ply-1] + 1U );
+			} else {
+				ptree->nsuc_check[ply+1] = 0;
+			}
+//		    int v = -search_quies( ptree, -beta, -alpha, Flip(sideToMove), 2, 1 );
+//			int v = -search_quies_aoba( ptree, -INT_MAX, +INT_MAX, Flip(sideToMove), ply+1, 1 );
+		    int v = -search_quies_aoba( ptree, -beta, -alpha, Flip(sideToMove), ply+1, 1 );
+//			print_board(ptree);
+			PRT("root %3d,ply=%2d:%8s,v=%5d(%4d),%d\n",i,ply,str_CSA_move(pc->move),v,(int)ptree->node_searched,now_in_check);
+			UnMakeMove( sideToMove, pc->move, ply );
+//			out_pv( ptree, int value, int turn, unsigned int time );
+		}
+//		int *p = reinterpret_cast<int *>(ptree);
+//		int *q = reinterpret_cast<int *>(&copy_tree);
+//		int sz = sizeof(tree_t);
+//		PRT("sz=%d\n",sz);
+//		for (i=0;i<170000;i++) if ( *(p+i) != *(q+i) ) PRT("%d,",i);
+//		*ptree = copy_tree;
+
+//		print_board(ptree);
+	}
+
 	if ( NOT_USE_NN ) {
 		// softmax
 		const float temperature = 1.0f;
@@ -1490,7 +1537,7 @@ if (0) {
 			}
 
 		}
-//		{ PRT("ply=%2d,sideToMove=%d(white=%d),move_num=%3d,v=%.5f\n",ply,sideToMove,white,move_num,v); print_board(ptree); }
+//		{ PRT("ply=%2d,sideToMove=%d(white=%d),move_num=%3d,v=%.5f,eval=%d\n",ply,sideToMove,white,move_num,v,evaluate(ptree,ply,sideToMove)); print_board(ptree); }
 	}
 	if ( sideToMove==white ) v = -v;
 
@@ -1538,7 +1585,7 @@ if (0) {
 			//                                              敵の駒がいれば素抜き(移動した駒で王手)
 			// 空き王手で移動後の駒で他の駒を取る場合。動いた駒で王手をかけて同～で素抜く場合。
 			int d[8] = {+1,-1,+9,-9,+10,-10,+8,-8};
-			int j,za[2],ka[2];
+			int j,ka[2];
 			for (j=0;j<8;j++) {
 				ka[(j&1)] = 0;
 				int dz = d[j];
@@ -1550,7 +1597,7 @@ if (0) {
 					if ( (prev%9)==0 && (z%9)==8 ) break;
 					int k = BOARD[z];
 					if ( k ) {
-						za[(j&1)] = z;
+//						za[(j&1)] = z;
 						ka[(j&1)] = k;
 						break;
 					}
@@ -1569,7 +1616,7 @@ if (0) {
 				if ( (ipiece&0x07) != 6 && (ipiece&0x07) != 7 && abs((iking%9)-(ito%9))<=1 && abs(iking/9-ito/9)<=1 ) ok = 0;
 				if ( (ipiece&0x07) >= 6 && abs((ifrom%9)-(ito%9))<=1 && abs(ifrom/9-ito/9)<=1 ) ok = 0;	// 2マス以上動く手
 				if ( ok==0 ) continue;
-				PRT("ply=%2d,col=%d:%3d:%s %2d -> %2d(%2d,%d),z0=%2d,z1=%2d,k0=%3d,k1=%2d,OU=%2d,bias=%.5f\n",ply,sideToMove,i, string_CSA_move(move).c_str(),ifrom,ito,ipiece,(is_promote!=0),za[0],za[1],ka[0],ka[1],iking,pc->bias);
+//				PRT("ply=%2d,col=%d:%3d:%s %2d -> %2d(%2d,%d),k0=%3d,k1=%2d,OU=%2d,bias=%.5f\n",ply,sideToMove,i, string_CSA_move(move).c_str(),ifrom,ito,ipiece,(is_promote!=0),ka[0],ka[1],iking,pc->bias);
 //				print_board(ptree);
 				float b = max_bias / 3.0;
 				if ( pc->bias < b ) pc->bias = b;
@@ -1589,19 +1636,6 @@ if (0) {
 			}
 		}
 
-	}
-
-	if ( 0 ) {	// 1手の静止探索を
-		for (i = 0; i < phg->child_num; i++) {
-			CHILD *pc = &phg->child[i];
-			unsigned int move = pc->move;
-			MakeMove( sideToMove, move, ply );
-			int v = -search_quies_aoba( ptree, -INT_MAX, +INT_MAX, Flip(sideToMove), ply+1, 1 );
-//			int v = -search_quies( ptree, -INT_MAX, +INT_MAX, Flip(sideToMove), ply+1, 1 );
-			UnMakeMove( sideToMove, move, ply );
-			PRT("ply=%2d,col=%d:%3d:%08x(%s) v=%5d(%d)\n",ply,sideToMove,i, move,string_CSA_move(move).c_str(),v,(int)ptree->node_searched);
-//			out_pv( ptree, int value, int turn, unsigned int time );
-		}
 	}
 
 	if ( 0 ) {	// 勝率補正。valueは楽観的？。初期valueは800playoutした後(最大回数の手の勝率)、0に近づく傾向にある
@@ -1706,14 +1740,14 @@ double uct_tree(tree_t * restrict ptree, int sideToMove, int ply, int *pExactVal
 	PRT("init_v=%9f:w_sum=%7.2f,g_sum=%5d,ply=%2d\n",init_v,phg->win_sum,phg->games_sum,ply);
 */
 	bool do_dfpn = false;
-	if ( ptree->tlp_id == 0 ) {
+//	if ( ptree->tlp_id == 0 ) {	// スレッド固定だと特定の手にまったく来ないことがある？頓死するのでとりあえず削除。
 //		if ( ply==1                   && (phg->mate_bit & MATE_3)     ==0 ) { phg->mate_bit |= MATE_3;      do_dfpn = true; }
 		if ( phg->games_sum >=     10 && (phg->mate_bit & MATE_DFPN_0)==0 ) { phg->mate_bit |= MATE_DFPN_0; do_dfpn = true; }
 		if ( phg->games_sum >=    100 && (phg->mate_bit & MATE_DFPN_1)==0 ) { phg->mate_bit |= MATE_DFPN_1; do_dfpn = true; }
 		if ( phg->games_sum >=   1000 && (phg->mate_bit & MATE_DFPN_2)==0 ) { phg->mate_bit |= MATE_DFPN_2; do_dfpn = true; }
 		if ( phg->games_sum >=  10000 && (phg->mate_bit & MATE_DFPN_3)==0 ) { phg->mate_bit |= MATE_DFPN_3; do_dfpn = true; }
 		if ( phg->games_sum >= 100000 && (phg->mate_bit & MATE_DFPN_4)==0 ) { phg->mate_bit |= MATE_DFPN_4; do_dfpn = true; }
-	}
+//	}
 
 	if ( is_do_mate3() && do_dfpn ) for (;;) {
 		if ( 0 ) {
@@ -1723,11 +1757,12 @@ double uct_tree(tree_t * restrict ptree, int sideToMove, int ply, int *pExactVal
 			unsigned int move;
 			dfpn(ptree, sideToMove, ply, &move, phg->games_sum*1000);
 			Lock(phg->entry_lock);
-//			static int count; PRT("%2d:dfpn =%d,games=%d(%d)\n",ply,count++,phg->games_sum*1000,phg->games_sum);
+//			if ( ply == 2 ) { static int count; PRT("%2d:%6s:dfpn=%3d,games=%d(%d)\n",ply,string_CSA_move(ptree->path[ply-1]).c_str(),count++,phg->games_sum*1000,phg->games_sum); }
 			if ( move == MOVE_NA ) break;
 			MOVE_CURR = move;
 		}
-		PRT("dfpn mate: ply=%2d,col=%d,move=%08x(%s),games=%d\n",ply,sideToMove, MOVE_CURR,string_CSA_move(MOVE_CURR).c_str(),phg->games_sum);
+		if ( ply <= 4 ) PRT("dfpn mate: ply=%2d,col=%d,%-6s:move=%s:games=%d,%016" PRIx64 "\n",ply,sideToMove, string_CSA_move(ptree->path[ply-1]).c_str(), string_CSA_move(MOVE_CURR).c_str(),phg->games_sum, ptree->sequence_hash);
+
 		if ( ! is_move_valid( ptree, MOVE_CURR, sideToMove ) ) break;
 
 		// 1手詰があるのに3手詰を選び、連続王手の千日手になるのを避ける
@@ -1871,6 +1906,7 @@ skip_select:
 	}
 //	PRT("%2d:%s:SHash=%016" PRIx64,ply,str_CSA_move(pc->move),ptree->sequence_hash);
 	MakeMove( sideToMove, pc->move, ply );
+	ptree->path[ply] = pc->move;
 //	PRT(" -> %016" PRIx64 "\n",ptree->sequence_hash);
 
 	MOVE_CURR = pc->move;
@@ -1996,7 +2032,7 @@ skip_select:
 		}
 	}
 
-	if ( ply >= PLY_MAX-10 ) { PRT("depth over=%d\n",ply); debug(); }
+	if ( ply >= PLY_MAX-10 ) { DEBUG_PRT("depth over=%d\n",ply); }
 
 	if ( skip_search == 0 ) {
 		int down_tree = 0;
@@ -2015,7 +2051,7 @@ skip_select:
 				create_node(ptree, Flip(sideToMove), ply+1, phg2);
 			} else {
 //				static int count; PRT("has come already? ply=%d,%d\n",ply,++count); //debug();	// 手順前後? 複数スレッドの場合
-				if ( force_do_playout == 0 ) down_tree = 1;
+				down_tree = 1;
 			}
 			if ( fSkipOneReply && phg2->child_num == 1 ) {
 //				PRT("down_tree:ply=%d\n",ply);
@@ -2039,7 +2075,7 @@ skip_select:
 			Lock(phg->entry_lock);
 		}
 //		PRT("down_tree=%d,do_playout=%d,ply=%d\n",down_tree,do_playout,ply);
-		if ( down_tree ) {
+		if ( down_tree && force_do_playout==0 ) {
 			// down tree
 			const int fVirtualLoss = 1;
 			const int VL_N = 1;
@@ -2077,7 +2113,7 @@ skip_select:
 
 	if ( is_use_exact() && pc->exact_value == EX_WIN ) {	// この手を指せば勝
 		*pExactValue = EX_LOSS;
-		PRT("mate: ply=%2d,col=%d,move=%08x(%s)win=%5.2f -> +1.0\n",ply,sideToMove, MOVE_CURR,string_CSA_move(MOVE_CURR).c_str(),win);
+//		PRT("mate: ply=%2d,col=%d,move=%08x(%s)win=%5.2f -> +1.0\n",ply,sideToMove, MOVE_CURR,string_CSA_move(MOVE_CURR).c_str(),win);
 		win = +1.0;
 	}
 
@@ -2228,8 +2264,13 @@ int getCmdLineParam(int argc, char *argv[])
 		}
 #endif
 		if ( strstr(p,"-kldgain") ) {
-			PRT("MinimumKLDGainPerNode=%f\n",nf);
+			PRT("MinimumKLDGainPerNode=%.10f\n",nf);
 			MinimumKLDGainPerNode = nf;
+			continue;
+		}
+		if ( strstr(p,"-kldinterval") ) {
+			PRT("KLDGainAverageInterval=%d\n",n);
+			KLDGainAverageInterval = n;
 			continue;
 		}
 		if ( strstr(p,"-reset_root_visit") ) {
@@ -2742,7 +2783,6 @@ std::vector<int> prev_dist_;
 int prev_dist_visits_total_;
 
 bool isKLDGainSmall(tree_t * restrict ptree, int sideToMove) {
-	const int KLDGainAverageInterval = 100;
 	if ( MinimumKLDGainPerNode <= 0 ) return false;
 	bool ret = false;
 	HASH_SHOGI *phg = HashShogiReadLock(ptree, sideToMove);
