@@ -362,6 +362,12 @@
     <ClCompile Include="..\..\..\common\opencli.cpp">
       <Filter>Source Files\common</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\bona\pipe.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\bona\r_book.cpp">
+      <Filter>Source Files\bona</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

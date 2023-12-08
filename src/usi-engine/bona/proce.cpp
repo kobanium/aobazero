@@ -1,5 +1,7 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
+#include "../config.h"
+
 #include <ctype.h>
 #include <limits.h>
 #include <math.h>
