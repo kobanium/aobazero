@@ -443,7 +443,8 @@ public:
 	int make_www_samples();
 	void get_piece_num_diff(bool bGoteTurn, int d[]);
 	void sum_pwv(double z, bool bGoteTurn, double sumd[]);
-
+	void same_pos_check();
+	int is_koshikake_gin(ZERO_DB *p);
 
 	// fish´ØÏ¢
 	bool is_pseudo_legalYSS(Move m, Color sideToMove);

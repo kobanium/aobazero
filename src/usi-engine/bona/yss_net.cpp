@@ -473,6 +473,8 @@ void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *
 #ifdef USE_POLICY2187
 	const int T_STEP = 6;
 //	const int T_STEP = 1;
+	const int PREV_AZ = 0;	// 1手前の場所だけを追加する場合に1。T_STEP=1
+	const int TWO_HOT = 0;	// 自分の歩は +1、相手の歩は -1 で同じ面にエンコード
 #else
 	const int T_STEP = 8;
 #endif
@@ -504,7 +506,16 @@ void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *
 				m -= 14;
 				if ( m < 0 ) m += 28;	// 0..13 -> 14..27
 			} 
-			set_dcnn_data(data, base+m, yy,xx);
+
+			if ( TWO_HOT ) {
+				if ( m < 14 ) {
+					set_dcnn_data(data, base+m   , yy,xx, +1.0f);
+				} else {
+					set_dcnn_data(data, base+m-14, yy,xx, +0.01f);
+				}
+			} else {
+				set_dcnn_data(data, base+m, yy,xx);
+			}
 		}
 		base += add_base;
 
@@ -562,7 +573,23 @@ void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *
 		}
 	}
 
-//	if ( T_STEP == 1 ) base += (28 + 14 + 3) * (6 - 1);
+	if ( T_STEP==1 && PREV_AZ ) {
+		int ret_z = get_previous_move_from_pos(ptree, ply);
+		int b0 = ret_z / 100;
+		int a0 = ret_z - b0 * 100;
+		int x = a0 / 10;
+		int y = a0 - x*10;
+		x = 9 - x;	// 0<=x<=8
+		y = y - 1;	// 0<=y<=8
+		if ( flip ) {
+			y = B_SIZE - y -1;
+			x = B_SIZE - x -1;
+		}
+		if ( ptree->nrep > 0 ) set_dcnn_data( data, base, y,x);
+		PRT("ret_z=%d,b0=%d,a0=%d,x=%d,y=%d\n",ret_z,b0,a0,x,y);
+	}
+
+	if ( T_STEP == 1 ) base += (28 + 14 + 3) * (6 - 1);
 
 #ifdef USE_POLICY2187
 /* nnet.cpp で入力特徴がfillとそれ以外で最適化されてるので、それに合わせる。最初の28が通常、残り17がfill。合計45。28+10=38が通常。1+6=7 がfill
@@ -796,6 +823,13 @@ float get_network_policy_value(tree_t * restrict ptree, int sideToMove, int ply,
 	set_dcnn_channels(ptree, sideToMove, ply, data);
 //	if ( 1 || ply==1 ) { prt_dcnn_data_table((float(*)[B_SIZE][B_SIZE])data);  }
 //	if ( 1 && ptree->nrep+ply==101+3 ) { int sum=0; int i; for (i=0;i<size;i++) sum = sum*37 + (int)(data[i]*1000.0f); PRT("sum=%08x,ply=%d,nrep=%d\n",sum,ply,ptree->nrep); }
+	if ( 0 ) {
+		FILE *fp = fopen("nninput.bin","ab");
+		if ( fp ) {
+			for (int i=0;i<size;i++) fwrite( data+i, sizeof(float),1,fp);
+			fclose(fp);
+		}
+	}
 
 	int move_num = phg->child_num;
 	unsigned int * restrict pmove = ptree->move_last[0];
@@ -1395,7 +1429,7 @@ int get_dlshogi_policy_id(int bz, int az, int tk, int nf) {
 			if ( dx > 0 ) dir = 0;
 			if ( dx < 0 ) dir = 4;
 		} else {
-			if ( abs(dx) != abs(dy) ) DEBUG_PRT("");
+			if ( abs(dx) != abs(dy) ) DEBUG_PRT("bz=%02x,%02x,%02x,%02x\n",bz,az,tk,nf);
 			if ( dx > 0 && dy > 0 ) dir = 1;
 			if ( dx < 0 && dy > 0 ) dir = 3;
 			if ( dx < 0 && dy < 0 ) dir = 5;
@@ -1407,7 +1441,7 @@ int get_dlshogi_policy_id(int bz, int az, int tk, int nf) {
 	int ay = (az & 0xf0) >> 4;
 	int z81 = (ay-1)*9 + (ax-1);
 	int index = z81 + 81*dir + fNari*(81*10) + fDrop*(81*20);
-	if ( index < 0 || index >= 2187 || dir < 0 ) DEBUG_PRT("");
+	if ( index < 0 || index >= 2187 || dir < 0 ) DEBUG_PRT("bz=%02x,%02x,%02x,%02x,index=%d,dir=%d\n",bz,az,tk,nf,index,dir);
 	return index;
 }
 
@@ -1443,7 +1477,7 @@ void add_dirichlet_noise(float epsilon, float alpha, HASH_SHOGI *phg)
 		CHILD *pc = &phg->child[i];
         float score = pc->bias;
         score = score * (1 - epsilon) + epsilon * eta_a;
-        { static int count; if ( count++<100 ) PRT("%3d:%8s,noise=%.9f, bias=%.9f -> %.9f\n",i,str_CSA_move(pc->move),eta_a,pc->bias,score); }
+        { static int count; if ( count++<100 ) PRT("%3d:%8s,noise=%.9f, bias=%.9f -> %.9f,%08x\n",i,str_CSA_move(pc->move),eta_a,pc->bias,score,pc->move); }
         pc->bias = score;
     }
 }

@@ -616,8 +616,10 @@ static void start_engine(USIEngine &c, int i) noexcept {
       if (strcmp(line, "usiok") == 0) break;
     }
 
-    FILE *fp = fopen(fname_option[i].get_fname(),"r");
-    if ( fp ) {
+    const char *opt_name = fname_option[i].get_fname();
+    if ( strlen(opt_name) > 0 ) {
+      FILE *fp = fopen(opt_name,"r");
+      if ( !fp ) die(ERR_INT("fail to open USI option %s.", opt_name));
       for (;;) {
         char line[256];
         if ( fgets( line, 256, fp ) == NULL ) break;

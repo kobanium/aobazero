@@ -136,7 +136,9 @@ extern unsigned char ailast_one[512];
 //#define BNZ_VER                 "36"	// 20220626 pawn ,rook, bishop are always promoted. discovered attack moves have 30% of best policy. safe LCB, kldgain 0.000005.
 //#define BNZ_VER                 "37"	// 20220626 kldgain 000000075. ave playouts is 1568/move.
 //#define BNZ_VER                 "38"	// 20221110 test get_best_move_alphabeta_usi().
-#define BNZ_VER                 "39"	// 20221221 raw value and policy are recorded in *.csa. Dynamic Variance-Scaled cPUCT. NN is not called for one reply king escape position.
+//#define BNZ_VER                 "39"	// 20221221 raw value and policy are recorded in *.csa. Dynamic Variance-Scaled cPUCT. NN is not called for one reply king escape position.
+//#define BNZ_VER                 "40"	// 20230519 dfpn is called from all threads. make_book, kldinterval.
+#define BNZ_VER                 "41"	// 20231207 kldgain 0.0000004, kldinterval 400, -p 12800, ave playouts is 3180/move.
 #define BNZ_NAME                "AobaZero"
 
 //#define BNZ_VER                 "16"	// 20210528 komaochi, mate3
@@ -763,6 +765,7 @@ struct tree {
   int reached_ply;
   int max_reached_ply;
   int sum_reached_ply;
+  unsigned int path[PLY_MAX];	// UCTで木を降りる際の手順
 #endif
   uint64_t node_searched;
   unsigned int *move_last[ PLY_MAX ];
@@ -981,6 +984,7 @@ extern unsigned char adirec[nsquare][nsquare];
 extern unsigned char is_same[16][16];
 extern char str_message[ SIZE_MESSAGE ];
 extern char str_cmdline[ SIZE_CMDLINE ];
+extern char str_usi_position[ SIZE_CMDLINE ];
 extern char str_buffer_cmdline[ SIZE_CMDBUFFER ];
 extern const char *str_error;
 
@@ -1112,6 +1116,7 @@ int read_board_rep1( const char *str_line, min_posi_t *pmin_posi );
 int CONV com_turn_start( tree_t * restrict ptree, int flag );
 int read_record( tree_t * restrict ptree, const char *str_file,
 		 unsigned int moves, int flag );
+int get_previous_move_from_pos( const tree_t * restrict ptree, int ply);
 int out_board( const tree_t * restrict ptree, FILE *pf, unsigned int move,
 	       int flag );
 int make_root_move_list( tree_t * restrict ptree );
@@ -1387,6 +1392,7 @@ int CONV csa2usi( const tree_t * restrict ptree, const char *str_csa,
 		  char *str_usi );
 int analyze( tree_t * restrict ptree );
 int CONV usi_posi( tree_t * restrict ptree, char **lasts );
+int CONV usi_go( tree_t * restrict ptree, char **lasts );
 #else
 #  define USIOut( ... )
 #endif

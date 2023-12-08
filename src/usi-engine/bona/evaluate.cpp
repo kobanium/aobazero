@@ -87,7 +87,7 @@ eval_material( const tree_t * restrict ptree )
   return material;
 }
 
-//  piece value from AobaZero kifu. https://524.teacup.com/yss/bbs/3946
+//  piece value from AobaZero kifu. http://www.yss-aya.com/bbs_log/bbs2022.html#bbs64
 int aoba_piece_v[13] = {
 // FU  KY  KE  GI  KI  KA  HI    TO  NK  NG  NG   UM   RY
   100,198,367,562,674,775,871,  496,364,459,649,1133,1408

@@ -1,5 +1,7 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
+#include "../config.h"
+
 #include <ctype.h>
 #include <limits.h>
 #include <math.h>
@@ -59,7 +61,7 @@ static int CONV cmd_mnjmove( tree_t * restrict ptree, char **lasts,
 #if defined(USI)
 static int CONV proce_usi( tree_t * restrict ptree );
 //     int CONV usi_posi( tree_t * restrict ptree, char **lasts );
-static int CONV usi_go( tree_t * restrict ptree, char **lasts );
+//static int CONV usi_go( tree_t * restrict ptree, char **lasts );
 static int CONV usi_ignore( tree_t * restrict ptree, char **lasts );
 static int CONV usi_option( tree_t * restrict ptree, char **lasts );
 #endif
@@ -491,6 +493,11 @@ static int CONV proce_usi( tree_t * restrict ptree )
     kill_usi_child();
     return cmd_quit();
   }
+  if ( ! strcmp( token, "make_book" ) ) {
+    make_r_book(ptree);
+    return 1;
+  }
+
   if ( ! strcmp( token, "d" ) ) {
 /*
     fprintf(stderr,"print board\n");
@@ -540,7 +547,7 @@ usi_ignore( tree_t * restrict ptree, char **lasts )
 }
 
 
-static int CONV
+int CONV
 usi_go( tree_t * restrict ptree, char **lasts )
 {
   const char *token;
@@ -836,6 +843,7 @@ usi_posi( tree_t * restrict ptree, char **lasts )
   moves_ignore[0] = MOVE_NA;
   sfen_current_move_number = 0;
   nHandicap = 0;
+  strcpy(str_usi_position, *lasts);
 
   bool sfen = false;
   token = strtok_r( NULL, str_delimiters, lasts );

@@ -106,12 +106,14 @@
     <ClCompile Include="..\..\bona\movgenex.cpp" />
     <ClCompile Include="..\..\bona\next.cpp" />
     <ClCompile Include="..\..\bona\phash.cpp" />
+    <ClCompile Include="..\..\bona\pipe.cpp" />
     <ClCompile Include="..\..\bona\ponder.cpp" />
     <ClCompile Include="..\..\bona\problem.cpp" />
     <ClCompile Include="..\..\bona\proce.cpp" />
     <ClCompile Include="..\..\bona\quiesrch.cpp" />
     <ClCompile Include="..\..\bona\rand.cpp" />
     <ClCompile Include="..\..\bona\root.cpp" />
+    <ClCompile Include="..\..\bona\r_book.cpp" />
     <ClCompile Include="..\..\bona\sckt.cpp" />
     <ClCompile Include="..\..\bona\search.cpp" />
     <ClCompile Include="..\..\bona\searchr.cpp" />

@@ -426,16 +426,16 @@ void InitLockYSS()
 void shogi::hyouji()
 {
    int x,y,i;
-   PRT("    1 2 3 4 5 6 7 8 9  \n");
+   PRT("   1 2 3 4 5 6 7 8 9  \n");
    for (y=0;y<9;y++) {
-	  PRT("%dив",y+1);
+	  PRT("%d|",y+1);
 	  for (x=0;x<9;x++) {
 		 int n = ban[ (y+1)*16+x+1 ];
 		 int k = kn[n][0];
 		 if (k>0x80) k-=0x70;
 //		 PRT("%s",koma[i]);
 		 PRT("%s",koma_kanji[k]);
-	  }  PRT("ив");
+	  }  PRT("|");
 	  if (y==0) {
 		 PRT("   COM :");
 //		 for (i=1;i<8;i++) PRT("%s %x:",koma[i+16],mo_c[i]);

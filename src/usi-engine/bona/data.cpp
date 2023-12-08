@@ -145,6 +145,7 @@ unsigned char book_section[ MAX_SIZE_SECTION+1 ];
 unsigned char adirec[ nsquare ][ nsquare ];
 unsigned char is_same[ 16 ][ 16 ];
 char str_cmdline[ SIZE_CMDLINE ];
+char str_usi_position[ SIZE_CMDLINE ];
 char str_message[ SIZE_MESSAGE ];
 char str_buffer_cmdline[ SIZE_CMDBUFFER ];
 const char *str_error;

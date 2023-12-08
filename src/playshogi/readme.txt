@@ -29,6 +29,12 @@ bin/playshogi -rsm 800 -P 25 -B 7 -U 0 -H 1 -c /bin/bash -W w1650.txt -0 "bin/ao
 2枚落ち。先手が常に下手。"-d 1" は香落ち、以下、角(2)、飛(3)、2枚(4)、4枚(5)、6枚(6)
 bin/playshogi -frsm 800 -d 4 -0 "bin/aobaz -p 400 -msafe 30 -w w1525.txt" -1 "bin/aobaz -p 10 -msafe 30 -w w1525.txt" >> 2mai_p400_vs_p10.csa
 
+dlshogiと1手100playoutで。dlshogiはplayoutが指定可能なように改造したもの
+bin/playshogi -brsm 400 -i usi0.txt:usi0.txt -c /bin/bash -P 7 -U 0 -B 3 -H 1  -W w4195.txt -0 "./aobaz -p 100 -e 0 -w w4195.txt" -1 "./dlshogi_dr2_exhi/usi/bin/usi_dr2e_po 100" >> w4195_b1t1_p100_vs_dlshogi_dr2_b1t1_100p.csa
+$ cat usi0.txt
+setoption name DNN_Batch_Size value 1
+setoption name UCT_Threads value 1
+
 
 ※ 注意
 ubuntu 16だと "-c /bin/bash" を付けないとAobaZeroのプロセス間バッチは動作しません。
@@ -86,6 +92,7 @@ Other options:
   -T STR   Specifies the number of threads for CPU BLAS computation. STR can
            contain two numbers separated by ':'. The default is -1 (means an
            upper bound of the number).
+  -i STR   USI setoption file. STR can contain two numbers separated by ':'.
 Example:
   playshogi -0 "~/aobaz -w ~/w0.txt" -1 "~/aobaz -w ~/w1.txt"
            Generate a gameplay between 'w0.txt' (black) and 'w1.txt' (white)

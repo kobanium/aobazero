@@ -332,6 +332,46 @@ open_history( const char *str_name1, const char *str_name2 )
 }
 
 
+//直前の指し手を盤面図から取り出す。効率悪いけど
+int
+get_previous_move_from_pos( const tree_t * restrict ptree, int ply) 
+{
+  int ret_z = 0;
+  if ( ptree->nrep == 0 ) return ret_z;
+  int np = ptree->nrep + ply - 1;
+  if ( np <= 0 ) { PRT("err np"); debug(); }
+  const min_posi_t *p0 = &ptree->record_plus_ply_min_posi[np-0];
+  const min_posi_t *p1 = &ptree->record_plus_ply_min_posi[np-1];
+  int x,y,n=0,diff[2],d[2];
+  diff[0] = diff[1] = 0;
+  for (y=0;y<9;y++) for (x=0;x<9;x++) {
+    int z = y*9 + x;
+//  fprintf( pf, "%d,",p0->asquare[z]);
+    if ( p0->asquare[z] == p1->asquare[z] ) continue;
+    if ( n == 2 ) continue;
+    d[n] = (y+1) + (10 - (x+1))*10;
+    diff[n++] = z;	// 変更が1か所なら駒打
+  }
+  int bz = diff[0];
+//int az = diff[1];
+  int b0 = d[0];
+  int a0 = d[1];
+  if ( n==2 ) {
+    if ( p0->asquare[bz] != 0 ) {
+//    bz = diff[1];
+//    az = diff[0];
+      b0 = d[1];
+      a0 = d[0];
+    }
+  } else {
+    b0 = 0;
+    a0 = d[0];
+//  az = diff[0];
+  }
+  ret_z = b0*100 + a0;
+  return ret_z;
+}
+
 int
 out_board( const tree_t * restrict ptree, FILE *pf, unsigned int move,
 	   int is_strict )
@@ -401,34 +441,13 @@ out_board( const tree_t * restrict ptree, FILE *pf, unsigned int move,
 //  fprintf( pf, "moves=%d, pr->games=%d,moves=%d,lines=%d\n",ptree->nrep, pr->games,pr->moves,pr->lines );
   fprintf( pf, "moves=%3d(%d), turn %c, nHandicap=%d, seq_hash=%016" PRIx64 ,ptree->nrep+sfen_current_move_number,sfen_current_move_number, ach_turn[(root_turn)&1], nHandicap, ptree->sequence_hash );
   if ( ptree->nrep > 0 ) {
+    int ret_z = get_previous_move_from_pos(ptree, 1);	// plyは1から始まる
     const min_posi_t *p0 = &ptree->record_plus_ply_min_posi[ptree->nrep-0];
-    const min_posi_t *p1 = &ptree->record_plus_ply_min_posi[ptree->nrep-1];
-	int x,y,n=0,diff[2],d[2];
-	diff[0] = diff[1] = 0;
-	for (y=0;y<9;y++) for (x=0;x<9;x++) {
-		int z = y*9 + x;
-//		fprintf( pf, "%d,",p0->asquare[z]);
-		if ( p0->asquare[z] == p1->asquare[z] ) continue;
-		if ( n == 2 ) continue;
-		d[n] = (y+1) + (10 - (x+1))*10;
-		diff[n++] = z;	// 変更が1か所なら駒打
-	}
-	int bz = diff[0];
-	int az = diff[1];
-	int b0 = d[0];
-	int a0 = d[1];
-	if ( n==2 ) {
-		if ( p0->asquare[bz] != 0 ) {
-//			bz = diff[1];
-			az = diff[0];
-			b0 = d[1];
-			a0 = d[0];
-		}
-	} else {
-		b0 = 0;
-		a0 = d[0];
-		az = diff[0];
-	}
+    int b0 = ret_z / 100;
+    int a0 = ret_z - b0 * 100;
+    int x = a0 / 10;
+    int y = a0 - x*10;
+    int az = (y-1)*9 + (9-x);
 //	fprintf( pf, "%d,02d%d%s\n",n,b0,a0,astr_table_piece[abs(p0->asquare[az])]);
 	fprintf( pf, ", %c%02d%d%s\n",ach_turn[(root_turn+1)&1],b0,a0,astr_table_piece[abs(p0->asquare[az])]);
   }

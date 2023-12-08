@@ -253,14 +253,14 @@ search_quies_aoba( tree_t * restrict ptree, int alpha, int beta, int turn, int p
   }
 
   if ( ply >= PLY_MAX-1 ) {
-    if ( alpha_old != alpha ) { pv_close( ptree, ply, no_rep ); }
+//  if ( alpha_old != alpha ) { pv_close( ptree, ply, no_rep ); }
     MOVE_CURR = MOVE_NA;
     return stand_pat;
   }
 
   ptree->anext_move[ply].next_phase = next_quies_gencap;
   while ( gen_next_quies_aoba( ptree, alpha, turn, ply, qui_ply ) ) {
-//    PRT( "\nexpand %s (%" PRIu64 ")%2d", str_CSA_move(MOVE_CURR), ptree->node_searched,ply );
+    PRT( "\nexpand %s (%" PRIu64 ")%2d", str_CSA_move(MOVE_CURR), ptree->node_searched,ply );
     MakeMove( turn, MOVE_CURR, ply );
     if ( InCheck(turn) ) {
       UnMakeMove( turn, MOVE_CURR, ply );
@@ -285,8 +285,8 @@ search_quies_aoba( tree_t * restrict ptree, int alpha, int beta, int turn, int p
 //  PRT( "\nall searched (%" PRIu64 ")\n", ptree->node_searched );
 
   if ( alpha_old != alpha ) {
-    if ( alpha == stand_pat ) { pv_close( ptree, ply, no_rep ); }
-    else                      { pv_copy( ptree, ply ); }
+//  if ( alpha == stand_pat ) { pv_close( ptree, ply, no_rep ); }
+//  else                      { pv_copy( ptree, ply ); }
   }
 
   return alpha;

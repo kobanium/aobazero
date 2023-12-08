@@ -115,6 +115,8 @@ bool isKLDGainSmall(tree_t * restrict ptree, int sideToMove);
 void init_KLDGain_prev_dist_visits_total(int games_sum);
 void clear_opening_hash();
 void make_balanced_opening(tree_t * restrict ptree, int sideToMove, int ply);
+HASH_SHOGI* HashShogiReadLock(tree_t * restrict ptree, int sideToMove);
+uint64 get_marge_hash(tree_t * restrict ptree, int sideToMove);
 
 // yss_net.cpp
 void init_network();
@@ -150,5 +152,10 @@ int get_motigoma(int m, int hand);
 // pipe.cpp
 unsigned int get_best_move_alphabeta_usi(tree_t * restrict ptree, int sideToMove, int ply);
 void kill_usi_child();
+
+// r_book.cpp
+void make_r_book(tree_t * restrict ptree);
+int get_book_move(tree_t * restrict ptree, HASH_SHOGI *phg);
+
 
 #endif	//]] INCLUDE__GUARD

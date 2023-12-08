@@ -435,13 +435,16 @@ str_CSA_move( unsigned int move )
 
 std::string string_CSA_move( unsigned int move ) {
   const int size = 7+8;	// +8 is "-Wformat-truncation" prevention
-  char str[size];
+  char str[size] = {0};
   int ifrom, ito, ipiece_move, is_promote;
 
   is_promote  = (int)I2IsPromote(move);
   ipiece_move = (int)I2PieceMove(move);
   ifrom       = (int)I2From(move);
   ito         = (int)I2To(move);
+
+//if ( ifrom <=0 || ifrom >= nsquare ) ifrom = 0;
+//if ( ito   <=0 || ito   >= nsquare ) ito   = 0;
 
   if ( is_promote )
     {
