@@ -12,6 +12,7 @@ const int B_SIZE = 9;
 const int DCNN_CHANNELS = 362;
 const int LABEL_CHANNELS = 139;	// 11259ê—p‚Ì’l
 
+const int MAX_DRAW_MOVES = 513;	// 513è–Ú‚ªw‚¹‚ê‚Îˆø‚«•ª‚¯
 
 const int SHOGI_MOVES_MAX = 593;
 const float ILLEGAL_MOVE = -1000;

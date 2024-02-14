@@ -741,10 +741,11 @@ void set_dcnn_channels(tree_t * restrict ptree, int sideToMove, int ply, float *
 		set_dcnn_data( data, base, y,x);
 	}
 	float div = 1.0f;
-	if ( STANDARDIZATION ) div = 512.0f;
-	// 513手目が指せれば引き分け。floodgateは256手目が指せれば引き分け。選手権は321手目が指せれば引き分け。
+	if ( STANDARDIZATION ) div = MAX_DRAW_MOVES-1;
+	// 513手目が指せれば引き分け。floodgateは256手目(513手目、2024年1月7日から)が指せれば引き分け。選手権は321手目が指せれば引き分け。
 	int tt = t + sfen_current_move_number;
-	if ( nDrawMove ) {
+	if ( tt > div ) tt = div;
+	if ( nDrawMove && nDrawMove < MAX_DRAW_MOVES ) {
 		int draw = nDrawMove;	// 256, 321
 		int w = 160;	// 何手前から増加させるか。256手引き分けでw=60なら196手から増加
 		if ( draw - w < 0 ) w = draw;
