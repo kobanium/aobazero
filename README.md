@@ -70,6 +70,9 @@ AobaZeroはShogiGUIでも動作しますがengineに送られてくる局面が�
 ShogiGUIのページ
 <http://shogigui.siganus.com/>
 
+# Compileの仕方は？
+[こちら](readme.txt)をご覧ください。
+
 # AobaZeroの紹介ページ
 今までに作成した棋譜や重み、棋譜のサンプルなどを公開しています。  
 <http://www.yss-aya.com/aobazero/>

@@ -539,7 +539,7 @@ void wmma_mma(uint *mc, __local const uint *ma, __local const uint *mb) {
         "r"(mb[SGEMM_NLN*WRAP_SIZE*4]), "r"(mb[SGEMM_NLN*WRAP_SIZE*5]),
         "r"(mb[SGEMM_NLN*WRAP_SIZE*6]), "r"(mb[SGEMM_NLN*WRAP_SIZE*7])); }
 
-void wmma_store(__global float *dest, const float *src) {
+void wmma_store(__global void *dest, const uint *src) {
   asm("{  wmma.store.d.sync.aligned.row" SGEMM_TDM ".global.f16\n"
       "     [%4], {%0, %1, %2, %3}, %5; }"
       :: "r"(src[0]), "r"(src[1]), "r"(src[2]), "r"(src[3]),
@@ -565,7 +565,7 @@ void wmma_mma(uint *mc, __local const uint *ma, __local const uint *mb) {
         "r"(mb[SGEMM_NLN*WRAP_SIZE*4]), "r"(mb[SGEMM_NLN*WRAP_SIZE*5]),
         "r"(mb[SGEMM_NLN*WRAP_SIZE*6]), "r"(mb[SGEMM_NLN*WRAP_SIZE*7])); }
 
-void wmma_store(__global float *dest, const float *src) {
+void wmma_store(__global void *dest, const uint *src) {
   asm("{  wmma.store.d.sync.aligned.row" SGEMM_TDM ".global.f32\n"
       "     [%8], {%0, %1, %2, %3, %4, %5, %6, %7}, %9; }"
       :: "r"(src[0]), "r"(src[1]), "r"(src[2]), "r"(src[3]),
@@ -642,6 +642,7 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
     for (uint upn = 0; upn < SGEMM_NPN; ++upn)
       wmma_store(gC + upm*SGEMM_NTM*NN + upn*SGEMM_NTN, &pD[upm][upn][0]); }
 
+
 #else
 
 __kernel __attribute__((reqd_work_group_size(SGEMM_NLN*WRAP_SIZE,
@@ -699,7 +700,8 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
   gC += ulm*SGEMM_NTM*NN + uln*SGEMM_NTN;
   for (uint upm = 0; upm < SGEMM_NPM; ++upm)
     for (uint upn = 0; upn < SGEMM_NPN; ++upn)
-      wmma_store(gC + upm*SGEMM_NLTM*NN + upn*SGEMM_NLTN, &pD[upm][upn][0]); }
+      wmma_store(gC + upm*SGEMM_NLTM*NN + upn*SGEMM_NLTN, (&pD[upm][upn][0])); }
+
 #endif
 )";
 
@@ -1240,6 +1242,7 @@ static SgemmParam tune_compute_matM(bool use_half, bool use_wmma,
       elapsed = measure_compute_matM(context, param, nbatch, nm0, nn0, nk0,
 				     1U); }
     catch (const ErrInt &e) {
+      cout << "e.what()=" << e.what() << std::endl;
       if (! strstr(e.what(), msg_opencl_error)) throw;
       elapsed = DBL_MAX; flag_error = true; }
     catch (...) { throw; }
