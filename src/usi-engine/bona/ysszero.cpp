@@ -57,7 +57,7 @@ bool fRawValuePolicy = true;
  
 int nLimitUctLoop = 100;
 double dLimitSec = 0;
-int nDrawMove = 0;		// 引き分けになる手数。0でなし。floodgateは256, 選手権は321
+int nDrawMove = MAX_DRAW_MOVES;	// 引き分けになる手数。0でなし。floodgateは256, 選手権は321。学習中も探索内では引き分けに
 
 const float FIXED_RESIGN_WINRATE = 0.10;	// 自己対戦でこの勝率以下なら投了。0で投了しない。0.10 で勝率10%。 0 <= x <= +1.0
 float resign_winrate = 0;

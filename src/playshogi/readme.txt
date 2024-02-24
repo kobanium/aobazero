@@ -5,12 +5,11 @@ playshogiは2つのusiプログラム同士を対戦させます。
    条件を満たす手を指した瞬間にplayshogiが判定します)。27点法
 3. AobaZeroを使う場合、同時に複数の対戦を走らせ、プロセス間バッチを組むことで高速化できます。
 4. 棋譜は標準出力に出ます。
-5. 磯崎氏が作成された24手目までの互角定跡集を使って対戦できます。
+5. 磯崎氏が作成された24手目までの互角局面集を使って対戦できます。
    http://yaneuraou.yaneu.com/2016/08/24/%E8%87%AA%E5%B7%B1%E5%AF%BE%E5%B1%80%E7%94%A8%E3%81%AB%E4%BA%92%E8%A7%92%E3%81%AE%E5%B1%80%E9%9D%A2%E9%9B%86%E3%82%92%E5%85%AC%E9%96%8B%E3%81%97%E3%81%BE%E3%81%97%E3%81%9F/
    records2016_10818.sfen
    をカレントディレクトリに置いて下さい。
-   定跡は起動ごとにランダムに選ばれます。
-
+   局面数は起動ごとにランダムに選ばれます。
 
 
 例:
@@ -19,6 +18,9 @@ bin/playshogi -rsbm 800 -0 "./bin/aobaz -p 100 -w ./weight/w1198.txt" -1 "./bin/
 
 AobaZero(1手800playout)とKristallweizen(1手200kノード、1スレッド、定跡なし)を対戦させる場合。プロセス間バッチ利用。HALF利用。weightの指定はplayshogi、aobaz、同じものを指定してください(内部で時々GPUの計算とCPUの計算の一致を確認するため)。
 bin/playshogi -rsbm 600 -B 7 -P 25 -U 0 -H 1 -c /bin/bash -W ./weight/w1198.txt -0 "./bin/aobaz -p 800 -e 0 -w ./weight/w1198.txt" -1 "~/Kristallweizen/yane483_nnue_avx2 usi , setoption name BookMoves value 0 , setoption Threads value 1 , setoption USI_Hash value 16 , setoption NodesLimit value 200000 , isready" >> w1198_p800_vs_200k.csa
+
+AobaZero(1手800playout)と水匠5(1手300kノード、1スレッド、定跡なし)を対戦させる場合。
+bin/playshogi -rsbm 800 -P 18 -B 7 -U 0 -H 1 -c /bin/bash -W ./w4365.txt -0 "./aobazero/bin/aobaz -p 800 -e 0 -w ./w4365.txt" -1 "cd ../suisho5; ./yane750sse42 , isready , setoption name BookMoves value 0 , setoption Threads value 1 , setoption NodesLimit value 300000" >> w4365_s5_750_300k.csa
 
 GPU 0 と GPU 1 を使ってw485とw450を800局対戦。定跡集は使わず。ランダム性としてノイズの追加と最初の30手は確率分布で選択。
 bin/playshogi -rsm 800 -P 25 -U 0:1 -B 7:7 -H 1:1 -W w0485.txt:w0450.txt -0 "bin/aobaz -e 0 -p 800 -n -m 30 -w w0485.txt" -1 "bin/aobaz -e 1 -n -m 30 -p 800 -w w0450.txt"
@@ -29,11 +31,24 @@ bin/playshogi -rsm 800 -P 25 -B 7 -U 0 -H 1 -c /bin/bash -W w1650.txt -0 "bin/ao
 2枚落ち。先手が常に下手。"-d 1" は香落ち、以下、角(2)、飛(3)、2枚(4)、4枚(5)、6枚(6)
 bin/playshogi -frsm 800 -d 4 -0 "bin/aobaz -p 400 -msafe 30 -w w1525.txt" -1 "bin/aobaz -p 10 -msafe 30 -w w1525.txt" >> 2mai_p400_vs_p10.csa
 
-dlshogiと1手100playoutで。dlshogiはplayoutが指定可能なように改造したもの
-bin/playshogi -brsm 400 -i usi0.txt:usi0.txt -c /bin/bash -P 7 -U 0 -B 3 -H 1  -W w4195.txt -0 "./aobaz -p 100 -e 0 -w w4195.txt" -1 "./dlshogi_dr2_exhi/usi/bin/usi_dr2e_po 100" >> w4195_b1t1_p100_vs_dlshogi_dr2_b1t1_100p.csa
-$ cat usi0.txt
+dlshogiと1手100playoutで。
+bin/playshogi -brsm 800 -i usi_dummy.txt:usi_dr2_mb1_p100.txt -c /bin/bash -P 7 -U 0 -B 3 -H 1 -W w4357.txt -0 "./aobaz -p 100 -e 0 -w w4357.txt" -1 "dlshogi_dr2_exhi/usi/bin/usi" >> w4357_vs_dlshogi_dr2_100p.csa
+$ cat usi_dr2_mb1_p100.txt
+setoption name DNN_Model value /home/yss/shogi/dlshogi_dr2_exhi/model/model-dr2_exhi.onnx
 setoption name DNN_Batch_Size value 1
-setoption name UCT_Threads value 1
+setoption name Const_Playout value 100
+
+"-i" で usi コマンドを送れますが、usi と isready の間の setoption のみを指定します。
+指定する場合は必ず2つ必要です。送る必要がない場合は 改行1行だけの usi_dummy.txt を指定します。
+
+usi
+...
+usiok
+
+  ここで指定する setoption を複数行で指定
+
+isready
+
 
 
 ※ 注意

@@ -138,7 +138,9 @@ extern unsigned char ailast_one[512];
 //#define BNZ_VER                 "38"	// 20221110 test get_best_move_alphabeta_usi().
 //#define BNZ_VER                 "39"	// 20221221 raw value and policy are recorded in *.csa. Dynamic Variance-Scaled cPUCT. NN is not called for one reply king escape position.
 //#define BNZ_VER                 "40"	// 20230519 dfpn is called from all threads. make_book, kldinterval.
-#define BNZ_VER                 "41"	// 20231207 kldgain 0.0000004, kldinterval 400, -p 12800, ave playouts is 3180/move.
+//#define BNZ_VER                 "41"	// 20231207 kldgain 0.0000004, kldinterval 400, -p 12800, ave playouts is 3180/move.
+#define BNZ_VER                 "42"	// 20240214 nDrawMove 0 -> 513 default, MAX_DRAW_MOVES = 513
+
 #define BNZ_NAME                "AobaZero"
 
 //#define BNZ_VER                 "16"	// 20210528 komaochi, mate3
