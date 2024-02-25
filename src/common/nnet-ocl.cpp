@@ -190,7 +190,7 @@ void compute_BNReLU(__global const float *mean, __global const float *sd_inv,
   float b = mean[ch];
   float c = a*(fin[ch*NN_IN + ub*SIZE_PLANE + sq] - b);
   fout[ch*NB*128U + ub*128U + sq]
-    = c / (1.0 + exp(-c));	// SWISH
+    = c / (1.0f + exp(-c));	// SWISH
 //  = max(0.0f, a*(fin[ch*NN_IN + ub*SIZE_PLANE + sq] - b));
 }
 )";
@@ -359,14 +359,14 @@ void func_BNReLU(__local float *f, uint off, float sd_inv, float mean,
                  float x) {
   float c = sd_inv * (x - mean) + f[off];
 //f[off] = max(0.0f, sd_inv * (x - mean) + f[off]);
-  f[off] = c / (1.0 + exp(-c));	// SWISH
+  f[off] = c / (1.0f + exp(-c));	// SWISH
 }
 #else
 void func_BNReLU(__local float *f, uint off, float sd_inv, float mean,
                  float x) {
   float c = sd_inv * (x - mean);
 //f[off] = max(0.0f, sd_inv * (x - mean));
-  f[off] = c / (1.0 + exp(-c));	// SWISH
+  f[off] = c / (1.0f + exp(-c));	// SWISH
 }
 #endif
 
@@ -700,7 +700,7 @@ void compute_matM(__global const uint *gA, __global const uint *gB,
   gC += ulm*SGEMM_NTM*NN + uln*SGEMM_NTN;
   for (uint upm = 0; upm < SGEMM_NPM; ++upm)
     for (uint upn = 0; upn < SGEMM_NPN; ++upn)
-      wmma_store(gC + upm*SGEMM_NLTM*NN + upn*SGEMM_NLTN, (&pD[upm][upn][0])); }
+      wmma_store(gC + upm*SGEMM_NLTM*NN + upn*SGEMM_NLTN, &pD[upm][upn][0]); }
 
 #endif
 )";
@@ -867,7 +867,7 @@ void resize_bias_ReLU(__global const float *bias, __global const float *fin,
   uint nm = get_global_id(1);
   float c = fin[nm*LD_IN + nn] + bias[nm];
 //fout[nm*LD_OUT + nn] = fmax(0.0f, fin[nm*LD_IN + nn] + bias[nm]);
-  fout[nm*LD_OUT + nn] = c / (1.0 + exp(-c));	// SWISH
+  fout[nm*LD_OUT + nn] = c / (1.0f + exp(-c));	// SWISH
 }
 )";
 
