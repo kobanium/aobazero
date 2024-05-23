@@ -881,7 +881,12 @@ void uct_tree_loop(tree_t * restrict ptree, int sideToMove, int ply)
 			if ( isKLDGainSmall(ptree, sideToMove) ) set_stop_search();
 		}
 		if ( is_use_exact() && (exact_value == EX_WIN || exact_value == EX_LOSS) ) set_stop_search();
-		if ( is_stop_search() ) break;
+		if ( is_stop_search() ) {
+			if (is_main_thread(ptree)) {
+				send_usi_info(ptree, sideToMove, ply, count, (int)(count / get_spend_time(search_start_ct)));
+			}
+			break;
+		}
 	}
 }
 
