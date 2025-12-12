@@ -1,2 +1,16 @@
 weight-save/*
 log/*
+pool/*
+archive/*
+weight/*
+bin/*
+weight-list.cfg
+ema.cfg
+.gitignore
+*.o
+*.d
+*.inc
+*.BAK
+net-test.txt
+src/usi-engine/aobaz
+.gitignore

@@ -1599,7 +1599,7 @@ void update_AverageWinrate(const char *str)
 {
 	// "0.547"
 	average_winrate = atof(str);
-	if ( average_winrate <= 0 || average_winrate >= 1 ) DEBUG_PRT("aw=%f\n",average_winrate);
+	if ( average_winrate <= 0 || average_winrate >= 1 ) DEBUG_PRT("aw=%f,%s\n",average_winrate,str);
 	PRT("average_winrate=%f\n",average_winrate);
 }
 

@@ -66,6 +66,7 @@ struct Game {
   USIEngine engine0, engine1;
   string startpos, record;
   uint nplay;
+  uint think_moves;
   Color turn0;
   Game(uint game_id, const string &cmd0, const string &cmd1) noexcept
   : engine0(game_id, 0U, cmd0), engine1(game_id, 1U, cmd1) {}
@@ -80,7 +81,7 @@ struct RowResult {
 
 static void procedure_io(USIEngine &myself, USIEngine &opponent,
 			 Node<Param::maxlen_play_learn> &node,
-			 string &startpos, string &record) noexcept;
+			 string &startpos, string &record, Game &game) noexcept;
 static void node_update(USIEngine &myself, USIEngine &opponent,
 			Node<Param::maxlen_play_learn> &node, string &startpos,
 			string &record, char *line) noexcept;
@@ -97,12 +98,13 @@ static void log_out(USIEngine &c, const char *fmt, ...) noexcept;
 static void close_flush(USIEngine &c) noexcept;
 static void file_out(const char *fmt, ...) noexcept;
 
-constexpr char str_book[]   = "records2016_10818.sfen";
-constexpr uint size_book    = 10831U;
+constexpr char default_book[]   = "records2016_10818.sfen";
+constexpr uint default_book_size = 10831U;
 static string book_file;
-static void load_book_file(string file=str_book) noexcept;
+static void load_book_file(string file) noexcept;
+static bool book_shuffle = true;
 
-const char *str_go_visit[] = { "go", "go visit" };
+const char *str_go_visit[] = { "go", "go visit", "go btime 0 wtime 0 byoyomi 3000" };
 static int go_visit = 0;
 static bool flag_f          = false;
 static bool flag_r          = false;
@@ -149,19 +151,17 @@ int main(int argc, char **argv) {
   set_terminate(on_terminate);
 
   if (get_options(argc, argv) < 0) return 1;
-  if (flag_b) load_book_file();
+  if (flag_b) book_file = default_book;
   if ( !book_file.empty() ) load_book_file(book_file);
 
   if (num_N == 2) {
     seq_s.emplace_back();
-    nnets.emplace_back(impl_I[0], 0U, num_P, num_B[0], num_U[0], 0, num_H[0],
-		       num_T[0], false, fname_W[0], "");
-    nnets.emplace_back(impl_I[1], 1U, num_P, num_B[1], num_U[1], 0, num_H[1],
-		       num_T[1], false, fname_W[1], ""); }
-  else if (num_N == 1) {
+    nnets.emplace_back(impl_I[0], 0U, num_P, num_B[0], num_U[0], 0, num_H[0], num_T[0], false, fname_W[0], "");
+    nnets.emplace_back(impl_I[1], 1U, num_P, num_B[1], num_U[1], 0, num_H[1], num_T[1], false, fname_W[1], "");
+  } else if (num_N == 1) {
     seq_s.emplace_back();
-    nnets.emplace_back(impl_I[0], 0U, num_P * 2, num_B[0], num_U[0], 0,
-		       num_H[0], num_T[0], false, fname_W[0], ""); }
+    nnets.emplace_back(impl_I[0], 0U, num_P * 2, num_B[0], num_U[0], 0, num_H[0], num_T[0], false, fname_W[0], "");
+  }
 
   static vector<unique_ptr<Game>> games;
   for (uint u = 0; u < static_cast<uint>(num_P); ++u)
@@ -172,7 +172,7 @@ int main(int argc, char **argv) {
   uint latest = 0;
   uint result[Color::ok_size][NodeType::ok_size][3] = {{{0}}};
   bool is_first = true;
-  if (num_d > 0) turn0 = SAux::white;
+//if (num_d > 0) turn0 = SAux::white;
 
   OSI::handle_signal(on_signal);
   for (auto &ptr : games) {
@@ -187,47 +187,39 @@ int main(int argc, char **argv) {
   while (latest < num_m) {
     if (flag_signal) break;
     if (Child::wait(1000U) == 0) continue;
-
     for (auto &ptr : games) {
-      procedure_io(ptr->engine0, ptr->engine1, ptr->node, ptr->startpos,
-		   ptr->record);
-      procedure_io(ptr->engine1, ptr->engine0, ptr->node, ptr->startpos,
-		   ptr->record);
+      procedure_io(ptr->engine0, ptr->engine1, ptr->node, ptr->startpos, ptr->record, *ptr);
+      procedure_io(ptr->engine1, ptr->engine0, ptr->node, ptr->startpos, ptr->record, *ptr);
       if (! ptr->node.get_type().is_term()) continue;
-
       cout << "'Play #" << ptr->nplay << " ends." << endl;
-
       ptr->record += "\n%" + string(ptr->node.get_type().to_str()) + "\n";
-      row_results[ptr->nplay] = { ptr->node.get_type(), ptr->node.get_turn(),
-				  ptr->node.get_len_path(), ptr->turn0,
-				  ptr->record };
+      row_results[ptr->nplay] = { ptr->node.get_type(), ptr->node.get_turn(), ptr->node.get_len_path(), ptr->turn0, ptr->record };
       while (latest < num_m) {
-	auto it = row_results.find(latest);
-	if (it == row_results.end()) break;
-	
-	cout << "'Count result #" << latest << endl;
-	string str = addup_result(it->second.type_term,
-				  it->second.turn, it->second.len,
-				  it->second.turn0, result);
-	if (is_first) is_first = false;
-	else          str     += "/\n";
-
-	if (flag_r) str += it->second.record;
-	cout << str;
-	row_results.erase(it);
-	latest += 1U; }
-      
+		auto it = row_results.find(latest);
+		if (it == row_results.end()) break;
+		cout << "'Count result #" << latest << endl;
+		string str = addup_result(it->second.type_term, it->second.turn, it->second.len, it->second.turn0, result);
+		if (is_first) is_first = false;
+		else          str     += "/\n";
+		if (flag_r) str += it->second.record;
+		cout << str;
+		row_results.erase(it);
+		latest += 1U;
+	  }
       start_newgame(*ptr, nplay++, turn0);
-      if (! flag_f) turn0 = turn0.to_opp(); } }
+      if (! flag_f) turn0 = turn0.to_opp();
+    }
+  }
 
   if (flag_signal) { cout << "cought signal " << flag_signal << endl; }
   for (auto &ptr : games) {
     close_flush(ptr->engine0);
-    close_flush(ptr->engine1); }
-
+    close_flush(ptr->engine1);
+  }
   while (!nnets.empty()) nnets.pop_back();
   while (!seq_s.empty()) seq_s.pop_back();
-  return 0; }
+  return 0;
+}
 
 enum { win = 0, draw = 1, lose = 2 };
 
@@ -382,31 +374,35 @@ static string result_out(Color turn, uint result[][NodeType::ok_size][3],
 
 static void procedure_io(USIEngine &myself, USIEngine &opponent,
 			 Node<Param::maxlen_play_learn> &node,
-			 string &startpos, string &record) noexcept {
+			 string &startpos, string &record, Game &game) noexcept {
   assert(myself.ok() && opponent.ok() && node.ok());
   bool eof = false;
-  char line[65536];
+  static char line[65536];
 
   if (myself.has_line_err()) {
     uint ret = myself.getline_err(line, sizeof(line));
     if (ret == 0) eof = true;
-    else log_out(myself, "%s", line); }
-
+    else log_out(myself, "%s", line);
+  }
   if (myself.has_line_in()) {
     uint ret = myself.getline_in(line, sizeof(line));
     if (ret == 0) eof = true;
     else {
+      if ( strstr(line,"bestmove ") ) {
+//      if ( game.think_moves++ > 9 ) sprintf(line,"bestmove resign");	// book test
+      }
       log_out(myself, "%s", line);
-      node_update(myself, opponent, node, startpos, record, line); } }
-
+      node_update(myself, opponent, node, startpos, record, line);
+    }
+  }
   if (eof) {
     while (0 < myself.getline_err(line, sizeof(line)))
       log_out(myself, "%s", line);
     while (0 < myself.getline_in(line, sizeof(line)))
       log_out(myself, "%s", line);
-    die(ERR_INT("Player %u of game %u terminates.\n%s",
-		myself.get_player_id(), myself.get_game_id(),
-		static_cast<const char *>(node.to_str()))); } }
+    die(ERR_INT("Player %u of game %u terminates.\n%s",myself.get_player_id(), myself.get_game_id(),static_cast<const char *>(node.to_str())));
+  }
+}
 
 static void node_update(USIEngine &myself, USIEngine &opponent,
 			Node<Param::maxlen_play_learn> &node, string &startpos,
@@ -420,9 +416,8 @@ static void node_update(USIEngine &myself, USIEngine &opponent,
 
   Action action = node.action_interpret(token, SAux::usi);
   if (!action.ok())
-    die(ERR_INT("Bad move %s (Player %u of game %u)\n%s", token,
-		myself.get_player_id(), myself.get_game_id(),
-		static_cast<const char *>(node.to_str())));
+    die(ERR_INT("Bad move %s (Player %u of game %u)\n%s",
+     token, myself.get_player_id(), myself.get_game_id(), static_cast<const char *>(node.to_str())));
 
   if (action.is_move()) {
     if ( go_visit ) {
@@ -501,99 +496,99 @@ static void node_update(USIEngine &myself, USIEngine &opponent,
   startpos += string(" ") + string(token);
   child_out(myself,   startpos.c_str());
   child_out(opponent, startpos.c_str());
-  child_out(opponent, str_go_visit[go_visit]); }
+  child_out(opponent, str_go_visit[go_visit]);
+}
 
 static void start_newgame(Game &game, uint nplay, const Color &turn0) noexcept {
   bool fTurn0Black = (turn0 == SAux::black);
-  cout << "'Play #" << nplay << " starts from player"
-       << (fTurn0Black ? "0." : "1.") << endl;
-
+  cout << "'Play #" << nplay << " starts from player" << (fTurn0Black ? "0." : "1.") << endl;
   bool fSenteName = fTurn0Black;
-  if ( num_d ) fSenteName = true;
-  game.record  = "";
-  game.record += "N+player" + string(fSenteName ? "0\n" : "1\n");
-  game.record += "N-player" + string(fSenteName ? "1\n" : "0\n");
+//if ( num_d ) fSenteName = true;
+  string rec = "";
+  rec += "N+player" + string(fSenteName ? "0\n" : "1\n");
+  rec += "N-player" + string(fSenteName ? "1\n" : "0\n");
 
   game.nplay = nplay;
   game.turn0 = turn0;
-  game.node.clear(num_d);
+  game.think_moves = 0;
 
-  if ( num_d == 0 ) {
-    game.record += "PI\n+";
-  } else {
-    string s = static_cast<const char *>(game.node.to_str());
-    for (int i=0; i<9; i++) s.at(30*i+1) = s.at(30*i+1)+1;
-    int n = s.find("Hand");
-    game.record += s.substr(0, n);
-    game.record += "-";
-  }
-
-  child_out(game.engine0, "usinewgame");
-  child_out(game.engine1, "usinewgame");
-
-
-  if ( !book_file.empty() ) {
-    const int KOMAOCHI_BOOK_SIZE = 800;
-    const int KOMAOCHI_BOOK_MOVES = 16;
+  if ( book.size() > 0 ) {
     int n = nplay;
-    if ( num_d==0 && !flag_f ) n = n / 2;
-    int book_i = n % KOMAOCHI_BOOK_SIZE;
-    game.startpos = "position " + book[book_i];
-    int del = 6;
-    if ( game.startpos.find("startpos") != string::npos ) del = 2;
-    std::stringstream ss(book[book_i]);
-    for (int i = 0; i < KOMAOCHI_BOOK_MOVES + del; ++i) {
+    if ( !flag_f ) n = n / 2;
+    int book_i = n % book.size();
+    string sb = book[book_i];
+
+	string init_pos[HANDICAP_TYPE-1] = {
+      "sfen lnsgkgsn1/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w -",// ky
+      "sfen lnsgkgsnl/1r7/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w -",  // ka
+      "sfen lnsgkgsnl/7b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w -",  // hi
+      "sfen lnsgkgsnl/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w -",	   // 2mai
+      "sfen 1nsgkgsn1/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w -",	   // 4mai
+      "sfen 2sgkgs2/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w -"	   // 6mai
+    };
+	num_d = 0;	// for handicap jishogi hantei.
+	for (int i=0;i<HANDICAP_TYPE-1;i++) {
+      if ( sb.find(init_pos[i]) != string::npos ) num_d = i+1;
+    }
+	// startpos moves 2g2f 8c8d 7g7f 4a3b 6i7h
+	// sfen 1n1gk2nl/1r4g2/1sppppspp/L5p2/1p5P1/2P6/1PSPPPPSP/7R1/1N1GKG1NL w BLPbp 24
+	// sfen lnsgkgsnl/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1 moves 7c7d
+    int del = 2;
+    if ( sb.find("sfen") != string::npos ) {
+      game.node.clear(num_d, sb.c_str());
+      del = 6;
+      string s = static_cast<const char *>(game.node.to_str());
+      s.pop_back();	// delete "+\n" or "-\n"
+      s.pop_back();
+      rec += s;
+	} else {
+      game.node.clear(0);
+      rec += "PI\n";
+	}
+    int book_moves = std::count(sb.begin(), sb.end(), ' ') - (del-1);	// 1 ... hirate, 5 ... sfen
+    game.startpos = "position " + sb;
+    if ( sb.find("moves") == string::npos ) {
+      game.startpos += " moves";
+    }
+
+    if ( game.node.get_turn() == SAux::black ) {
+      rec += "+";
+    } else {
+      rec += "-";
+    }
+//  cerr << "book_move=" << book_moves << ",num_d="<< num_d << ",n=" << n << ",nplay=" << nplay << ",book_i=" << book_i << "," << sb << endl;
+
+    std::stringstream ss(sb);
+    for (int i = 0; i < book_moves + del; ++i) {
       string token;
       ss >> token;
       if (i < del) continue;
       Action action = game.node.action_interpret(token.c_str(), SAux::usi);
-      if (! action.ok()) die(ERR_INT("Bad book move %s", token.c_str()));
-
+      if (! action.ok()) die(ERR_INT("Bad book move=%s,book_i=%d,[]=%s", token.c_str(),book_i,sb.c_str()));
       if (action.is_move()) {
-        if ((game.node.get_len_path() % 8U) == 0) game.record += "\n";
-        else game.record += ",";
-        game.record += game.node.get_turn().to_str();
-        game.record += action.to_str(SAux::csa);
+        if ((game.node.get_len_path() % 8U) == 0) rec += "\n";
+        else rec += ",";
+        rec += game.node.get_turn().to_str();
+        rec += action.to_str(SAux::csa);
       }
       game.node.take_action(action);
     }
-  } else if (num_d>0) { // hadicap game. drop ky,ka,hi,2mai,4mai,6mai. also change shogibase.cpp node.clear(min_d)
-	string init_pos[HANDICAP_TYPE-1] = {
-      "position sfen lnsgkgsn1/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",// ky
-      "position sfen lnsgkgsnl/1r7/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// ka
-      "position sfen lnsgkgsnl/7b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// hi
-      "position sfen lnsgkgsnl/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// 2mai
-      "position sfen 1nsgkgsn1/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// 4mai
-      "position sfen 2sgkgs2/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL"		// 6mai
-    };
-    if (num_d>=HANDICAP_TYPE || !flag_f) die(ERR_INT("Handicap game Err. Must be with 'f'"));
-    game.startpos = init_pos[num_d-1] + " w - 1 moves";
-  } else if (flag_f || ! flag_b) {
-    game.startpos = "position startpos moves";
   } else {
-    game.startpos = "position " + book[nplay / 2U];
-    std::stringstream ss(book[nplay / 2U]);
-    for (int i = 0; i < 24 + 2; ++i) {
-      string token;
-      ss >> token;
-      if (i < 2) continue;
-      Action action = game.node.action_interpret(token.c_str(), SAux::usi);
-      if (! action.ok()) die(ERR_INT("Bad book move %s", token.c_str()));
-
-      if (action.is_move()) {
-        if ((game.node.get_len_path() % 8U) == 0) game.record += "\n";
-        else game.record += ",";
-        game.record += game.node.get_turn().to_str();
-        game.record += action.to_str(SAux::csa);
-      }
-      game.node.take_action(action);
-    }
+    game.node.clear(0);
+    game.startpos = "position startpos moves";
+    rec += "PI\n+";
   }
+  game.record = "'engine start ply=" + to_string( game.node.get_len_path() ) + "\n" + rec;
+
+  child_out(game.engine0, "usinewgame");
+  child_out(game.engine1, "usinewgame");
   child_out(game.engine0, game.startpos.c_str());
   child_out(game.engine1, game.startpos.c_str());
 
-  if (fTurn0Black) child_out(game.engine0, str_go_visit[go_visit]);
-  else             child_out(game.engine1, str_go_visit[go_visit]);
+  bool fWhiteStart = (game.node.get_turn() == SAux::white );
+  bool fBlack = (fWhiteStart + fTurn0Black) & 1;
+  if (fBlack) child_out(game.engine0, str_go_visit[go_visit]);
+  else        child_out(game.engine1, str_go_visit[go_visit]);
 }
 
 static void start_engine(USIEngine &c, int i) noexcept {
@@ -736,7 +731,7 @@ static int get_options(int argc, const char * const *argv) noexcept {
   uint num;
 
   while (! flag_err) {
-    int opt = Opt::get(argc, argv, "0:1:c:m:d:P:I:B:U:H:W:T:o:i:frsubv");
+    int opt = Opt::get(argc, argv, "0:1:c:m:P:I:B:U:H:W:T:o:y:i:frsubvn");
     if (opt < 0) break;
 
     switch (opt) {
@@ -749,13 +744,21 @@ static int get_options(int argc, const char * const *argv) noexcept {
     case 'b': flag_b = true; break;
     case 'v': go_visit = 1; break;
     case 'c': shell.reset_fname(Opt::arg); break;
-    case 'd':
-      num_d = strtol(Opt::arg, &endptr, 10);
-      if (endptr == Opt::arg || *endptr != '\0'
-	  || num_d >= HANDICAP_TYPE || num_d < 0) flag_err = true;
-      break;
+//  case 'd':
+//    num_d = strtol(Opt::arg, &endptr, 10);
+//    if (endptr == Opt::arg || *endptr != '\0' || num_d >= HANDICAP_TYPE || num_d < 0) flag_err = true;
+//    break;
+    case 'n': book_shuffle = false; break;
     case 'o':
       book_file = string(Opt::arg);
+      break;
+    case 'y':
+      {
+        static char byo[256]; 
+        go_visit = 2;
+        sprintf(byo,"go btime 0 wtime 0 byoyomi %s",string(Opt::arg).c_str());
+        str_go_visit[go_visit] = byo;
+      }
       break;
     case 'm':
       num_m = strtol(Opt::arg, &endptr, 10);
@@ -844,15 +847,19 @@ static int get_options(int argc, const char * const *argv) noexcept {
 
   if (!flag_err && 0 < cmd0.size() && 0 < cmd1.size()) {
     cout << "'-------------------------------------------------------------\n";
-    cout << "'Player0:    " << shell.get_fname() << " -c \"" << cmd0 << "\"\n";
-    cout << "'Player1:    " << shell.get_fname() << " -c \"" << cmd1 << "\"\n";
-    cout << "'Gameplays:  " << num_m << "\n";
-    cout << "'Fix color?  " << (flag_f ? "Yes\n" : "No\n");
-    cout << "'Out USI?    " << (flag_u ? "Yes\n" : "No\n");
-    cout << "'Book?       " << (flag_b ? "Yes\n" : "No\n");
-    cout << "'Parallel:   " << num_P << "\n";
-    cout << "'Handicap:   " << num_d << "\n";
-    cout << "'Book file:  " << book_file << "\n";
+    cout << "'";
+    for (int i=0; i<argc; i++) cout << argv[i] << " ";
+    cout << "\n";
+    cout << "'Player0:      " << shell.get_fname() << " -c \"" << cmd0 << "\"\n";
+    cout << "'Player1:      " << shell.get_fname() << " -c \"" << cmd1 << "\"\n";
+    cout << "'Gameplays:    " << num_m << "\n";
+    cout << "'Fix color?    " << (flag_f ? "Yes\n" : "No\n");
+    cout << "'Out USI?      " << (flag_u ? "Yes\n" : "No\n");
+    cout << "'Book?         " << (flag_b ? "Yes\n" : "No\n");
+    cout << "'Book file:    " << book_file << "\n";
+    cout << "'Book shuffle: " << (book_shuffle ? "Yes\n" : "No\n");
+    cout << "'Parallel:     " << num_P << "\n";
+    cout << "'Handicap:     " << num_d << "\n";
     for (int i = 0; i < num_N; ++i) {
       cout << "'NNet" << i << ":\n";
       cout << "'- Implimentation " << (int)impl_I[i] << "\n";
@@ -902,9 +909,10 @@ Other options:
   -u       Print verbose USI messages.
   -b       Use positions recorded in records2016_10818.sfen (a collection of
            24 moves from the no-handicap initial position).
-  -o STR   Use positions recorded file. Especially for hadicap opening book.
-  -v       use 'go visit' to get aobak 'v=' and searched moves and nodes.
-  -d NUM   Handicap Game. NUM = 1(ky), 2(ka), 3(hi), 4(2mai), 5(4mai), 6(6mai)
+  -o STR   Use sfen positions file. Like 'start_sfens_ply32.sfen'
+  -n       Do not shuffle sfen positions file.
+  -v       Use 'go visit' to get aobak 'v=' and searched moves and nodes.
+  -y STR   Use 'go btime 0 wtime 0 byoyomi 3000'. STR=3000
   -c SHELL Use SHELL, e.g., /bin/csh, instead of /bin/sh.
   -P NUM   Generate NUM gameplays simultaneously. The default is 1.
   -I STR   Specifies nnet implementation. STR can conatin two characters
@@ -945,19 +953,22 @@ static void load_book_file(string file) noexcept {
     n = str.size();
     if ( n > 0 && (str.at(n-1)=='\r' || str.at(n-1)=='\n') ) str.pop_back();
 //  str.pop_back(); // delete last " "
+    if (std::isspace(static_cast<unsigned char>(str.back()))) {
+        str.pop_back();
+    }
     book.push_back(std::move(str));
   }
-  if ( file == str_book ) {
-	if ( book.size() != size_book ) die(ERR_INT("Bad book size %d", book.size()));
-    if (flag_f) die(ERR_INT("Option -f with -b is not supported."));
+  if ( file == default_book ) {
+	if ( book.size() != default_book_size ) die(ERR_INT("Bad book size %d", book.size()));
+//  if (flag_f) die(ERR_INT("Option -f with -b is not supported."));
   } else {
     if (flag_b) die(ERR_INT("Option -b with -o is not supported."));
-    if (!flag_f && num_d!=0 ) die(ERR_INT("-o must be with -f."));
   }
+  if ( book.size()==0 ) die(ERR_INT("book size = 0"));
 
   std::random_device seed_gen;
   auto seed = seed_gen();
   std::mt19937 engine(seed);
-  std::shuffle(book.begin(), book.end(), engine);
+  if ( book_shuffle ) std::shuffle(book.begin(), book.end(), engine);
   cout << "'Read " << book.size() << " lines from " << file << " seed=" << seed << std::endl;
 }

@@ -75,7 +75,7 @@ void load_hadicap() {
 	FILE *fp = fopen(AVERAGE_WINRATE_SYN,"r");
 	if ( fp==NULL ) {
 		std::cout << "fail open " << AVERAGE_WINRATE_SYN << std::endl;
-		return;
+		die(ERR_INT("AVERAGE_WINRATE ERROR"));
 	}
 	char str[256] = { 0 } ;
 	if ( fgets( str, 255, fp ) == NULL ) die(ERR_INT("AVERAGE_WINRATE ERROR"));
@@ -180,20 +180,20 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
     digest = XZAux::crc64(line, digest);
     digest = XZAux::crc64(newline, 1U, digest);
     
-    if (!has_result && line[0] == '%' && node.get_type().is_term()
-	&& strcmp(line + 1, node.get_type().to_str()) == 0) {
+    if (!has_result && line[0] == '%' && node.get_type().is_term() && strcmp(line + 1, node.get_type().to_str()) == 0) {
       has_result = true;
       if      (node.get_type() == SAux::illegal_bwin) result = black_win;
       else if (node.get_type() == SAux::illegal_wwin) result = black_lose;
       else if (node.get_type() == SAux::repeated)     result = draw;
       else if (node.get_type() == SAux::maxlen_term)  result = draw;
       else die(ERR_INT("INTERNAL ERROR"));
-	
+
       if      (result == black_win)  value_min = value_min_black;
       else if (result == black_lose) value_min = value_min_white;
       else value_min = std::min(value_min_black, value_min_white);
       node_type = node.get_type().to_u();
-      continue; }
+      continue;
+    }
     
     const char *token;
     char *saveptr_token, *endptr;
@@ -208,78 +208,81 @@ examine_record(const char *rec, size_t len_rec, uint64_t &digest,
       node.take_action(action);
       token = strtok_r(nullptr, ",\'", &saveptr_token);
       if (!token) {
-	if (node.get_type() == SAux::resigned) {
-	  if (SAux::black == node.get_turn()) result = black_lose;
-	  else                                result = black_win; }
-	else if (node.get_type() == SAux::windclrd) {
-	  if (SAux::black == node.get_turn()) result = black_win;
-	  else                                result = black_lose; }
-	else die(ERR_INT("INTERNAL ERROR"));
+        if (node.get_type() == SAux::resigned) {
+          if (SAux::black == node.get_turn()) result = black_lose;
+          else                                result = black_win;
+        } else if (node.get_type() == SAux::windclrd) {
+          if (SAux::black == node.get_turn()) result = black_win;
+          else                                result = black_lose;
+        } else die(ERR_INT("INTERNAL ERROR"));
 	
-	if      (result == black_win)  value_min = value_min_black;
-	else if (result == black_lose) value_min = value_min_white;
-	else die(ERR_INT("INTERNAL ERROR"));
-	node_type = node.get_type().to_u();
-	continue; }
+        if      (result == black_win)  value_min = value_min_black;
+        else if (result == black_lose) value_min = value_min_white;
+        else die(ERR_INT("INTERNAL ERROR"));
+        node_type = node.get_type().to_u();
+        continue;
+      }
 
       if (strcmp(token, "autousi") == 0) {
-	if (flag_no_resign) return false;
-	if (node.get_type() != SAux::resigned) return false;
-	node_type = node.get_type().to_u();
-	continue; }
+        if (flag_no_resign) return false;
+        if (node.get_type() != SAux::resigned) return false;
+        node_type = node.get_type().to_u();
+        continue;
+      }
 
-      return false; }
-
-    token = strtok_r(nullptr, ",\'", &saveptr_token);
-    if (!token || token[0] != 'v' || token[1] != '=') return false;
-
-    token += 2;
-    value = strtof(token, &endptr);
-    if (endptr == token || *endptr != '\0' || value < 0.0f
-	|| value == HUGE_VALF) return false;
-
-    if (node.get_turn() == SAux::black) {
-      if (value < value_min_black) value_min_black = value; }
-    else {
-      if (value < value_min_white) value_min_white = value; }
-
-    token = strtok_r(nullptr, ",\'", &saveptr_token);
-    if (!token || token[0] != 'r' || token[1] != '=') return false;
-    token += 2;
-    float raw_value = strtof(token, &endptr);
-    if (endptr == token || *endptr != '\0' || raw_value < 0.0f
-	|| raw_value == HUGE_VALF) return false;
-
-
-    token = strtok_r(nullptr, ",\'", &saveptr_token);
-    if (!token) return false;
-
-    num = strtol(token, &endptr, 10);
-    if (endptr == token || *endptr != '\0' || num < 1 || num == LONG_MAX)
       return false;
-    
-    while (true) {
+    }
+
+    token = strtok_r(nullptr, ",\'", &saveptr_token);
+    if ( token ) {
+      if (!token || token[0] != 'v' || token[1] != '=') return false;
+
+      token += 2;
+      value = strtof(token, &endptr);
+      if (endptr == token || *endptr != '\0' || value < 0.0f || value == HUGE_VALF) return false;
+      if (node.get_turn() == SAux::black) {
+        if (value < value_min_black) value_min_black = value;
+      } else {
+        if (value < value_min_white) value_min_white = value;
+      }
+
       token = strtok_r(nullptr, ",\'", &saveptr_token);
-      if (!token) break;
-      Action a = node.action_interpret(token, SAux::csa);
-      assert(a.ok());
-      if (!a.is_move()) return false;
-      
+      if (!token || token[0] != 'r' || token[1] != '=') return false;
+      token += 2;
+      float raw_value = strtof(token, &endptr);
+      if (endptr == token || *endptr != '\0' || raw_value < 0.0f || raw_value == HUGE_VALF) return false;
+
       token = strtok_r(nullptr, ",\'", &saveptr_token);
       if (!token) return false;
+
       num = strtol(token, &endptr, 10);
-      char c = *endptr;
-      bool hasPolicy = ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z');
-      if (endptr == token || hasPolicy == false || num < 1 || num == LONG_MAX)
-	return false;
-      tot_nchild += 1U; }
+      if (endptr == token || *endptr != '\0' || num < 1 || num == LONG_MAX) return false;
+
+      while (true) {
+        token = strtok_r(nullptr, ",\'", &saveptr_token);
+        if (!token) break;
+        Action a = node.action_interpret(token, SAux::csa);
+        assert(a.ok());
+        if (!a.is_move()) return false;
+
+        token = strtok_r(nullptr, ",\'", &saveptr_token);
+        if (!token) return false;
+        num = strtol(token, &endptr, 10);
+        char c = *endptr;
+        bool hasPolicy = ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z');
+        if (endptr == token || hasPolicy == false || num < 1 || num == LONG_MAX) return false;
+        tot_nchild += 1U;
+      }
+    }
 
     len_play += 1U;
-    node.take_action(action); }
+    node.take_action(action);
+  }
   
   if (!node.get_type().is_term()) return false;
   ave_child = (float)tot_nchild / (float)len_play;
-  return true; }
+  return true;
+}
 
 static void write_pooltemp(const FName &fxz, PtrLen<const char> pl) noexcept {
   assert(pl.ok());

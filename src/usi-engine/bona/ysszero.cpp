@@ -54,10 +54,13 @@ bool fDiffRootVisit = false;
 bool fSkipOneReply  = true;		// 王手を逃げる手が1手の局面は評価せずに木を降りる
 bool fSkipKingCheck = false;	// 王手がかかってる局面では評価せずに木を降りる
 bool fRawValuePolicy = true;
- 
+bool fDLBook = false;
+int first_usi_position_moves = 0;	// usi_newgame 以降で最初に来た usi_position の手数
+
 int nLimitUctLoop = 100;
 double dLimitSec = 0;
 int nDrawMove = MAX_DRAW_MOVES;	// 引き分けになる手数。0でなし。floodgateは256, 選手権は321。学習中も探索内では引き分けに
+int time_left_msec[2];
 
 const float FIXED_RESIGN_WINRATE = 0.10;	// 自己対戦でこの勝率以下なら投了。0で投了しない。0.10 で勝率10%。 0 <= x <= +1.0
 float resign_winrate = 0;
@@ -72,6 +75,7 @@ char engine_name[SIZE_CMDLINE];
 float average_winrate = 0;
 int balanced_opening_move[PLY_MAX];
 int usi_newgames;
+int usi_positions;
 
 std::vector <HASH_SHOGI> hash_shogi_table;
 const int HASH_SHOGI_TABLE_SIZE_MIN = 1024*4*4;
@@ -280,6 +284,18 @@ int YssZero_com_turn_start( tree_t * restrict ptree )
 		PRT("%.2f sec\n",get_spend_time(ct1));
 	}
 
+	if ( fDLBook ) {
+		std::string best = get_dlshogi_book(ptree);
+//		std::string best = get_flood_book(ptree);
+		if ( best.size() ) {
+			char str_best[USI_BESTMOVE_LEN+11+7];
+			sprintf( str_best,"bestmove %s\n",best.c_str() );
+			set_latest_bestmove(str_best);
+			send_latest_bestmove();
+			return 1;
+		}
+	}
+
 	int ply = 1;	// 1 から始まる
 /*
 	int move_num = generate_all_move( ptree, root_turn );
@@ -347,7 +363,7 @@ int YssZero_com_turn_start( tree_t * restrict ptree )
 }
 
 char latest_bestmove[USI_BESTMOVE_LEN] = "bestmove resign\n";
-void set_latest_bestmove(char *str)
+void set_latest_bestmove(const char *str)
 {
 	strcpy(latest_bestmove,str);
 }
@@ -849,8 +865,10 @@ int get_thread_id(tree_t * restrict ptree)
 }
 int is_limit_sec()
 {
+	double st = get_spend_time(search_start_ct);
+	if ( time_left_msec[root_turn] && st > (double)time_left_msec[root_turn]/1000.0 - 10.0 ) return 1;
 	if ( dLimitSec == 0 ) return 0;
-	if ( get_spend_time(search_start_ct) >= dLimitSec ) return 1;
+	if ( st >= dLimitSec ) return 1;
 	return 0;
 }
 int is_limit_sec_or_stop_input() {
@@ -874,13 +892,15 @@ void uct_tree_loop(tree_t * restrict ptree, int sideToMove, int ply)
 		ptree->sum_reached_ply += ptree->reached_ply;
 		if ( ptree->reached_ply > ptree->max_reached_ply ) ptree->max_reached_ply = ptree->reached_ply;
 		int count = inc_uct_count();
+		if ( is_use_exact() && (exact_value == EX_WIN || exact_value == EX_LOSS) ) set_stop_search();
 		if ( is_main_thread(ptree) ) {
-			if ( is_send_usi_info(0) ) send_usi_info(ptree, sideToMove, ply, count, (int)(count/get_spend_time(search_start_ct)));
 			if ( IsHashFull() ) set_stop_search();
 			is_limit_sec_or_stop_input();
 			if ( isKLDGainSmall(ptree, sideToMove) ) set_stop_search();
+			if ( is_send_usi_info() || is_stop_search() ) {
+				send_usi_info(ptree, sideToMove, ply, count, (int)(count/get_spend_time(search_start_ct)));
+			}
 		}
-		if ( is_use_exact() && (exact_value == EX_WIN || exact_value == EX_LOSS) ) set_stop_search();
 		if ( is_stop_search() ) break;
 	}
 }
@@ -1177,8 +1197,10 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 	}
 //	PRT("\n");
 
-	// 30手までは通常の温度で選び、31手以上はハンデのレートで弱くする。
-	int is_opening_random = (ptree->nrep < nVisitCount || ptree->nrep < nVisitCountSafe);
+	// 指定局面の開始から手数から10手までは通常の温度で選び、11手以上はハンデのレートで弱くする。
+	int nVC = nVisitCount;
+	if ( nVC ) nVC += first_usi_position_moves;
+	int is_opening_random = (ptree->nrep < nVC || ptree->nrep < nVisitCountSafe);
 	double select_rand_prob = dSelectRandom;
 	double softmax_temp = cfg_random_temp;
 	int rate = nHandicapRate[nHandicap];
@@ -2151,7 +2173,7 @@ skip_select:
 	return win;
 }
 
-void init_yss_zero()
+void init_yss_zero(tree_t * restrict ptree)
 {
 	static int fDone = 0;
 	if ( fDone ) return;
@@ -2165,6 +2187,8 @@ void init_yss_zero()
 
 	init_network();
 	make_move_id_c_y_x();
+
+	if ( fDLBook ) make_dl_book(ptree);
 }
 
 void copy_min_posi(tree_t * restrict ptree, int sideToMove, int ply)
@@ -2349,7 +2373,7 @@ int getCmdLineParam(int argc, char *argv[])
 		}
 		if ( strstr(p,"-m") ) {
 			nVisitCount = n;
-			PRT("play randomly first %d moves\n",n);
+			PRT("play randomly first %d moves from given position.\n",n);
 		}
 		if ( strstr(p,"-i") ) {
 			PRT("usi info enable\n");
@@ -2471,7 +2495,7 @@ int is_ignore_stop()
 	return 0;
 }
 
-int is_send_usi_info(int /*nodes*/)
+int is_send_usi_info(/*int nodes*/)
 {
 	if ( fUsiInfo == 0 ) return 0;
 	static int prev_send_t = 0;
@@ -2553,6 +2577,7 @@ bool is_selfplay()
 void usi_newgame(tree_t * restrict ptree)
 {
 	usi_newgames++;
+	usi_positions = 0;
 	hash_shogi_table_clear();
 	if ( is_selfplay() ) {
 		resign_winrate = FIXED_RESIGN_WINRATE;
@@ -2568,6 +2593,11 @@ void usi_newgame(tree_t * restrict ptree)
 	}
 }
 
+void usi_position(tree_t * restrict ptree) {
+	if ( usi_positions == 0 ) first_usi_position_moves = ptree->nrep;
+	usi_positions++;
+	PRT("usi_positions=%d,first_usi_position_moves=%d\n",usi_positions, first_usi_position_moves);
+}
 
 void test_dist()
 {

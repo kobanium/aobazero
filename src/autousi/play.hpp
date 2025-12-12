@@ -9,6 +9,8 @@
 #include <vector>
 #include <cstdint>
 
+void load_opening_sfen();
+
 class PlayManager {
   using uint = unsigned int;
   std::queue<std::string> _moves_eid0;

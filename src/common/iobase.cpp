@@ -130,7 +130,7 @@ bool IOAux::is_weight_ok(const char *fname, uint64_t &digest) noexcept {
   size_t len = ifs.tellg();
   ifs.seekg(0, ifs.beg);
   if (!ifs) die(ERR_INT("cannot open %s", fname));
-  unique_ptr<char> ptr(new char [len]);
+  unique_ptr<char[]> ptr(new char [len]);
   ifs.read(ptr.get(), len);
   return is_weight_ok(PtrLen<const char>(ptr.get(), len), digest); }
 
