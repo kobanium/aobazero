@@ -1,7 +1,6 @@
 // 2019 Team AobaZero
 // This source code is in the public domain.
 #include "../config.h"
-
 #include <ctype.h>
 #include <limits.h>
 #include <math.h>
@@ -487,7 +486,11 @@ static int CONV proce_usi( tree_t * restrict ptree )
     return iret;
   }
 
-  if ( ! strcmp( token, "position" ) ) { return usi_posi( ptree, &lasts ); }
+  if ( ! strcmp( token, "position" ) ) {
+    int ret = usi_posi( ptree, &lasts );
+    usi_position(ptree);
+    return ret;
+  }
   if ( ! strcmp( token, "quit" ) ) {
     stop_thread_submit();
     kill_usi_child();
@@ -495,6 +498,10 @@ static int CONV proce_usi( tree_t * restrict ptree )
   }
   if ( ! strcmp( token, "make_book" ) ) {
     make_r_book(ptree);
+    return 1;
+  }
+  if ( ! strcmp( token, "make_dlbook" ) ) {
+    make_dl_book(ptree);
     return 1;
   }
 
@@ -602,6 +609,23 @@ usi_go( tree_t * restrict ptree, char **lasts )
      fUSIMoveCount = 1;
   }
 #endif
+
+  // go btime 466000 wtime 355000 binc 10000 winc 10000
+  time_left_msec[0] = time_left_msec[1] = 0;
+  if ( ! strcmp( token, "btime" ) ) {
+    char *pa[7];
+    int i;
+    for (i=0;i<7;i++) {
+      pa[i] = strtok_r( NULL, str_delimiters, lasts );
+      if ( !pa[i] ) break;
+    }
+    if ( i==7 ) {
+      time_left_msec[0] = atoi(pa[0]);
+      time_left_msec[1] = atoi(pa[2]);
+//    for (i=0;i<7;i++) PRT("%s,",pa[i]); PRT("\n");
+    }
+  }
+
 
 /*
   if ( ! strcmp( token, "book" ) )
@@ -885,7 +909,7 @@ usi_posi( tree_t * restrict ptree, char **lasts )
 	return -1;
       }
   }
-    
+
   if ( get_elapsed( &time_turn_start ) < 0 ) { return -1; }
   return 1;
 }

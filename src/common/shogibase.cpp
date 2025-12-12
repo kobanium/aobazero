@@ -2,6 +2,7 @@
 // This source code is in the public domain.
 #include "shogibase.hpp"
 #include "param.hpp"
+#include "err.hpp"
 #include <algorithm>
 #include <functional>
 #include <cassert>
@@ -13,10 +14,14 @@
 using std::function;
 using std::fill_n;
 using std::min;
+using std::cerr;
+using std::cout;
+using std::endl;
 using uint   = unsigned int;
 using ushort = unsigned short;
 using uchar  = unsigned char;
 using namespace SAux;
+using namespace ErrAux;
 
 constexpr BMap::RBB BMap::tbl_bmap_rbb[81][4];
 constexpr unsigned char BMap::tbl_bmap_rel[Color::ok_size][3];
@@ -169,7 +174,7 @@ FixLStr<512U> Board::to_str(const Color &turn) const noexcept {
   FixLStr<512U> str;
   for (int rank = 0; rank < 9; ++rank) {
     str += "P";
-    str += rank;
+    str += (rank+1);
     for (int file = 0; file < 9; ++file) {
       Sq sq(rank, file);
       if (!get_c(sq).ok()) str += " * ";
@@ -177,7 +182,7 @@ FixLStr<512U> Board::to_str(const Color &turn) const noexcept {
 	str += get_c(sq).to_str();
 	str += get_pc(sq).to_str(csa); } }
     str += "\n"; }
-  
+#if 0
   for (uint uc = 0; uc < Color::ok_size; ++uc) {
     str += "Hand";
     str += Color(uc).to_str();
@@ -187,10 +192,23 @@ FixLStr<512U> Board::to_str(const Color &turn) const noexcept {
       str += Pc(upc).to_str(csa);
       str += _hand[uc][upc]; }
     str += "\n"; }
-
+#else	// CSA style
+  for (uint uc = 0; uc < Color::ok_size; ++uc) {
+    int n = 0;
+    for (uint upc = 0; upc < Pc::hand_size; ++upc) {
+      for (int i=0;i<_hand[uc][upc];i++) {
+        if ( n++==0 ) { str += "P"; str += Color(uc).to_str(); }
+        str += "00";
+        str += Pc(upc).to_str(csa);
+      }
+    }
+    if ( n ) str += "\n";
+  }
+#endif
   if (turn.ok()) str += turn.to_str();
   str += "\n";
-  return str; }
+  return str;
+}
 
 bool Board::ok(const Color &turn) const noexcept {
   uint count[Color::ok_size][Pc::ok_size] = { 0 };
@@ -582,45 +600,192 @@ bool Node<N>::ok() const noexcept {
   if (_len_path == N && _type == interior) return false;
   return true; }
 
+
+// position sfen l2S2s1l/5k1g1/pBngppnpp/6p2/2P6/P3PP3/6P1P/3NK3R/7+rL b 3PLS2GB3pns 91 moves L*4d N*5a S*5b 4b3b 5b5a 4c4d N*4c L*4a 6a5b 4a4c
+void parse_sfen(const char *sfen, int *p_board, int p_hand[][8], int *p_turn, int *p_next_moves) {
+	static char usi_koma[] = " PLNSGBRK";
+//	static int board[256];
+//	static int hand[2][8];
+
+	const char *p = strstr(sfen,"sfen ");
+	if ( !p ) die(ERR_INT("not sfen"));
+	p += 5;
+	int x = 1;
+	int y = 1;
+	int nf = 0;
+	for (;;) {
+		char c = *p++;
+//		PRT("c=%c,x=%d,y=%d\n",c,x,y);
+		if ( c >= '1' && c <= '9' ) {
+			int n = c - '1' + 1;
+			for (int i=0;i<n;i++) {
+				int z = y*16+x;
+				if ( x > 9 || y > 9 ) die(ERR_INT("sfen x=%d,y=%d, Err1. c=%c,%s\n",x,y,c,p));
+				p_board[z] = 0;
+				x++;
+			}
+		} else if ( c == '/' ) {
+			if ( x != 10 ) die(ERR_INT("sfen x=%d,y=%d, Err2. c=%c,%s\n",x,y,c,p));
+			y++;
+			x = 1;
+		} else if ( c == ' ' ) {
+			if ( y != 9 || x != 10 ) die(ERR_INT("sfen x=%d,y=%d, Err3. c=%c,%s\n",x,y,c,p));
+			break;
+		} else if ( c == '+' ) {
+			nf = 0x08;
+		} else {
+			int k = 0;
+			int i;
+			for (i=1;i<=8;i++) {
+				if ( c == usi_koma[i] ) {
+					k = 0x00 + i + nf;
+					break;
+				} else if ( c == usi_koma[i]+32 ) {
+					k = 0x80 + i + nf;
+					break;
+				}
+			}
+			if ( i==9 ) die(ERR_INT("sfen Err. c=%c,%s\n",c,p));
+			int z = y*16+x;
+			if ( x > 9 || y > 9 ) die(ERR_INT("sfen x=%d,y=%d, Err4. c=%c,%s\n",x,y,c,p));
+			p_board[z] = k;
+			x++;
+			nf = 0x00;
+		}
+	}
+
+	char c = *p++;
+	int turn = -1;
+	if ( c=='b' ) turn = 0;
+	if ( c=='w' ) turn = 1;
+	if ( turn < 0 ) die(ERR_INT("sfen turn Err. %s\n",p));
+//	if ( turn==1 ) fGotekara = 1;
+
+	c = *p++;
+	if ( c != ' ' ) die(ERR_INT("sfen turn space Err. %s\n",p));
+	for (;;) {
+		char c = *p++;
+		if ( c == '-' || c == ' ' ) {
+			if ( c=='-' && *p == ' ' ) p++; 
+			break;
+		}
+		int n = 1;
+		if ( c >= '1' && c <= '9' ) {
+			n = c - '1' + 1;
+			if ( c == '1' ) {
+				char cc = *p++;
+				if ( cc >= '0' && cc <= '9' ) {
+					int nn = cc - '0';
+					n = 10 + nn;
+				} else die(ERR_INT("sfen mo Err. %s\n",p));
+			}
+			c = *p++;
+		}
+		int i;
+		for (i=1;i<=7;i++) {
+			if ( c == usi_koma[i] ) {
+				p_hand[0][i] = n;
+				break;
+			} else if ( c == usi_koma[i]+32 ) {
+				p_hand[1][i] = n;
+				break;
+			}
+		}
+		if ( i==8 ) die(ERR_INT("sfen mo Err. %s\n",p));
+	}
+
+	// ŽŸ‚Í‰½Žè–Ú‚©B‰Šú”Õ–Ê‚È‚ç1
+	int moves = atoi(p);
+	p += 1 + (moves >= 10) + (moves >= 100);
+	if ( moves == 0 ) die(ERR_INT("sfen next move number=%d Err. %s\n",moves));
+//	if ( sum_hands > 0 || turn != 1 ) nHandicap = 0;
+	*p_turn = turn;
+	*p_next_moves = moves;
+}
+
 template<uint N>
-void Node<N>::clear(int num_d) noexcept {
+void Node<N>::clear(int num_d, const char *sfen) noexcept {
   _board.clear();
   _count_repeat = 0;
   _turn         = black;
   _node_handicap = num_d;
   assert(0 <= num_d && num_d < HANDICAP_TYPE);
   if ( num_d > 0 ) _turn = white;
+
   auto place = [&](const Color &c, const Pc &pc,
 		   const Sq &sq){ _board.place_sq(c, pc,  sq.rel(c)); };
-  for (uint uc = 0; uc < Color::ok_size; ++uc) {
-    Color c(uc);
-    for (uint u = sq97.to_u(); u < sq98.to_u(); ++u) place(c, pawn, Sq(u));
+  if ( sfen==NULL ) {
+	for (uint uc = 0; uc < Color::ok_size; ++uc) {
+	  Color c(uc);
+	  for (uint u = sq97.to_u(); u < sq98.to_u(); ++u) place(c, pawn, Sq(u));
 
-    place(c, silver, sq79);  place(c, silver, sq39);
-    place(c, gold,   sq69);  place(c, gold,   sq49);
-    place(c, king,   sq59);
-    if ( num_d == 0 || uc == 0 ) {
-      place(c, knight, sq89);  place(c, knight, sq29);
-      place(c, lance,  sq99);  place(c, lance,  sq19);
-      place(c, bishop, sq88);  place(c, rook,   sq28);
-      continue;
-    }
-    if ( num_d == 6 ) continue;
-    place(c, knight, sq89);  place(c, knight, sq29);
-    if ( num_d == 5 ) continue;
-    if ( num_d == 1 ) {
-                               place(c, lance,  sq19);
-      place(c, bishop, sq88);  place(c, rook,   sq28);
-      continue;
-    }
-    place(c, lance,  sq99);  place(c, lance,  sq19);
-    if ( num_d == 4 ) continue;
-    if ( num_d == 2 ) {
-      place(c, rook,   sq28);
-    }
-    if ( num_d == 3 ) {
-      place(c, bishop, sq88);
-    }
+	  place(c, silver, sq79);  place(c, silver, sq39);
+	  place(c, gold,   sq69);  place(c, gold,   sq49);
+	  place(c, king,   sq59);
+	  if ( num_d == 0 || uc == 0 ) {
+	    place(c, knight, sq89);  place(c, knight, sq29);
+	    place(c, lance,  sq99);  place(c, lance,  sq19);
+	    place(c, bishop, sq88);  place(c, rook,   sq28);
+	    continue;
+	  }
+	  if ( num_d == 6 ) continue;
+	  place(c, knight, sq89);  place(c, knight, sq29);
+	  if ( num_d == 5 ) continue;
+	  if ( num_d == 1 ) {
+	                             place(c, lance,  sq19);
+	    place(c, bishop, sq88);  place(c, rook,   sq28);
+	    continue;
+	  }
+	  place(c, lance,  sq99);  place(c, lance,  sq19);
+	  if ( num_d == 4 ) continue;
+	  if ( num_d == 2 ) {
+	    place(c, rook,   sq28);
+	  }
+	  if ( num_d == 3 ) {
+	    place(c, bishop, sq88);
+	  }
+	}
+  } else {
+	int sfen_board[256] = {0};
+	int sfen_hand[2][8] = {0};
+	int sfen_turn;
+	int sfen_moves;
+	parse_sfen(sfen, sfen_board, sfen_hand, &sfen_turn, &sfen_moves);
+	_turn = (Color)sfen_turn;
+	for (uint uc = 0; uc < Color::ok_size; ++uc)
+	  for (uint upc = 0; upc < Pc::hand_size; ++upc)
+//	    _hand[uc][upc] = sfen_hand[uc][upc+1];
+	    for (int i=0;i<sfen_hand[uc][upc+1];i++) {
+//        cerr << "uc=" << uc << ",upc="<< upc << ",i=" << i << endl;
+	      _board.place_hand((Color)uc, (Pc)upc, true);
+        }
+
+	for (int y=0;y<9;y++) for (int x=0;x<9;x++) {
+	  int z = (y+1)*16 + (x+1);
+	  int k = sfen_board[z];
+	  if ( k == 0 ) continue;
+	  uint uc = 0;
+	  if ( k & 0x80 ) uc = 1;
+	  k = k & 0x0f;
+	  Pc pc = pawn;
+	  if ( k== 2 ) pc = lance;
+	  if ( k== 3 ) pc = knight;
+	  if ( k== 4 ) pc = silver;
+	  if ( k== 5 ) pc = gold;
+	  if ( k== 6 ) pc = bishop;
+	  if ( k== 7 ) pc = rook;
+	  if ( k== 8 ) pc = king;
+	  if ( k== 9 ) pc = tokin;
+	  if ( k==10 ) pc = pro_lance;
+	  if ( k==11 ) pc = pro_knight;
+	  if ( k==12 ) pc = pro_silver;
+  //  if ( k==13 ) pc = 
+	  if ( k==14 ) pc = horse;
+	  if ( k==15 ) pc = dragon;
+	  uint u = y*9+x;
+	  if ( uc==1 ) u = 80 - u;
+	  place((Color)uc, pc, Sq(u));
+	}
   }
   
   _path[0]        = _board.get_zkey();

@@ -81,6 +81,7 @@ public:
     return _u == c._u; }
   constexpr bool operator!=(const Color &c) const noexcept {
     return _u != c._u; }
+  Color& operator=(const Color&) = default;
   constexpr bool ok() const noexcept { return _u < 2U; }
   constexpr uint to_u() const noexcept { return _u; }
   const char *to_str() const noexcept {
@@ -230,6 +231,7 @@ public:
   constexpr bool operator!=(const Sq &c) const noexcept { return _u != c._u; }
   constexpr bool operator<=(const Sq &c) const noexcept { return _u <= c._u; }
   constexpr bool operator>=(const Sq &c) const noexcept { return _u >= c._u; }
+  Sq& operator=(const Sq&) = default;
 
   constexpr bool ok() const noexcept { return _u < 81U; }
   constexpr uint to_u() const noexcept { return _u; }
@@ -270,24 +272,16 @@ public:
 };
 
 namespace SAux {
-  constexpr Sq sq91( 0), sq81( 1), sq71( 2), sq61( 3), sq51( 4);
-  constexpr Sq sq41( 5), sq31( 6), sq21( 7), sq11( 8);
-  constexpr Sq sq92( 9), sq82(10), sq72(11), sq62(12), sq52(13);
-  constexpr Sq sq42(14), sq32(15), sq22(16), sq12(17);
-  constexpr Sq sq93(18), sq83(19), sq73(20), sq63(21), sq53(22);
-  constexpr Sq sq43(23), sq33(24), sq23(25), sq13(26);
-  constexpr Sq sq94(27), sq84(28), sq74(29), sq64(30), sq54(31);
-  constexpr Sq sq44(32), sq34(33), sq24(34), sq14(35);
-  constexpr Sq sq95(36), sq85(37), sq75(38), sq65(39), sq55(40);
-  constexpr Sq sq45(41), sq35(42), sq25(43), sq15(44);
-  constexpr Sq sq96(45), sq86(46), sq76(47), sq66(48), sq56(49);
-  constexpr Sq sq46(50), sq36(51), sq26(52), sq16(53);
-  constexpr Sq sq97(54), sq87(55), sq77(56), sq67(57), sq57(58);
-  constexpr Sq sq47(59), sq37(60), sq27(61), sq17(62);
-  constexpr Sq sq98(63), sq88(64), sq78(65), sq68(66), sq58(67);
-  constexpr Sq sq48(68), sq38(69), sq28(70), sq18(71);
-  constexpr Sq sq99(72), sq89(73), sq79(74), sq69(75), sq59(76);
-  constexpr Sq sq49(77), sq39(78), sq29(79), sq19(80); }
+  constexpr Sq sq91( 0), sq81( 1), sq71( 2), sq61( 3), sq51( 4), sq41( 5), sq31( 6), sq21( 7), sq11( 8);
+  constexpr Sq sq92( 9), sq82(10), sq72(11), sq62(12), sq52(13), sq42(14), sq32(15), sq22(16), sq12(17);
+  constexpr Sq sq93(18), sq83(19), sq73(20), sq63(21), sq53(22), sq43(23), sq33(24), sq23(25), sq13(26);
+  constexpr Sq sq94(27), sq84(28), sq74(29), sq64(30), sq54(31), sq44(32), sq34(33), sq24(34), sq14(35);
+  constexpr Sq sq95(36), sq85(37), sq75(38), sq65(39), sq55(40), sq45(41), sq35(42), sq25(43), sq15(44);
+  constexpr Sq sq96(45), sq86(46), sq76(47), sq66(48), sq56(49), sq46(50), sq36(51), sq26(52), sq16(53);
+  constexpr Sq sq97(54), sq87(55), sq77(56), sq67(57), sq57(58), sq47(59), sq37(60), sq27(61), sq17(62);
+  constexpr Sq sq98(63), sq88(64), sq78(65), sq68(66), sq58(67), sq48(68), sq38(69), sq28(70), sq18(71);
+  constexpr Sq sq99(72), sq89(73), sq79(74), sq69(75), sq59(76), sq49(77), sq39(78), sq29(79), sq19(80);
+}
 
 // 0:pawn   1:lance   2:knight 3:silver     4:gold        5:bishop
 // 6:rook   7:king    8:tokin  9:pro_lance 10:pro_knight 11:pro_silver
@@ -320,6 +314,7 @@ public:
     return _u == pc._u; }
   constexpr bool operator!=(const Pc &pc) const noexcept {
     return _u != pc._u; }
+  Pc& operator=(const Pc&) = default;
   constexpr bool ok() const noexcept { return _u < 14U; }
   constexpr bool isnot_promo() const noexcept { return _u < 8U; }
   constexpr bool hand_ok() const noexcept { return _u < 7U; }
@@ -418,6 +413,7 @@ public:
     return static_cast<uchar>(_type) <= static_cast<uchar>(Type::Drop); }
   constexpr bool is_notmove() const noexcept {
     return (_type == Type::WinDecl || _type == Type::Resign); }
+//void set_type(Type t) { _type = t; }
   constexpr Type get_type() const noexcept { return _type; }
   constexpr Sq get_from() const noexcept { return _from; }
   constexpr Sq get_to() const noexcept { return _to; }
@@ -587,7 +583,7 @@ public:
   FixLStr<512U> to_str() const noexcept { return _board.to_str(_turn); }
   bool ok() const noexcept;
   
-  void clear(int num_d = 0) noexcept;
+  void clear(int num_d = 0, const char *sfen = NULL) noexcept;
   Board &get_board() noexcept { return _board; }
   void take_action(const Action &a) noexcept;
   Action action_interpret(const char *cstr,

@@ -88,6 +88,9 @@ extern std::vector<int> default_gpus;
 extern int usi_go_count;
 extern int usi_bestmove_count;
 
+extern int time_left_msec[2];
+
+
 void debug_set(const char *file, int line);
 void debug_print(const char *fmt, ... );
 #define DEBUG_PRT (debug_set(__FILE__,__LINE__), debug_print)	
@@ -102,10 +105,11 @@ void print_all_min_posi(tree_t * restrict ptree, int ply);
 int check_stop_input();
 int is_ignore_stop();
 void send_latest_bestmove();
-void set_latest_bestmove(char *str);
-int is_send_usi_info(int nodes);
+void set_latest_bestmove(const char *str);
+int is_send_usi_info();
 void send_usi_info(tree_t * restrict ptree, int sideToMove, int ply, int nodes, int nps);
 void usi_newgame(tree_t * restrict ptree);
+void usi_position(tree_t * restrict ptree);
 int is_declare_win(tree_t * restrict ptree, int sideToMove);
 int is_declare_win_root(tree_t * restrict ptree, int sideToMove);
 int get_thread_id(tree_t * restrict ptree);
@@ -118,6 +122,7 @@ void clear_opening_hash();
 void make_balanced_opening(tree_t * restrict ptree, int sideToMove, int ply);
 HASH_SHOGI* HashShogiReadLock(tree_t * restrict ptree, int sideToMove);
 uint64 get_marge_hash(tree_t * restrict ptree, int sideToMove);
+unsigned long rand_m521();
 
 // yss_net.cpp
 void init_network();
@@ -153,10 +158,14 @@ int get_motigoma(int m, int hand);
 // pipe.cpp
 unsigned int get_best_move_alphabeta_usi(tree_t * restrict ptree, int sideToMove, int ply);
 void kill_usi_child();
+std::string get_sfen_string(tree_t * restrict ptree, int sideToMove, int ply);
 
 // r_book.cpp
 void make_r_book(tree_t * restrict ptree);
 int get_book_move(tree_t * restrict ptree, HASH_SHOGI *phg);
+void make_dl_book(tree_t * restrict ptree);
+std::string get_dlshogi_book(tree_t * restrict ptree);
+std::string get_flood_book(tree_t * restrict ptree);
 
 
 #endif	//]] INCLUDE__GUARD

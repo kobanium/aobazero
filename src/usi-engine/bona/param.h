@@ -17,10 +17,10 @@
 #define DKing         15000
 
 /*
-AobaZeroの駒の価値
+AobaZero's Piece value
 http://www.yss-aya.com/bbs_log/bbs2022.html#bbs64
-　 歩  香  桂  銀  金  角   飛   と 成香 成桂 成銀   馬   龍
-　100 198 367 562 674 775  871  496  364  459  649 1133 1408
-　 歩  香  桂  銀  金  角   飛 (持駒)
-　106 351 403 663 889 924 1257 
+   FU  KY  KE  GI  KI  KA   HI   TO   NY   NK   NG   UM   RY
+  100 198 367 562 674 775  871  496  364  459  649 1133 1408
+   FU  KY  KE  GI  KI  KA   HI (Hand)
+  106 351 403 663 889 924 1257 
 */

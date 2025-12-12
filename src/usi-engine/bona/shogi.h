@@ -140,7 +140,9 @@ extern unsigned char ailast_one[512];
 //#define BNZ_VER                 "40"	// 20230519 dfpn is called from all threads. make_book, kldinterval.
 //#define BNZ_VER                 "41"	// 20231207 kldgain 0.0000004, kldinterval 400, -p 12800, ave playouts is 3180/move.
 //#define BNZ_VER                 "42"	// 20240214 nDrawMove 0 -> 513 default, MAX_DRAW_MOVES = 513
-#define BNZ_VER                 "43"	// 20240225 OpenCL now works even with the 11th generation Intel Iris Xe graphics built into the CPU
+//#define BNZ_VER                 "43"	// 20240225 OpenCL now works even with the 11th generation Intel Iris Xe graphics built into the CPU
+//#define BNZ_VER                 "44"	// 20240525 time_left_msec, go btime 310000 wtime 300000 binc 10000 winc 10000
+#define BNZ_VER                 "45"	// 20251212 selfplay from aoba26523.sfen
 
 #define BNZ_NAME                "AobaZero"
 
@@ -1508,7 +1510,7 @@ uint64_t get_sequence_hash_drop(int moves, int to, int piece);
 void debug();
 void PRT(const char *fmt, ...);
 void print_board(const tree_t * restrict ptree);
-void init_yss_zero();
+void init_yss_zero(tree_t * restrict ptree);
 void set_default_param();
 void init_state( const tree_t * restrict parent, tree_t * restrict child );
 extern int sfen_current_move_number;

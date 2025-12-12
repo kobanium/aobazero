@@ -199,19 +199,21 @@ std::string get_sfen_string(tree_t * restrict ptree, int sideToMove, int ply)
 
 	int moves = ptree->nrep + ply - 1;
 
+	// The pieces are always listed in the order rook, bishop, gold, silver, knight, lance, pawn;
+	// https://yaneuraou.yaneu.com/2016/07/15/sfen%e6%96%87%e5%ad%97%e5%88%97%e3%81%af%e6%9c%ac%e6%9d%a5%e3%81%af%e4%b8%80%e6%84%8f%e3%81%ab%e5%ae%9a%e3%81%be%e3%82%8b%e4%bb%b6/
 	const char ct[2] = { 'b','w' };
 	sprintf(buf, " %c ",ct[sideToMove]);
 //	sprintf(buf, " %c ",ct[moves&1]);
 	s += buf;
 	int i,sum = 0;
-	for (i=1;i<=7;i++) {
+	for (i=7;i>=1;i--) {
 		int n = get_motigoma(i, HAND_B);
 		sum += n;
 		if ( n==0 ) continue;
 		if ( n > 1 ) { sprintf(buf,"%d",n); s += buf; }
 		s += usi_koma[i];
 	}
-	for (i=1;i<=7;i++) {
+	for (i=7;i>=1;i--) {
 		int n = get_motigoma(i, HAND_W);
 		sum += n;
 		if ( n==0 ) continue;

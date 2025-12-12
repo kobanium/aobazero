@@ -139,13 +139,15 @@ static void init() noexcept {
   print_status           = Config::get<uint>  (m, "PrintStatus");
   print_csa              = Config::get<uint>  (m, "PrintCSA");
 
+  load_opening_sfen();
   opt_dname_csa.reset_fname(cstr_csa);
   dirlocks.emplace_back(cstr_dwght);
   dirlocks.emplace_back(str_dlog.c_str());
   dirlocks.emplace_back(str_dtune.c_str());
   dirlocks.emplace_back(cstr_csa);
   Client::get().start(cstr_dwght, cstr_addr, port, recvTO, recv_bufsiz, sendTO,
-		      send_bufsiz, max_retry, size_queue, keep_wght); }
+		      send_bufsiz, max_retry, size_queue, keep_wght);
+}
 
 static void output() noexcept {
   static bool first = true;

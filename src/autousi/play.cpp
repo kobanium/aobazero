@@ -30,6 +30,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <sstream>
 using std::cout;
 using std::deque;
 using std::endl;
@@ -57,6 +58,89 @@ constexpr char fmt_log[]           = "engine%03u-%03u.log";
 static uint resign_count           = 0;
 static mutex m_seq;
 static deque<SeqPRNService> seq_s;
+
+const int SFEN_MAX = 26523;
+const int SFEN_ADD = 2;	// 2 words, "startpos moves"
+static int f_sel[SFEN_MAX][2];	// keep furibisha [0]...sente, [1]...gote, 5=nakabisha,4=siken,3=3ken 2=mukai
+std::vector<std::vector<std::string>> opening_sfen;
+std::mt19937 mt_rand;
+
+void load_opening_sfen() {
+	std::random_device rd;
+	mt_rand.seed(rd());
+	FILE *fp = fopen("aoba26523.sfen","r");
+	if ( fp==NULL ) die(ERR_INT("can not open sfen"));
+	int count = 0, sum_tesuu = 0, fm_sum=0,fc_sum=0,f_ai=0,ibisha=0;
+	for (;;) {
+		const int size = 256*32;
+		static char buf[size];
+		memset(buf,0,size);
+		if ( fgets( buf, size-1, fp ) == NULL ) break;
+		int fm=0,fc=0;
+
+		std::string line = buf;
+		std::vector<std::string> words;
+		std::string word;
+		// delete \n
+		line.erase(std::remove(line.begin(), line.end(), '\n'), line.end());
+		std::stringstream ss(line);
+		// Extract words while separating them with spaces
+		while (std::getline(ss, word, ' ')) {
+			words.push_back(word);
+		}
+		if ( words.size() != 60+SFEN_ADD ) die(ERR_INT("sfen moves err"));
+//		PRT("size=%d,",words.size()); for (const std::string& w : words) PRT("%s ",w.c_str()); PRT("\n");
+		opening_sfen.push_back(words);
+
+		for (int i=0;i<30;i++) {
+			if ( words.at(i+3) == "2h5h" ) fm=5;
+			if ( words.at(i+3) == "2h6h" ) fm=4;
+			if ( words.at(i+3) == "2h7h" ) fm=3;
+			if ( words.at(i+3) == "2h8h" ) fm=2;
+			if ( words.at(i+3) == "8b5b" ) fc=5;
+			if ( words.at(i+3) == "8b4b" ) fc=4;
+			if ( words.at(i+3) == "8b3b" ) fc=3;
+			if ( words.at(i+3) == "8b2b" ) fc=2;
+		}
+		if ( fm ) fm_sum++;
+		if ( fc ) fc_sum++;
+		if ( fm && fc ) f_ai++;
+		if ( fm==0 && fc==0 ) ibisha++;
+		if ( count >= SFEN_MAX ) die(ERR_INT("sfen number over"));
+		f_sel[count][0] = fm;
+		f_sel[count][1] = fc;
+		count++;
+	}
+	if ( count != SFEN_MAX ) die(ERR_INT("sfen number err"));
+	printf("count=%d, fm_sum=%d,fc_sum=%d,ai_furi=%d,ai_ibisha=%d(%.2f %%)\n",count, fm_sum,fc_sum,f_ai,ibisha,(double)ibisha*100.0/count);
+}
+
+// Random number generation for logistics distribution
+double logistic_random(double mu, double s, std::mt19937 &rng) {
+    std::uniform_real_distribution<double> uniform_dist(0.0, 1.0);
+    double u = uniform_dist(rng);
+    return mu + s * std::log(u / (1.0 - u));
+}
+
+void get_sfen_number_moves(int *index, int *moves) {
+	lock_guard<mutex> lock(m_seq);
+	double mu = +30.0;	// moves param. The probability of the 30th move being chosen is the highest
+	double s = 3.748;	// scale param. The probability that move 0 (initial position) will be selected is 1 in 10,000 games.
+	for (;;) {
+		int m = mt_rand() % SFEN_MAX;
+		if ( (mt_rand() % 3)<=0 && (f_sel[m][0] + f_sel[m][1]) ) continue;	// reduce furibisha. 1/1...37%, 1/3...28%, 1/2...23%B2/3...16%
+		double r = logistic_random(mu, s, mt_rand);
+//		PRT("%10.5f\n",r);
+		if ( r < 0 || r > 61 ) continue;
+		int n = (int)r;
+		if ( n < 0 || n > 60 ) die(ERR_INT("err select sfen n"));
+//		if ( f_sel[m][0] + f_sel[m][1] ) furi_sum++;
+		if ( opening_sfen[m].size() < (uint)n+SFEN_ADD ) die(ERR_INT("sfen moves err"));
+		*index = m;
+		*moves = n;
+		break;
+	}
+}
 
 class Device {
   enum class Type : unsigned char { Aobaz, NNService, Bad };
@@ -184,6 +268,8 @@ class USIEngine : public Child {
   uint _eid, _nmove;
   bool _flag_playing, _flag_ready, _flag_thinking, _flag_do_resign;
   int _handicap;
+  int _sfen_index;
+  int _sfen_moves;
   uint _silent_eng;
 
   void out_log(const char *p) noexcept {
@@ -273,7 +359,8 @@ public:
     argv[argc++] = opt_n;
 
     char opt_m[]       = "-m";
-    char opt_m_value[] = "30";
+//  char opt_m_value[] = "30";
+    char opt_m_value[] = "10";
     argv[argc++] = opt_m;
     argv[argc++] = opt_m_value;
 
@@ -294,8 +381,7 @@ public:
 
     char opt_w[] = "-w";
     unique_ptr<char []> opt_w_value(new char [wfname.get_len_fname() + 1U]);
-    memcpy(opt_w_value.get(),
-	   wfname.get_fname(), wfname.get_len_fname() + 1U);
+    memcpy(opt_w_value.get(), wfname.get_fname(), wfname.get_len_fname() + 1U);
     argv[argc++] = opt_w;
     argv[argc++] = opt_w_value.get();
 
@@ -335,20 +421,39 @@ public:
     sprintf(buf, "%s\n%s\n",str_init_csa[_handicap], str_turn[(_handicap!=0)]);
 //  _record_main    = string("PI\n+\n");
     _record_main    = string(buf);
-
+/*
 	string init_pos[HANDICAP_TYPE] = {
-      "position startpos moves",
-      "position sfen lnsgkgsn1/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",// ky
-      "position sfen lnsgkgsnl/1r7/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// ka
-      "position sfen lnsgkgsnl/7b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// hi
-      "position sfen lnsgkgsnl/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// 2mai
-      "position sfen 1nsgkgsn1/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	// 4mai
-      "position sfen 2sgkgs2/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL"		// 6mai
+      "startpos moves",
+      "sfen lnsgkgsn1/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",// ky
+      "sfen lnsgkgsnl/1r7/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",  // ka
+      "sfen lnsgkgsnl/7b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",  // hi
+      "sfen lnsgkgsnl/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	   // 2mai
+      "sfen 1nsgkgsn1/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL",	   // 4mai
+      "sfen 2sgkgs2/9/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL"	   // 6mai
     };
     _startpos = init_pos[_handicap];
     if ( _handicap > 0 ) _startpos += " w - 1 moves";
-
+*/
+    _startpos = "position";
     _nmove          = 0;
+
+	get_sfen_number_moves(&_sfen_index, &_sfen_moves);
+	for (int i=0; i< _sfen_moves + SFEN_ADD; i++) {
+		string sfen_usi = opening_sfen[_sfen_index][i];
+		const char *str_move_usi = sfen_usi.c_str();
+		_startpos += " " + sfen_usi;
+		if ( i<SFEN_ADD ) continue;
+		Action actionPlay = _node.action_interpret(str_move_usi, SAux::usi);
+		if (!actionPlay.ok()) die(ERR_INT("cannot interpret sfen %d move %s (engine %s)\n%s", i, str_move_usi, get_fp(), static_cast<const char *>(_node.to_str()) ));
+		if (!actionPlay.is_move()) die(ERR_INT("sfen move err %s", str_move_usi));
+		_nmove            += 1U;
+		string new_move   = _node.get_turn().to_str();
+		new_move          += actionPlay.to_str(SAux::csa);
+		if ( new_move.empty() ) die(ERR_INT("sfen move empty %s", str_move_usi));
+		_record_main += new_move + string("\n"); // string(",'") + new_info;
+		_node.take_action(actionPlay);
+	}
+
 
     sprintf(buf, "%16" PRIx64, _crc64_wght);
     _record_wght  = string("'w ") + to_string(_id_wght);
@@ -369,9 +474,10 @@ public:
     engine_out("setoption name USI_HandicapRate value %s", buf);	// "30:100:150:300:700:900:1200"
 */
     sprintf(buf,"%.3f",(float)(Client::get().get_average_winrate())/1000.0);
-    _record_handicap = string(", average_winrate ");
-    _record_handicap += buf;
     engine_out("setoption name USI_AverageWinrate value %s", buf);	// "0.547"
+    _record_handicap = string(", average_winrate ") + buf;
+    sprintf(buf,", sfen %d/%d, moves %d",_sfen_index,SFEN_MAX,_sfen_moves);
+    _record_handicap += buf;
 
     engine_out("usinewgame");
   }
@@ -405,52 +511,46 @@ public:
       // _record_version is used for "no-resign". do not add other info.
 
       engine_out("isready");
-      return string(""); }
+      return string("");
+    }
 
     if (!_flag_ready && strcmp(token, "id") == 0) {
       token = OSI::strtok(nullptr, " ", &saveptr);
       if (!token) die(ERR_INT("Bad message from engine (%s).", get_fp()));
 
       if (strcmp(token, "settings") == 0) {
-	token = OSI::strtok(nullptr, "", &saveptr);
-	if (!token) die(ERR_INT("Bad message from engine (%s).", get_fp()));
-	_record_settings = string(token); }
+		token = OSI::strtok(nullptr, "", &saveptr);
+		if (!token) die(ERR_INT("Bad message from engine (%s).", get_fp()));
+		_record_settings = string(token);
+	  } else if (strcmp(token, "name") == 0) {
+		if (! OSI::strtok(nullptr, " ", &saveptr)) die(ERR_INT("Bad message from engine (%s).", get_fp()));
+		token = OSI::strtok(nullptr, " ", &saveptr);
+		if (!token) die(ERR_INT("Bad message from engine (%s).", get_fp()));
 
-      else if (strcmp(token, "name") == 0) {
-	if (! OSI::strtok(nullptr, " ", &saveptr))
-	  die(ERR_INT("Bad message from engine (%s).", get_fp()));
-	  
-	token = OSI::strtok(nullptr, " ", &saveptr);
-	if (!token) die(ERR_INT("Bad message from engine (%s).", get_fp()));
-	  
-	char *endptr;
-	long int ver = strtol(token, &endptr, 10);
-	if (endptr == token || *endptr != '\0' || ver < 0 || 65535 < ver)
-	  die(ERR_INT("Bad message from engine (%s).", get_fp()));
-	_version = ver;
-	if (ver < Ver::usi_engine) die(ERR_INT("Please update usi engine!")); }
-
-      return string(""); }
+		char *endptr;
+		long int ver = strtol(token, &endptr, 10);
+		if (endptr == token || *endptr != '\0' || ver < 0 || 65535 < ver) die(ERR_INT("Bad message from engine (%s).", get_fp()));
+		_version = ver;
+		if (ver < Ver::usi_engine) die(ERR_INT("Please update usi engine!"));
+	  }
+      return string("");
+    }
 
     if (!_flag_ready) die(ERR_INT("Bad message from engine (%s).", get_fp()));
 
     if (strcmp(token, "bestmove") != 0) return string("");
-    if (!_flag_playing && !_flag_thinking)
-      die(ERR_INT("bad usi message from engine %s", get_fp()));
+    if (!_flag_playing && !_flag_thinking) die(ERR_INT("bad usi message from engine %s", get_fp()));
     _flag_thinking = false;
 
+	// bestmove 7g7f,1600,7g7f,959m,2g2f,271l,6i7h,178j,9g9f,33b,3i3h,31Z,4i5h,25h,5i6h,24W,1g1f,17Z,5i5h,14d,6i6h,8b,3i4h,8X,4g4f,7V,2h1h,6h,7i7h,4U,9i9h,3E,2h3h,3a,3g3f,2T,4i4h,2P,6g6f,2U,5g5f,2S,2h5h,1L
     // read played move
     long int num_best = 0;
     long int num_tot  = 0;
     const char *str_move_usi = OSI::strtok(nullptr, " ,", &saveptr);
-    if (!str_move_usi)
-      die(ERR_INT("bad usi message from engine %s", get_fp()));
+    if (!str_move_usi) die(ERR_INT("bad usi message from engine %s", get_fp()));
 
     Action actionPlay = _node.action_interpret(str_move_usi, SAux::usi);
-    if (!actionPlay.ok())
-      die(ERR_INT("cannot interpret candidate move %s (engine %s)\n%s",
-		  str_move_usi, get_fp(),
-		  static_cast<const char *>(_node.to_str())));
+    if (!actionPlay.ok()) die(ERR_INT("cannot interpret candidate move %s (engine %s)\n%s", str_move_usi, get_fp(), static_cast<const char *>(_node.to_str()) ));
 
     string new_move, new_info;
     bool flag_resign = false;
@@ -467,82 +567,70 @@ public:
       new_move          += _node.get_turn().to_str();
       new_move          += actionPlay.to_str(SAux::csa);
       if (_eid == 0) {
-	char buf[256];
-	sprintf(buf, " (%5.0fms)", _time_average);
-	string smove = _node.get_turn().to_str();
-	smove += actionPlay.to_str(SAux::csa);
-	smove += buf;
-	moves_eid0.push(std::move(smove)); }
-    
+		char buf[256];
+		sprintf(buf, " (%5.0fms)", _time_average);
+		string smove = _node.get_turn().to_str();
+		smove += actionPlay.to_str(SAux::csa);
+		smove += buf;
+		moves_eid0.push(std::move(smove));
+	  }
       const char *str_value = OSI::strtok(nullptr, " ,", &saveptr);
-      if (!str_value || str_value[0] != 'v' || str_value[1] != '=')
-	die(ERR_INT("cannot read value (engine %s)", get_fp()));
+      if (!str_value || str_value[0] != 'v' || str_value[1] != '=') die(ERR_INT("cannot read value (engine %s)", get_fp()));
 
       char *endptr;
       float value = strtof(str_value+2, &endptr);
-      if (endptr == str_value+2 || *endptr != '\0' || value < 0.0f
-	  || value == HUGE_VALF)
-	die(ERR_INT("cannot interpret value %s (engine %s)", str_value+2, get_fp()));
-      if (value < th_resign) flag_resign = true;
+      if (endptr == str_value+2 || *endptr != '\0' || value < 0.0f || value == HUGE_VALF) die(ERR_INT("cannot interpret value %s (engine %s)", str_value+2, get_fp()));
+//    if (value < th_resign) flag_resign = true;
 //    if (value < th_resign && _nmove > 30) flag_resign = true;
+      if (value < th_resign && (int)_nmove > _sfen_moves + 10 ) flag_resign = true;
 
       str_value = OSI::strtok(nullptr, " ,", &saveptr);
-      if (!str_value || str_value[0] != 'r' || str_value[1] != '=')
-	die(ERR_INT("cannot read raw value (engine %s)", get_fp()));
+      if (!str_value || str_value[0] != 'r' || str_value[1] != '=') die(ERR_INT("cannot read raw value (engine %s)", get_fp()));
       float raw_value = strtof(str_value+2, &endptr);
-      if (endptr == str_value+2 || *endptr != '\0' || raw_value < 0.0f
-	  || raw_value == HUGE_VALF)
-	die(ERR_INT("cannot interpret raw_value %s (engine %s)", str_value+2, get_fp()));
-
+      if (endptr == str_value+2 || *endptr != '\0' || raw_value < 0.0f || raw_value == HUGE_VALF) die(ERR_INT("cannot interpret raw_value %s (engine %s)", str_value+2, get_fp()));
 
       const char *str_count = OSI::strtok(nullptr, " ,", &saveptr);
       if (!str_count) die(ERR_INT("cannot read count (engine %s)", get_fp()));
 
       long int num = strtol(str_count, &endptr, 10);
-      if (endptr == str_count || *endptr != '\0' || num < 1 || num == LONG_MAX)
-	die(ERR_INT("cannot interpret visit count %s (engine %s)",
-		    str_count, get_fp()));
+      if (endptr == str_count || *endptr != '\0' || num < 1 || num == LONG_MAX) die(ERR_INT("cannot interpret visit count %s (engine %s)", str_count, get_fp()));
 
       num_best = num;
       {
-	char buf[256];
-	sprintf(buf, "v=%.3f,r=%.3f,%ld", value, raw_value, num);
-	new_info += buf;
+		char buf[256];
+		sprintf(buf, "v=%.3f,r=%.3f,%ld", value, raw_value, num);
+		new_info += buf;
       }
 
       // read candidate moves
       while (true) {
-	str_move_usi = OSI::strtok(nullptr, " ,", &saveptr);
-	if (!str_move_usi) { new_info += "\n"; break; }
+		str_move_usi = OSI::strtok(nullptr, " ,", &saveptr);
+		if (!str_move_usi) { new_info += "\n"; break; }
 
-	Action action = _node.action_interpret(str_move_usi, SAux::usi);
-	if (!action.is_move())
-	  die(ERR_INT("bad candidate %s (engine %s)", str_move_usi, get_fp()));
-	new_info += ",";
-	new_info += action.to_str(SAux::csa);
+		Action action = _node.action_interpret(str_move_usi, SAux::usi);
+		if (!action.is_move()) die(ERR_INT("bad candidate %s (engine %s)", str_move_usi, get_fp()));
+		new_info += ",";
+		new_info += action.to_str(SAux::csa);
 
-	str_count = OSI::strtok(nullptr, " ,", &saveptr);
-	if (!str_count)
-	  die(ERR_INT("cannot read count (engine %s)", get_fp()));
+		str_count = OSI::strtok(nullptr, " ,", &saveptr);
+		if (!str_count) die(ERR_INT("cannot read count (engine %s)", get_fp()));
 
-	num = strtol(str_count, &endptr, 10);
-	char c = *endptr;
-	bool hasPolicy = ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z');
-	if (endptr == str_count || hasPolicy == false
-	    || num < 1 || num == LONG_MAX)
-	  die(ERR_INT("cannot interpret a visit count %s (engine %s)",
-		      str_count, get_fp()));
+		num = strtol(str_count, &endptr, 10);
+		char c = *endptr;
+		bool hasPolicy = ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z');
+		if (endptr == str_count || hasPolicy == false || num < 1 || num == LONG_MAX) die(ERR_INT("cannot interpret a visit count %s (engine %s)", str_count, get_fp()));
 
-	num_tot  += num;
-	new_info += ",";
-	new_info += to_string(num) + c; } }
+		num_tot  += num;
+		new_info += ",";
+		new_info += to_string(num) + c;
+	  }
+	}
 
     if (num_best < num_tot) die(ERR_INT("bad counts (engine %s)", get_fp()));
     _node.take_action(actionPlay);
 
     // force declare nyugyoku
-    if (_node.get_type().is_interior() && _node.is_nyugyoku())
-      _node.take_action(SAux::windecl);
+    if (_node.get_type().is_interior() && _node.is_nyugyoku()) _node.take_action(SAux::windecl);
     assert(_node.ok());
 
     // terminal test
@@ -557,8 +645,7 @@ public:
       return move(rec);
     }
 
-    if (! new_move.empty())
-      _record_main += new_move + string(",'") + new_info;
+    if (! new_move.empty()) _record_main += new_move + string(",'") + new_info;
 
     if (_node.get_type().is_term()) {
       string rec;
@@ -575,7 +662,8 @@ public:
       return move(rec);
     }
 
-    return string(""); }
+    return string("");
+  }
 
   void engine_quit() noexcept { engine_out("quit"); }
   uint getline_in(char *line, uint size) noexcept {
