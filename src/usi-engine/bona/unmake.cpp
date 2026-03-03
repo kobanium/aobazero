@@ -31,7 +31,7 @@ unmake_move_b( tree_t * restrict ptree, unsigned int move, int ply )
   MATERIAL = ptree->save_material[ply];
 
 #if defined(YSS_ZERO)
-  ptree->sequence_hash = ptree->keep_sequence_hash[nrep];
+//ptree->sequence_hash = ptree->keep_sequence_hash[nrep];
 #endif
 
   if ( from >= nsquare )
@@ -186,7 +186,7 @@ unmake_move_w( tree_t * restrict ptree, unsigned int move, int ply )
   MATERIAL = ptree->save_material[ply];
 
 #if defined(YSS_ZERO)
-  ptree->sequence_hash = ptree->keep_sequence_hash[nrep];
+//ptree->sequence_hash = ptree->keep_sequence_hash[nrep];
 #endif
 
   if ( from >= nsquare )

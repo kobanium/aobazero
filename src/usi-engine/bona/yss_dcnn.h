@@ -34,6 +34,7 @@ typedef struct child {
 } CHILD;
 
 #define CHILD_VEC
+//#define CHILD_SFEN		// for debug. save all searched positions to file.
 
 typedef struct hash_shogi {
 	lock_yss_t entry_lock;		// lock
@@ -55,6 +56,9 @@ typedef struct hash_shogi {
 	std::vector <CHILD> child;
 #else
 	CHILD child[SHOGI_MOVES_MAX];
+#endif
+#ifdef CHILD_SFEN
+	std::string sfen;
 #endif
 } HASH_SHOGI;
 
@@ -91,13 +95,9 @@ extern int usi_bestmove_count;
 extern int time_left_msec[2];
 
 
-void debug_set(const char *file, int line);
-void debug_print(const char *fmt, ... );
-#define DEBUG_PRT (debug_set(__FILE__,__LINE__), debug_print)	
-void PRT(const char *fmt, ...);
 int get_clock();
 double get_spend_time(int ct1);
-void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *phg, bool fOpeningHash = false);
+void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *phg, bool fOpeningHash = false, bool do_quience = true);
 double uct_tree(tree_t * restrict ptree, int sideToMove, int ply, int *pExactValue);
 int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf_move_count);
 void print_all_min_posi(tree_t * restrict ptree, int ply);
@@ -153,12 +153,12 @@ int count_square_attack(tree_t * restrict ptree, int sideToMove, int square );
 void kiki_count_indirect(tree_t * restrict ptree, int kiki_count[][81], int kiki_bit[][2][81], bool fKikiBit);
 void update_HandicapRate(const char *token);
 void update_AverageWinrate(const char *token);
-int get_motigoma(int m, int hand);
 
 // pipe.cpp
-unsigned int get_best_move_alphabeta_usi(tree_t * restrict ptree, int sideToMove, int ply);
 void kill_usi_child();
 std::string get_sfen_string(tree_t * restrict ptree, int sideToMove, int ply);
+unsigned int get_best_move_alphabeta_usi(tree_t * restrict ptree, int sideToMove, int ply);
+bool get_pv_qsearch_usi(tree_t * restrict ptree, int sideToMove, int ply, float *v);
 
 // r_book.cpp
 void make_r_book(tree_t * restrict ptree);

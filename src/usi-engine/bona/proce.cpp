@@ -892,22 +892,16 @@ usi_posi( tree_t * restrict ptree, char **lasts )
   }
     
   for ( ;; )  {
-
     token = strtok_r( NULL, str_delimiters, lasts );
     if ( token == NULL ) { break; }
-      
     if ( usi2csa( ptree, token, str_buf ) < 0 )            { return -1; }
     if ( interpret_CSA_move( ptree, &move, str_buf ) < 0 ) { return -1; }
 #if defined(YSS_ZERO)
-    if ( make_move_root( ptree, move, 0 ) < 0 )
+    if ( make_move_root( ptree, move, 0 ) < 0 ) return -1;
+	set_root_rand2_hash(ptree, root_turn);
 #else
-    if ( make_move_root( ptree, move, ( flag_history | flag_time
-					| flag_rep
-					| flag_detect_hang ) ) < 0 )
+    if ( make_move_root( ptree, move, ( flag_history | flag_time | flag_rep | flag_detect_hang ) ) < 0 ) return -1;
 #endif
-      {
-	return -1;
-      }
   }
 
   if ( get_elapsed( &time_turn_start ) < 0 ) { return -1; }

@@ -70,7 +70,7 @@ void load_opening_sfen() {
 	mt_rand.seed(rd());
 	FILE *fp = fopen("aoba26523.sfen","r");
 	if ( fp==NULL ) die(ERR_INT("can not open sfen"));
-	int count = 0, sum_tesuu = 0, fm_sum=0,fc_sum=0,f_ai=0,ibisha=0;
+	int count = 0, fm_sum=0,fc_sum=0,f_ai=0,ibisha=0;
 	for (;;) {
 		const int size = 256*32;
 		static char buf[size];

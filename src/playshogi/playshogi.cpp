@@ -98,8 +98,10 @@ static void log_out(USIEngine &c, const char *fmt, ...) noexcept;
 static void close_flush(USIEngine &c) noexcept;
 static void file_out(const char *fmt, ...) noexcept;
 
-constexpr char default_book[]   = "records2016_10818.sfen";
-constexpr uint default_book_size = 10831U;
+//constexpr char default_book[]   = "records2016_10818.sfen";
+//constexpr uint default_book_size = 10831U;
+constexpr char default_book[]   = "2016yane_24_10818_9143.sfen";
+constexpr uint default_book_size = 9143;
 static string book_file;
 static void load_book_file(string file) noexcept;
 static bool book_shuffle = true;

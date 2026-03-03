@@ -74,6 +74,93 @@ hash_func( const tree_t * restrict ptree )
 #undef Foo
 
 
+void rand2_update(tree_t * restrict ptree, int sideToMove, int move) {
+	uint64_t r = ptree->rand2_hash;
+	const int from = (int)I2From(move);
+	const int to   = (int)I2To(move);
+	if ( from >= nsquare ) {	// drop
+		int k = From2Drop(from);
+		if ( sideToMove == black ) {
+			int n = get_motigoma(k, HAND_B);
+			if ( k <= 0 || k>31 || n<1 || n>18 || to < 0 || to >80 ) DEBUG_PRT("");
+			r ^= rand2_hand_table[0][k][n  ];
+			r ^= rand2_hand_table[0][k][n-1];
+ 			r ^= rand2_move_table[k][to];
+		} else {
+			int n = get_motigoma(k, HAND_W);
+			if ( k <= 0 || k+16>31 || n<1 || n>18 || to < 0 || to > 80 ) DEBUG_PRT("");
+			r ^= rand2_hand_table[1][k][n  ];
+			r ^= rand2_hand_table[1][k][n-1];
+ 			r ^= rand2_move_table[k+16][to];
+		}
+	} else {
+		int k                 = (int)I2PieceMove(move);
+		int k_cap             = (int)UToCap(move);
+		const int is_promote  = (int)I2IsPromote(move);
+
+		int new_k = k;
+		if ( is_promote ) new_k += promote;
+		if ( sideToMove == white ) {
+			k     += 16;
+			new_k += 16;
+		}
+	 	r ^= rand2_move_table[    k][from];
+	 	r ^= rand2_move_table[new_k][  to];
+
+		if ( k_cap ) {
+			int ck = k_cap & 0x07;
+			if ( sideToMove == black ) {
+				int n = get_motigoma(ck, HAND_B);
+				r ^= rand2_hand_table[0][ck][n  ];
+				r ^= rand2_hand_table[0][ck][n+1];
+				if ( ck < 1 || n > 17 ) DEBUG_PRT("");
+			} else {
+				int n = get_motigoma(ck, HAND_W);
+				r ^= rand2_hand_table[1][ck][n  ];
+				r ^= rand2_hand_table[1][ck][n+1];
+				if ( ck < 1 || n > 17 ) DEBUG_PRT("");
+			}
+			if ( sideToMove == black ) k_cap += 16;
+	 		r ^= rand2_move_table[k_cap][  to];
+			if ( k_cap > 31 ) DEBUG_PRT("");
+		}
+		if ( k < 0 || k>31 || k_cap < 0 || k_cap >31 || from < 0 || from > 80 || to < 0 || to > 80 || new_k < 0 || new_k > 31 ) DEBUG_PRT("");
+//		PRT("nrep=%3d:side=%d,k=%2d,new_k=%2d,from=%2d,to=%2d,k_cap=%2d,is_promote=%d,%016" PRIx64 "\n",ptree->nrep,sideToMove,k,new_k,from,to,k_cap,is_promote,ptree->rand2_hash);
+	}
+	r = ~r;	// Žè”Ô‚ð”½“]‚Å•\‚·B“¯ˆê‹Ç–Ê‚ÅŽè”Ô‚ªˆÙ‚È‚éA‚Í”½“]‚µ‚Ä‚¢‚é
+	ptree->rand2_hash = r;
+//	PRT("nrep=%3d:side=%d,from=%2d,to=%2d,move=%06x,%016" PRIx64 "\n",ptree->nrep,sideToMove,from,to,move,r);
+}
+
+void set_root_rand2_hash(tree_t * restrict ptree, int sideToMove) {
+	uint64_t r = 0;
+	for ( int sq = 0; sq < nsquare; sq++ ) {
+		int k = BOARD[sq];
+		if ( k == 0 ) continue;
+		if ( k < 0 ) k = abs(k)+16;	// -1 -> +17(+1+16),  -15 -> +31(+15+16)
+		if ( k > 32 ) DEBUG_PRT("");
+		r ^= rand2_move_table[k][sq];
+	}
+	for (int i=1;i<8;i++) {
+		int n;
+		n = get_motigoma(i, HAND_B);
+		if ( n > 18 ) DEBUG_PRT("");
+		r ^= rand2_hand_table[0][i][n];
+		n = get_motigoma(i, HAND_W);
+		if ( n > 18 ) DEBUG_PRT("");
+		r ^= rand2_hand_table[1][i][n];
+	}
+	if ( sideToMove ) r = ~r;
+	ptree->rand2_hash = r;
+	root_rand2_hash = r;
+//	PRT("set root side=%d,%016" PRIx64 "\n",sideToMove,r);
+}
+
+void copy_rand2_hash(tree_t * restrict ptree) {
+	ptree->rand2_hash = root_rand2_hash;
+}
+
+
 /*
        name    bits  shifts
 word1  depth     8     56

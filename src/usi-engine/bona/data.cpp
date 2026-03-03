@@ -75,6 +75,11 @@ uint64_t w_hand_silver_rand[ nsilver_max ];
 uint64_t w_hand_gold_rand[ ngold_max ];
 uint64_t w_hand_bishop_rand[ nbishop_max ];
 uint64_t w_hand_rook_rand[ nrook_max ];
+
+uint64_t rand2_move_table[32][nsquare];
+uint64_t rand2_hand_table[2][8][npawn_max+1];
+uint64_t root_rand2_hash;
+
 uint64_t node_limit;
 SHARE unsigned int game_status;
 unsigned int amove_save[NUM_UNMAKE];

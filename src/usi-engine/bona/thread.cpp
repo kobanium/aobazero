@@ -687,9 +687,11 @@ init_state( const tree_t * restrict parent, tree_t * restrict child )
     {
       child->record_plus_ply_min_posi[i] = parent->record_plus_ply_min_posi[i];
       child->history_in_check[i]         = parent->history_in_check[i];
-      child->keep_sequence_hash[i]       = parent->keep_sequence_hash[i];
+//    child->keep_sequence_hash[i]       = parent->keep_sequence_hash[i];
     }
-  child->sequence_hash = parent->sequence_hash;
+//child->sequence_hash = parent->sequence_hash;
+  child->rand2_hash    = parent->rand2_hash;
+
 #endif
 
 }

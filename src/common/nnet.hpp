@@ -25,7 +25,7 @@ namespace NNAux {
   constexpr uint nch_input_fill = 17U * 8U + 2U;
 #ifdef USE_POLICY2187
   constexpr uint nch_out_policy =  27U;
-  constexpr uint maxn_one       = 64U * 8U * 2;
+  constexpr uint maxn_one       = 64U * 8U * 8;
 #else
   constexpr uint nch_out_policy = 139U;
   constexpr uint maxn_one       = 64U * 8U;

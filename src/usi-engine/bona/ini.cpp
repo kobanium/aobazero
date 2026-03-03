@@ -669,6 +669,15 @@ ini_random_table( void )
       w_hand_bishop_rand[ i ] = rand64();
       w_hand_rook_rand[ i ]   = rand64();
     }
+
+  for ( i = 0; i < nsquare; i++ ) {
+    for (int j=0;j<32;j++) rand2_move_table[j][i] = rand64();
+  }
+  for ( i = 0; i < npawn_max+1; i++ ) {
+    for (int j=0;j<2;j++) {
+      for (int k=0;k<8;k++) rand2_hand_table[j][k][i] = rand64();
+    }
+  }
 }
 
 

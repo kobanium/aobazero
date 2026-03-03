@@ -82,7 +82,7 @@ const int HASH_SHOGI_TABLE_SIZE_MIN = 1024*4*4;
 int Hash_Shogi_Table_Size = HASH_SHOGI_TABLE_SIZE_MIN;
 int Hash_Shogi_Mask;
 int hash_shogi_use = 0;
-int hash_shogi_sort_num = 0;
+int hash_shogi_use_all = 0;
 int thinking_age = 0;
 
 const int REHASH_MAX = (2048*1);
@@ -434,6 +434,42 @@ void set_Hash_Shogi_Table_Size(int playouts)
 	}
 }
 
+inline void hash_shogi_array_clear(HASH_SHOGI *p) {
+#ifdef CHILD_SFEN
+	if ( ! p->sfen.empty() ) {
+		int max_i = -1;
+		int max_games = 0;
+		for (int i=0;i<p->child_num;i++) {
+			CHILD *pc = &p->child[i];
+			if ( pc->games > max_games ) {
+				max_games = pc->games;
+				max_i = i;
+			}
+		}
+		if ( max_i >= 0 && max_games >= 6 ) {
+			FILE *fp = fopen("all_searched_pos.txt","a");
+			if ( fp ) {
+				CHILD *pc = &p->child[max_i];
+//				fprintf(fp,"%s%d,%5d,w%6.3f,%3d,n%6.3f,%2d:g%5d,%s,v=%8.5f,%.4f\n",p->sfen.c_str()+14, p->col,p->games_sum,p->win_sum,p->child_num,p->net_value, max_i,pc->games,str_CSA_move(pc->move),pc->value,pc->bias);
+				fprintf(fp,"%s%d,%d,%s,%.5f\n",p->sfen.c_str()+14, p->games_sum,pc->games,str_CSA_move(pc->move),pc->value);
+				fclose(fp);
+			}
+			// 4090で1時間に550局、70手で70*550 = 38500 * 3200 = 123,200,000 局面  1.2億, 1日で 29億。84%が1手探索済み
+			// 100局面で15539byte,  29億で 459GB, 6以上で28局面, 4046 byte, 1000playoutで10以上は135、18176, 135 byte
+			// 1日で29億 * 0.135 = 3.915 億 *135 = 528億 byte = 52GB(4億局面)。320億 は80日。
+			// 2000で6以上は561、51792, 92 byte, 1日で29億 * 0.28 = 8億。738億 byte, 73GB(8億), 320億は40日。これぐらいなら
+			// 10日でHDDがあふれる。直接psvに変換する？ 1局面40byte, 半分程度か。10日後に考える。
+			// r49で6日間で 247,716,428,962 byte, /92=27億局面、4.5億/1日。r39とで6.5億/日。
+//			static int count; PRT(".count=%d",++count);
+		}
+	}
+	p->sfen.clear();
+#endif
+#ifdef CHILD_VEC
+	std::vector<CHILD>().swap(p->child);	// memory free hack for vector. 
+#endif
+}
+
 void hash_shogi_table_reset()
 {
 	for (int i=0;i<Hash_Shogi_Table_Size;i++) {
@@ -441,9 +477,7 @@ void hash_shogi_table_reset()
 		pt->deleted = 1;
 		LockInit(pt->entry_lock);
 //		pt->lock = false;
-#ifdef CHILD_VEC
-		std::vector<CHILD>().swap(pt->child);	// memory free hack for vector. 
-#endif
+		hash_shogi_array_clear(pt);
 	}
 	hash_shogi_use = 0;
 }
@@ -495,7 +529,7 @@ uint64 get_marge_hash(tree_t * restrict ptree, int sideToMove)
 void hash_half_del(tree_t * restrict ptree, int sideToMove)
 {
 	uint64 hash64pos  = get_marge_hash(ptree, sideToMove);
-	uint64 hashcode64 = ptree->sequence_hash;
+	uint64 hashcode64 = ptree->rand2_hash;
 
 	int i,sum = 0;
 	for (i=0;i<Hash_Shogi_Table_Size;i++) if ( hash_shogi_table[i].deleted==0 ) sum++;
@@ -520,11 +554,7 @@ void hash_half_del(tree_t * restrict ptree, int sideToMove)
 				del = 1;
 			}
 			if ( del ) {
-#ifdef CHILD_VEC
-				std::vector<CHILD>().swap(pt->child);	// memory free hack for vector. 
-#else
-//				memset(pt,0,sizeof(HASH_SHOGI));
-#endif
+				hash_shogi_array_clear(pt);
 				pt->deleted = 1;
 				hash_shogi_use--;
 				del_sum++;
@@ -582,7 +612,7 @@ research_empty_block:
 	int n,first_n,loop = 0;
 
 	uint64 hash64pos  = get_marge_hash(ptree, sideToMove);
-	uint64 hashcode64 = ptree->sequence_hash;
+	uint64 hashcode64 = ptree->rand2_hash;
 //	PRT("ReadLock hash=%016" PRIx64 "\n",hashcode64);
 
 	n = (int)hashcode64 & Hash_Shogi_Mask;
@@ -638,10 +668,12 @@ research_empty_block:
 	int n,first_n,loop = 0;
 
 	uint64 hash64pos  = get_marge_hash(ptree, sideToMove);
-	uint64 hashcode64 = ptree->sequence_hash;
+//	uint64 hashcode64 = ptree->sequence_hash;
+	uint64 hashcode64 = ptree->rand2_hash;	// 手順ハッシュで同一局面(手順前後)を区別すると+33(自己対戦で+88)弱い。局面ハッシュだけで128bitに
 //	PRT("ReadLock hash=%016" PRIx64 "\n",hashcode64);
 
-	n = (int)hashcode64 & Hash_Shogi_Mask;
+//	n = (int)hashcode64 & Hash_Shogi_Mask;
+	n = (int)hash64pos  & Hash_Shogi_Mask;
 	first_n = n;
 	const int TRY_MAX = 8;
 
@@ -651,7 +683,10 @@ research_empty_block:
 		HASH_SHOGI *pt = &hash_shogi_table[n];
 		Lock(pt->entry_lock);		// Lockをかけっぱなしにするように
 		if ( pt->deleted == 0 ) {
+			// 64bitの手順ハッシュだけだと17万棋譜生成した段階で衝突が起きて誤認識。局面ハッシュも加えた。2^32以上局面を生成してるので衝突は普通にありうる
+			if ( hashcode64 != pt->hashcode64 && hash64pos == pt->hash64pos ) PRT("rand2 collision? loop=%d\n",loop);
 			if ( hashcode64 == pt->hashcode64 && hash64pos == pt->hash64pos ) {
+//			if (                                 hash64pos == pt->hash64pos ) {
 				return pt;
 			}
 		} else {
@@ -692,9 +727,7 @@ void reset_opening_hash()
 	for (int i=0;i<Opening_Hash_Size;i++) {
 		HASH_SHOGI *pt = &opening_hash[i];
 		pt->deleted = 1;
-#ifdef CHILD_VEC
-		std::vector<CHILD>().swap(pt->child);	// memory free hack for vector. 
-#endif
+		hash_shogi_array_clear(pt);
 	}
 	opening_hash_use = 0;
 }
@@ -733,8 +766,9 @@ research_block:
 	int n,first_n,loop = 0;
 
 	uint64 hash64pos  = get_marge_hash(ptree, sideToMove);
-	uint64 hashcode64 = ptree->sequence_hash;
+	uint64 hashcode64 = ptree->rand2_hash;
 //	PRT("ReadLock hash=%016" PRIx64 "\n",hashcode64);
+	DEBUG_PRT("this function is depreacated.\n");
 
 	n = (int)hashcode64 & Opening_Hash_Mask;
 	first_n = n;
@@ -792,7 +826,7 @@ char *prt_pv_from_hash(tree_t * restrict ptree, int ply, int sideToMove, int fus
 	UnLock(phg->entry_lock);
 	if ( phg->deleted ) return str;
 //	if ( phg->hashcode64 != get_marge_hash(ptree, sideToMove) ) return str;
-	if ( phg->hashcode64 != ptree->sequence_hash || phg->hash64pos != get_marge_hash(ptree, sideToMove) ) return str;
+	if ( phg->hashcode64 != ptree->rand2_hash || phg->hash64pos != get_marge_hash(ptree, sideToMove) ) return str;
 	if ( ply > 30 ) return str;
 
 	int max_i = -1;
@@ -818,8 +852,8 @@ char *prt_pv_from_hash(tree_t * restrict ptree, int ply, int sideToMove, int fus
 			strcat(str,sg[(root_turn + ply) & 1]);
 			strcat(str,str_CSA_move(pc->move));
 		}
+		rand2_update(ptree, sideToMove, pc->move);
 		MakeMove( sideToMove, pc->move, ply );
-
 		prt_pv_from_hash(ptree, ply+1, Flip(sideToMove), fusi_str);
 		UnMakeMove( sideToMove, pc->move, ply );
 	}
@@ -888,7 +922,9 @@ void uct_tree_loop(tree_t * restrict ptree, int sideToMove, int ply)
 	for (;;) {
 		ptree->reached_ply = 0;
 		int exact_value = EX_NONE;
+		copy_rand2_hash(ptree);
 		uct_tree(ptree, sideToMove, ply, &exact_value);
+		copy_rand2_hash(ptree);	// rand2ハッシュはUCTを降りて戻ると復元しないのでRootでHashを見るとエラー
 		ptree->sum_reached_ply += ptree->reached_ply;
 		if ( ptree->reached_ply > ptree->max_reached_ply ) ptree->max_reached_ply = ptree->reached_ply;
 		int count = inc_uct_count();
@@ -907,6 +943,7 @@ void uct_tree_loop(tree_t * restrict ptree, int sideToMove, int ply)
 
 int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf_move_count)
 {
+	copy_rand2_hash(ptree);
 	if ( fClearHashAlways ) {
 		hash_shogi_table_clear();
 	} else {
@@ -918,7 +955,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 			hash_half_del(ptree, sideToMove);
 		}
 	}
-	
+
 //	{ make_balanced_opening(ptree, sideToMove, ply); return 0; }
 
 	HASH_SHOGI *phg = HashShogiReadLock(ptree, sideToMove);
@@ -939,7 +976,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 	const float alpha   = 0.15f;	// alpha ... Chess = 0.3, Shogi = 0.15, Go = 0.03
 	if ( fAddNoise ) add_dirichlet_noise(epsilon, alpha, phg);
 //{ void test_dirichlet_noise(float epsilon, float alpha);  test_dirichlet_noise(0.25f, 0.03f); }
-	PRT("root phg->sequence_hash=%" PRIx64 ",pos=%" PRIx64 ", child_num=%d\n",phg->hashcode64,phg->hash64pos,phg->child_num);
+	PRT("root phg->rand2_hash=%" PRIx64 ",pos=%" PRIx64 ", child_num=%d\n",phg->hashcode64,phg->hash64pos,phg->child_num);
 
 	init_KLDGain_prev_dist_visits_total(phg->games_sum);
 
@@ -1073,6 +1110,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		double v = 100.0 * (pc->value + 1.0) / 2.0;
 		PRT("best:%s,%3d,%6.2f%%(%6.3f),bias=%6.3f\n",str_CSA_move(pc->move),pc->games,v,pc->value,pc->bias);
 //		if ( v < 5 ) { PRT("resign threshold. 5%%\n"); best_move = 0; }
+		copy_rand2_hash(ptree);
 		char *pv_str = prt_pv_from_hash(ptree, ply, sideToMove, PV_CSA); PRT("%s\n",pv_str);
 	}
 
@@ -1124,6 +1162,8 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 	}
 
 	buf_move_count[0] = 0;
+	char buf_move_count_v[USI_BESTMOVE_LEN];
+	const bool fMoveCountV = false;
 
 	double best_v01 = 0;
 	if ( fAutoResign ) {
@@ -1140,6 +1180,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 	} else {
 		sprintf(buf_move_count,"%d",sum_games);
 	}
+	if ( fMoveCountV ) strcpy(buf_move_count_v,buf_move_count);
 	for (i=0;i<sort_n;i++) {
 		SORT_LCB *p = &sort_lcb[i];
 		char buf[7];
@@ -1147,6 +1188,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 		if ( 0 ) strcpy(buf,str_CSA_move(p->move));
 //		PRT("%s,%d,",str_CSA_move(p->move),p->games);
 		char str[TMP_BUF_LEN];
+		char strv[TMP_BUF_LEN];
 		if ( fRawValuePolicy ) {
 //			static int p_count[301],p_sum = 0;
 			int j;
@@ -1167,6 +1209,8 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 				c = 'A' + min_c + (min_c >= 26)*6;	// A=0.001,Z=0.028,a=0.033,z=0.954
 //				sprintf(str,",%s,%d,%.3f",buf,p->games,f);
 				sprintf(str,",%s,%d%c",buf,p->games,c);
+				if ( fMoveCountV ) sprintf(strv,",%s,%d%c(%.2f)",buf,p->games,c,100.0*(phg->child[j].value+1.0)/2.0);
+
 /*
 				if ( f >= 0.01 ) p_count[(int)(f*100)]++;
 				else if ( f >= 0.001 ) p_count[(int)(100+f*1000)]++;
@@ -1193,9 +1237,19 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 			sprintf(str,",%s,%d",buf,p->games);
 		}
 		strcat(buf_move_count,str);
+		strcat(buf_move_count_v,strv);
 //		PRT("%s",str);
 	}
 //	PRT("\n");
+
+	if ( fMoveCountV ) {
+		FILE *fp = fopen("move_count_v.txt","a");
+		if ( fp ) {
+			std::string sfen = get_sfen_string(ptree, root_turn, 1);
+			fprintf(fp,"%s:%s\n",sfen.c_str(),buf_move_count_v);
+			fclose(fp);
+		}
+	}
 
 	// 指定局面の開始から手数から10手までは通常の温度で選び、11手以上はハンデのレートで弱くする。
 	int nVC = nVisitCount;
@@ -1393,7 +1447,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 	return best_move;
 }
 
-void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *phg, bool fOpeningHash)
+void create_node(tree_t * restrict ptree, int sideToMove, int ply, HASH_SHOGI *phg, bool fOpeningHash, bool do_quience)
 {
 	if ( phg->deleted == 0 ) {
 		PRT("already created? ply=%d,sideToMove=%d,games_sum=%d,child_num=%d\n",ply,sideToMove,phg->games_sum,phg->child_num);
@@ -1445,6 +1499,9 @@ if (0) {
 
 #ifdef CHILD_VEC
 	phg->child.reserve(move_num);
+#endif
+#ifdef CHILD_SFEN
+	phg->sfen = get_sfen_string(ptree, sideToMove, ply);
 #endif
 
 	unsigned int * restrict pmove = ptree->move_last[0];
@@ -1647,7 +1704,7 @@ if (0) {
 		
 		if ( 0 ) {
 //			print_board(ptree);
-			unsigned int best_usi = get_best_move_alphabeta_usi( ptree, sideToMove, ply);
+			unsigned int best_usi = get_best_move_alphabeta_usi(ptree, sideToMove, ply);
 			for (i = 0; i < phg->child_num; i++) {
 				CHILD *pc = &phg->child[i];
 				if ( pc->move != (int)best_usi ) continue;
@@ -1657,7 +1714,6 @@ if (0) {
 				break;
 			}
 		}
-
 	}
 
 	if ( 0 ) {	// 勝率補正。valueは楽観的？。初期valueは800playoutした後(最大回数の手の勝率)、0に近づく傾向にある
@@ -1700,7 +1756,8 @@ if (0) {
 		}
 	}
 
-	phg->hashcode64     = ptree->sequence_hash;
+//	phg->hashcode64     = ptree->sequence_hash;
+	phg->hashcode64     = ptree->rand2_hash;
 	phg->hash64pos      = get_marge_hash(ptree, sideToMove);
 	phg->mate_bit       = 0;
 	phg->win_sum        = 0;
@@ -1711,13 +1768,24 @@ if (0) {
 	phg->net_value      = v;
 	phg->deleted        = 0;
 
-//	if ( ! is_main_thread(ptree) && ply==3 ) { PRT("create_node(),ply=%2d,c=%3d,v=%.5f,seqhash=%" PRIx64 "\n",ply,move_num,v,ptree->sequence_hash); print_board(ptree); }
+//	if ( ! is_main_thread(ptree) && ply==3 ) { PRT("create_node(),ply=%2d,c=%3d,v=%.5f,seqhash=%" PRIx64 "\n",ply,move_num,v,ptree->rand2_hash); print_board(ptree); }
 //PRT("create_node done...ply=%d,sideToMove=%d,games_sum=%d,child_num=%d,slot=%d,v=%5.2f\n",ply,sideToMove,phg->games_sum,phg->child_num, ptree->tlp_slot,v);
+
+	if ( 0 && do_quience ) {
+		UnLock(phg->entry_lock); if ( get_thread_id(ptree) != 0 ) DEBUG_PRT("1 thread only.");
+		float w;
+		if ( get_pv_qsearch_usi(ptree, sideToMove, ply, &w) ) {
+			PRT("v=%.4f -> %.4f\n",v,w);
+			phg->net_value = w;
+		}
+		Lock(phg->entry_lock);
+	}
 
 	if ( fOpeningHash ) {
 	} else {
 		std::lock_guard<std::mutex> guard(g_mtx); 
  		hash_shogi_use++;
+//		hash_shogi_use_all++;
 	}
 }
 
@@ -1783,7 +1851,7 @@ double uct_tree(tree_t * restrict ptree, int sideToMove, int ply, int *pExactVal
 			if ( move == MOVE_NA ) break;
 			MOVE_CURR = move;
 		}
-		if ( ply <= 4 ) PRT("dfpn mate: ply=%2d,col=%d,%-6s:move=%s:games=%d,%016" PRIx64 "\n",ply,sideToMove, string_CSA_move(ptree->path[ply-1]).c_str(), string_CSA_move(MOVE_CURR).c_str(),phg->games_sum, ptree->sequence_hash);
+		if ( ply <= 4 ) PRT("dfpn mate: ply=%2d,col=%d,%-6s:move=%s:games=%d,%016" PRIx64 "\n",ply,sideToMove, string_CSA_move(ptree->path[ply-1]).c_str(), string_CSA_move(MOVE_CURR).c_str(),phg->games_sum, ptree->rand2_hash);
 
 		if ( ! is_move_valid( ptree, MOVE_CURR, sideToMove ) ) break;
 
@@ -1926,10 +1994,12 @@ skip_select:
 		max_value = -10000;
 		goto select_again;
 	}
-//	PRT("%2d:%s:SHash=%016" PRIx64,ply,str_CSA_move(pc->move),ptree->sequence_hash);
+//	PRT("%2d:%s:SHash=%016" PRIx64,ply,str_CSA_move(pc->move),ptree->rand2_hash);
+	rand2_update(ptree, sideToMove, pc->move);	// MakeMoveの前に
 	MakeMove( sideToMove, pc->move, ply );
 	ptree->path[ply] = pc->move;
-//	PRT(" -> %016" PRIx64 "\n",ptree->sequence_hash);
+
+//	PRT(" -> %016" PRIx64 "\n",ptree->rand2_hash);
 
 	MOVE_CURR = pc->move;
 	copy_min_posi(ptree, Flip(sideToMove), ply);
@@ -2541,6 +2611,7 @@ void send_usi_info(tree_t * restrict ptree, int sideToMove, int ply, int nodes, 
 			max_games = pc->games;
 			max_i = i;
 		}
+		if ( is_use_exact() && pc->exact_value == EX_WIN ) { max_i = i; max_games = pc->games; break; }
 	}
 	UnLock(phg->entry_lock);
 	if ( max_i < 0 ) return;
@@ -2555,7 +2626,7 @@ void send_usi_info(tree_t * restrict ptree, int sideToMove, int ply, int nodes, 
 	float v          = old_eval / (old_visits + (old_visits==0));
 	float wr =         (v + 1.0f) / 2.0f;	// -1 <= x <= +1   -->   0 <= y <= +1
 	int score = winrate_to_score(wr);
-	
+
 	char *pv_str = prt_pv_from_hash(ptree, ply, sideToMove, PV_USI);
 //	char *pv_str = prt_pv_from_hash(ptree, ply, sideToMove, PV_CSA);
 	int depth = (int)(1.0+log(nodes+1.0));
@@ -2589,6 +2660,13 @@ void usi_newgame(tree_t * restrict ptree)
 		 	char *lasts = str;
 			usi_posi( ptree, &lasts );
 			make_balanced_opening(ptree, root_turn, 1);
+		}
+	}
+	if (0) {
+		FILE *fp = fopen("newgames.log","a");
+		if ( fp ) {
+			fprintf(fp,":usi_newgames=%d,hash_shogi_use_all=%d\n",usi_newgames,hash_shogi_use_all);
+			fclose(fp);
 		}
 	}
 }
