@@ -966,9 +966,25 @@ int shogi::LoadCSA()
 						pz->weight_n = atoi(lpLine+3);
 					}
 				}
+				char *p = strstr(lpLine,", moves ");
+				if ( p ) {
+					ZERO_DB *pz = &zdb_one;
+					pz->sfen_moves = atoi(p+8);
+				}
+
 			} else {
 				ZERO_DB *pz = &zdb_one;
 //				PRT("%s\n",lpLine);
+				for ( ; pz->vv_move_visit.size() < (size_t)(tesuu - 1); ) {
+					vector <unsigned int> v;
+					pz->vv_move_visit.push_back(v);
+					vector <char> vc;
+					pz->vv_raw_policy.push_back(vc);
+					pz->v_score_x10k.push_back(0);
+					pz->v_rawscore_x10k.push_back(0);
+					pz->v_playouts_sum.push_back(0);
+				}
+
 				vector <unsigned int> v;
 				pz->vv_move_visit.push_back(v);
 				if ( pz->vv_move_visit.size() != (size_t)tesuu ) {
