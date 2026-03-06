@@ -324,8 +324,8 @@ in_CSA( tree_t * restrict ptree, record_t *pr, unsigned int *pmove, int flag )
 
 
 int
-interpret_CSA_move( tree_t * restrict ptree, unsigned int *pmove,
-		    const char *str )
+interpret_CSA_move_turn( tree_t * restrict ptree, unsigned int *pmove,
+		    const char *str, int sideToMove )
 {
   int ifrom_file, ifrom_rank, ito_file, ito_rank, ipiece;
   int ifrom, ito;
@@ -370,11 +370,11 @@ interpret_CSA_move( tree_t * restrict ptree, unsigned int *pmove,
 
   *pmove = 0;
   pmove_last = ptree->amove;
-  pmove_last = GenCaptures(root_turn, pmove_last );
-  pmove_last = GenNoCaptures(root_turn, pmove_last );
-  pmove_last = GenCapNoProEx2(root_turn, pmove_last );
-  pmove_last = GenNoCapNoProEx2(root_turn, pmove_last );
-  pmove_last = GenDrop( root_turn, pmove_last );
+  pmove_last = GenCaptures(sideToMove, pmove_last );
+  pmove_last = GenNoCaptures(sideToMove, pmove_last );
+  pmove_last = GenCapNoProEx2(sideToMove, pmove_last );
+  pmove_last = GenNoCapNoProEx2(sideToMove, pmove_last );
+  pmove_last = GenDrop( sideToMove, pmove_last );
   for ( p = ptree->amove; p < pmove_last; p++ )
     {
       if ( *p == move )
@@ -390,11 +390,11 @@ interpret_CSA_move( tree_t * restrict ptree, unsigned int *pmove,
       if ( ipiece == pawn
 	   && ifrom == nsquare
 	   && ! BOARD[ito]
-	   && ( root_turn ? IsHandPawn(HAND_W) : IsHandPawn(HAND_B) ) )
+	   && ( sideToMove ? IsHandPawn(HAND_W) : IsHandPawn(HAND_B) ) )
 	{
 	  unsigned int u;
 
-	  if ( root_turn )
+	  if ( sideToMove )
 	    {
 	      u = BBToU( BB_WPAWN_ATK );
 	      if ( u & (mask_file1>>ito_file) )
@@ -421,6 +421,12 @@ interpret_CSA_move( tree_t * restrict ptree, unsigned int *pmove,
   return 1;
 }
 
+int
+interpret_CSA_move( tree_t * restrict ptree, unsigned int *pmove,
+		    const char *str )
+{
+  return interpret_CSA_move_turn( ptree, pmove, str, root_turn);
+}
 
 const char *
 str_CSA_move( unsigned int move )

@@ -32,16 +32,15 @@
 #include <sys/time.h>
 #endif
 
-const int CHILD_MAX = 1;
-int pid_child[CHILD_MAX];
+const int CHILD_MAX = 7;
 
+int pid_child[CHILD_MAX];
 int pfd_a[CHILD_MAX][2];
 int pfd_b[CHILD_MAX][2];
 FILE *to_engine_stream[CHILD_MAX], *from_engine_stream[CHILD_MAX];
 
 const int USI_MAX_LINES = 100;
 const int USI_BUF_SIZE = 128*16;
-char usi_commnad_line[USI_BUF_SIZE];
 char usi_return_latest_line[CHILD_MAX][USI_BUF_SIZE];
 char usi_return_line[CHILD_MAX][USI_MAX_LINES][USI_BUF_SIZE];
 int  usi_return_line_num[CHILD_MAX];
@@ -74,7 +73,7 @@ void send_wait(int n, const char *usi_commnad_line, const char *wait)
 	sSend[nLen] = 0;
 //	sprintf(sTmp, ",A%d\n", total_time[moves&1]);
 //	strcat(sSend, sTmp);
-	PRT("->%s", sSend);
+	PRT("%d->%s", n,sSend);
 
 	fprintf(to_engine_stream[n], "%s", sSend);
 	fflush(to_engine_stream[n]);
@@ -94,8 +93,9 @@ void send_wait(int n, const char *usi_commnad_line, const char *wait)
 	}
 }
 
-#define ENGINE_DIR "/home/yss/prg/Kristallweizen"
+//#define ENGINE_DIR "/home/yss/prg/Kristallweizen"
 //#define ENGINE_DIR "/home/yss/shogi/suisho5"
+#define ENGINE_DIR "/home/yss/shogi/nnue_dr4_learner/exe"
 
 void run_usi_engine()
 {
@@ -104,10 +104,10 @@ void run_usi_engine()
 	setbuf(stdout, NULL);
 	setbuf(stderr, NULL);
 
-	const char *sRun[CHILD_MAX][5] = { 
-//	   { ENGINE_DIR "/yane750zen2","","","","" },
-	   { ENGINE_DIR "/yane483_nnue_avx2","","","","" },
-	};
+	const char *sRun[5] = 
+//	   { ENGINE_DIR "/yane750zen2","","","","" };
+//	   { ENGINE_DIR "/yane483_nnue_avx2","","","","" };
+	   { ENGINE_DIR "/yane_evallearn","","","","" };
 
 	int i;
 	for (i=0; i<CHILD_MAX; i++) {
@@ -122,7 +122,7 @@ void run_usi_engine()
 			if (dup2(pfd_a[i][0], 0) == -1) error("dup pfd_a[0] failed");
 			// attach pipe b to stdout
 			if (dup2(pfd_b[i][1], 1) == -1) error("dup pfd_b[1] failed");
-			execlp(sRun[i][0], sRun[i][0], sRun[i][1], sRun[i][2], sRun[i][3], sRun[i][4], NULL);
+			execlp(sRun[0], sRun[0], sRun[1], sRun[2], sRun[3], sRun[4], NULL);
 			error("execlp failed");
 		}
 		to_engine_stream[i]   = fdopen(pfd_a[i][1], "w");	// Attach pipe a to to_gnugo_stream
@@ -302,6 +302,16 @@ void usistr_to_move(tree_t * restrict ptree, char *str, int *p_bz, int *p_az, in
 }
 */
 
+unsigned int usi2move(tree_t * restrict ptree, int sideToMove, char *str)
+{
+	char str_buf[7];
+	unsigned int move;
+    if ( usi2csa( ptree, str, str_buf ) < 0 ) DEBUG_PRT("");
+	PRT("csa:%s\n",str_buf);
+    if ( interpret_CSA_move_turn( ptree, &move, str_buf, sideToMove ) < 0 ) DEBUG_PRT("");
+	return move;
+}
+
 unsigned int get_best_move_alphabeta_usi(tree_t * restrict ptree, int sideToMove, int ply)
 {
 	// sfenで
@@ -335,16 +345,100 @@ unsigned int get_best_move_alphabeta_usi(tree_t * restrict ptree, int sideToMove
 //	int bz,az,tk,nf;
 //	usistr_to_move(ptree, str, &bz,&az,&tk,&nf, !sideToMove);
 
-	char str_buf[7];
-	unsigned int move;
-    if ( usi2csa( ptree, str, str_buf ) < 0 )              { DEBUG_PRT(""); }
-	PRT("csa:%s\n",str_buf);
-	int tmp_root_turn = root_turn;
-	root_turn = sideToMove;
-    if ( interpret_CSA_move( ptree, &move, str_buf ) < 0 ) { DEBUG_PRT(""); }
-	root_turn = tmp_root_turn;
-
+	unsigned int move = usi2move(ptree, sideToMove, str);
 	PRT("=%s=(%08x)\n",str,move);
 	return move;
 }
 
+
+
+// MCTSの末端で静止探索を行って、その末端局面でノードを評価。Policyがいるので2回呼ぶことになるか・・・。
+// Policyの最善を1手深く読む、だと +75
+// 常に1手先を評価、で同一playout回数で+75 ELO強い
+// http://www.yss-aya.com/bbs_log/bbs2023.html#bbs99
+bool get_pv_qsearch_usi(tree_t * restrict ptree, int sideToMove, int ply, float *ret_v)
+{
+	*ret_v = 0;
+	bool ok = false;
+	// sfenで
+	std::string s = get_sfen_string(ptree, sideToMove, ply);
+//	PRT("%s",s.c_str());
+
+	int tid = get_thread_id(ptree);
+	if ( tid >= CHILD_MAX ) DEBUG_PRT("tid=%d > CHILD_MAX!\n");
+	static int done = 0;
+	static lock_yss_t pipe_lock;
+	Lock(pipe_lock);
+	if ( done==0 ) {
+		run_usi_engine();
+		for (int i=0; i<CHILD_MAX; i++) {
+			send_wait(i, "usi\n",    "usiok");
+			send_wait(i, "setoption name EvalDir value /home/yss/shogi/nnue_dr4_learner/exe/eval/\n", "");
+ 			send_wait(i, "isready\n","readyok");
+		}
+		done = 1;
+	}
+	UnLock(pipe_lock);
+	send_wait(tid, s.c_str(),"");
+	send_wait(tid, "qsearch\n","qsearch :");
+	// qsearch : Value = 2185 , PV = 6i5h 4g5h+ 6e7d
+//	PRT("%s",usi_return_latest_line[tid]);
+	char *p = strstr(usi_return_latest_line[tid],"PV = ");
+	if ( p==NULL ) DEBUG_PRT("");
+	char *str = p+5;
+	if ( strstr(str,"resign") ) return ok;
+
+//	PRT("hash=%" PRIx64 ",%" PRIx64 "\n",ptree->rand2_hash,get_marge_hash(ptree, sideToMove));
+	// 1手ずつ取り出す
+	int turn = sideToMove;
+	p = str;
+	const int LOOP_MAX = 10;
+	unsigned int ma[LOOP_MAX];
+	int loop;
+	for (loop=0; loop<LOOP_MAX; loop++) {
+		char *q = strchr(p,' ');
+		char *r = strchr(p,'\n');
+		if ( r==NULL ) DEBUG_PRT("");
+		if ( q == NULL ) *r = 0;
+		else *q = 0;
+		if ( *p == 0 ) break;
+
+		unsigned int move = usi2move(ptree, turn, p);
+		ma[loop] = move;
+		MakeMove( turn, move, ply );
+		ptree->path[ply] = move;
+		MOVE_CURR = move;
+		copy_min_posi(ptree, Flip(turn), ply);
+
+		turn = Flip(turn); ply++;
+
+		if ( q == NULL ) break;
+		p = q+1;
+	}
+
+	if ( loop ) {
+		HASH_SHOGI *phg = HashShogiReadLock(ptree, turn);	// 空きを探してる時にロックで固まる
+//		HASH_SHOGI hs;
+//		HASH_SHOGI *phg = &hs;
+//		phg->deleted = 1;
+		if ( phg->deleted ) create_node(ptree, turn, ply, phg, false, false);
+		PRT("loop=%d:v=%.5f\n",loop,phg->net_value);
+		float v = phg->net_value;
+		if ( loop & 1 ) v = -v;
+		*ret_v = v;
+		ok = true;
+
+		UnLock(phg->entry_lock);
+	}
+
+	for (int i=loop; i>0; i--) {
+		turn = Flip(turn); ply--;
+		UnMakeMove( turn, ma[i-1], ply );
+	}
+
+//	PRT("hash=%" PRIx64 ",%" PRIx64 "\n",ptree->sequence_hash,get_marge_hash(ptree, sideToMove));
+	if ( turn != sideToMove ) DEBUG_PRT("");
+//	if ( loop ) print_board(ptree);
+	PRT("%s,loop=%d,turn=%d,sideToMove=%d\n",str,loop,turn,sideToMove);
+	return ok;
+}

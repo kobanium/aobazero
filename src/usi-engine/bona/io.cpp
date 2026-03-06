@@ -439,7 +439,7 @@ out_board( const tree_t * restrict ptree, FILE *pf, unsigned int move,
 #if defined(YSS_ZERO)
 //  record_t *pr = &record_game;	// ’Êí‚Í‹ó‚Á‚ÛH
 //  fprintf( pf, "moves=%d, pr->games=%d,moves=%d,lines=%d\n",ptree->nrep, pr->games,pr->moves,pr->lines );
-  fprintf( pf, "moves=%3d(%d), turn %c, nHandicap=%d, seq_hash=%016" PRIx64 ,ptree->nrep+sfen_current_move_number,sfen_current_move_number, ach_turn[(root_turn)&1], nHandicap, ptree->sequence_hash );
+  fprintf( pf, "moves=%3d(%d), turn %c, nHandicap=%d, rand2_hash=%016" PRIx64 ,ptree->nrep+sfen_current_move_number,sfen_current_move_number, ach_turn[(root_turn)&1], nHandicap, ptree->rand2_hash );
   if ( ptree->nrep > 0 ) {
     int ret_z = get_previous_move_from_pos(ptree, 1);	// ply‚Í1‚©‚çn‚Ü‚é
     const min_posi_t *p0 = &ptree->record_plus_ply_min_posi[ptree->nrep-0];

@@ -22,8 +22,11 @@ playshogiは2つのusiプログラム同士を対戦させます。
 
 7. 実行例
 
-やねうら王互角局面集2025で800局対戦。1手40kと20k、2スレッド。"-0"が先手です。
+やねうら王互角局面集2025で800局対戦。1手40kと20k、2スレッド。"-0"が先手です。先手と後手を交互に。互角局面からランダムに400個取り出し利用します。
 ./playshogi -rsm 800 -o ./2025_start_sfens_ply24.sfen -c /bin/bash -0 "./yane483 , usi , setoption name BookMoves value 0 , setoption Threads value 2 , setoption NodesLimit value 40000 , isready" -1 "./yane483 , usi , setoption name BookMoves value 0 , setoption Threads value 2 , setoption NodesLimit value 20000 , isready" >> A_40k_vs_B_20k_2t_2025_ply24.csa
+
+やねうら王互角局面集2025で800局対戦。局面集のシャッフルなし。「先手と後手を交互」なし。互角局面の最初から800個を利用します。
+./playshogi -fnrsm 800 -o ./2025_start_sfens_ply24.sfen -c /bin/bash -0 "./yane483 , usi , setoption name BookMoves value 0 , setoption Threads value 2 , setoption NodesLimit value 40000 , isready" -1 "./yane483 , usi , setoption name BookMoves value 0 , setoption Threads value 2 , setoption NodesLimit value 20000 , isready" >> A_40k_vs_B_20k_2t_2025_ply24.csa
 
 AobaNNUEと振電3を互角局面集(2016年)で。ディレクトリが異なる。FV_SCALEを指定。0.1秒/手で(ConstantThinkingTime value 100、はAobaNNUEのソースでのみ有効)
 ./playshogi -rsm 800 -o ./records2016_10818.sfen -c /bin/bash -0 "cd ~/aobannue/; ./yane900zen3_768_16_64 , setoption name BookMoves value 0 , setoption name Threads value 8 , setoption name ConstantThinkingTime value 100 , setoption name FV_SCALE value 40 , isready" -1 "cd ../sinden3; ./yane900zen3_512_8_64 , setoption name BookMoves value 0 , setoption name Threads value 8 , setoption name ConstantThinkingTime value 100 , setoption name FV_SCALE value 40 , isready" >> 768_900zen3FV40_vs_sn3_900zen3FV40_8t_100ms.csa
@@ -34,7 +37,7 @@ Aoba駒落ちの2枚落ち初期局面集で対戦。player0が常に先手
 AobaZero同士を対戦させる場合。800局。互角定跡集を400局使って先後交互に。
 ./playshogi -rsm 800 -o ./records2016_10818.sfen -0 "./bin/aobaz -p 100 -w ./weight/w1198.txt" -1 "./bin/aobaz -p 100 -w ./weight/w1198.txt" >> w1198_p100_vs_w1198_p100.csa
 
-AobaZero(1手800playout)とKristallweizen(1手200kノード、1スレッド、定跡なし)を対戦させる場合。プロセス間バッチ利用。HALF利用。weightの指定はplayshogi、aobaz、同じものを指定してください(内部で時々GPUの計算とCPUの計算の一致を確認するため)。
+AobaZero(1手800playout)とKristallweizen(1手200kノード、1スレッド、定跡なし)を対戦させる場合。プロセス間バッチ利用(aobazは1スレッドで動きます)。HALF利用。weightの指定はplayshogi、aobaz、同じものを指定してください(内部で時々GPUの計算とCPUの計算の一致を確認するため)。
 ./playshogi -rsbm 600 -B 7 -P 25 -U 0 -H 1 -c /bin/bash -W ./weight/w1198.txt -0 "./bin/aobaz -p 800 -e 0 -w ./weight/w1198.txt" -1 "~/Kristallweizen/yane483_nnue_avx2 usi , setoption name BookMoves value 0 , setoption Threads value 1 , setoption USI_Hash value 16 , setoption NodesLimit value 200000 , isready" >> w1198_p800_vs_200k.csa
 
 AobaZero(1手800playout)と水匠5(1手300kノード、1スレッド、定跡なし)を対戦させる場合。
@@ -44,7 +47,7 @@ GPU 0 と GPU 1 を使ってw485とw450を800局対戦。定跡集は使わず�
 ./playshogi -rsm 800 -P 25 -U 0:1 -B 7:7 -H 1:1 -W w0485.txt:w0450.txt -0 "bin/aobaz -e 0 -p 800 -n -msafe 30 -w w0485.txt" -1 "bin/aobaz -e 1 -n -msafe 30 -p 800 -w w0450.txt"
 
 GPU 0 のみを用いてw1650とw1500を対戦。
-./playshogi -brsm 800 -P 18 -B 7:7 -U 0:0 -H 1:1 -c /bin/bash -W ./w1650.txt:./w1500.txt w -0 "bin/aobaz -p 800 -e 0 -w w1650.txt" -1 "bin/aobaz -p 800 -e 1 -w w1500.txt" >> w1650_vs_w1500.csa
+./playshogi -brsm 800 -P 18 -B 7:7 -U 0:0 -H 1:1 -c /bin/bash -W ./w1650.txt:./w1500.txt -0 "bin/aobaz -p 800 -e 0 -w ./w1650.txt" -1 "bin/aobaz -p 800 -e 1 -w ./w1500.txt" >> w1650_vs_w1500.csa
 
 dlshogiと1手100playoutで。
 .playshogi -brsm 800 -i usi_dummy.txt:usi_dr2_mb1_p100.txt -c /bin/bash -P 7 -U 0 -B 3 -H 1 -W w4357.txt -0 "./aobaz -p 100 -e 0 -w w4357.txt" -1 "dlshogi_dr2_exhi/usi/bin/usi" >> w4357_vs_dlshogi_dr2_100p.csa

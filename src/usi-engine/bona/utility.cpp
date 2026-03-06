@@ -251,6 +251,7 @@ ini_game( tree_t * restrict ptree, const min_posi_t *pmin_posi, int flag,
 #if defined(YSS_ZERO)
   copy_min_posi(ptree, 0, 0);
   ptree->sequence_hash = 0;
+  set_root_rand2_hash(ptree, root_turn);
 #endif
 
   iret = exam_tree( ptree );

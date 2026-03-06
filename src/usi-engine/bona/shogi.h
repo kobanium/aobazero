@@ -142,7 +142,8 @@ extern unsigned char ailast_one[512];
 //#define BNZ_VER                 "42"	// 20240214 nDrawMove 0 -> 513 default, MAX_DRAW_MOVES = 513
 //#define BNZ_VER                 "43"	// 20240225 OpenCL now works even with the 11th generation Intel Iris Xe graphics built into the CPU
 //#define BNZ_VER                 "44"	// 20240525 time_left_msec, go btime 310000 wtime 300000 binc 10000 winc 10000
-#define BNZ_VER                 "45"	// 20251212 selfplay from aoba26523.sfen
+//#define BNZ_VER                 "45"	// 20251212 selfplay from aoba26523.sfen
+#define BNZ_VER                 "46"	// 20260304 rand2_hash. delete sequence_hash. Same positions (from different sequences) are not distinguished.
 
 #define BNZ_NAME                "AobaZero"
 
@@ -466,8 +467,8 @@ enum { A9 = 0, B9, C9, D9, E9, F9, G9, H9, I9,
            A1, B1, C1, D1, E1, F1, G1, H1, I1 };
 
 enum { promote = 8, empty = 0,
-       pawn, lance, knight, silver, gold, bishop, rook, king, pro_pawn,
-       pro_lance, pro_knight, pro_silver, piece_null, horse, dragon };
+           pawn,     lance,     knight,     silver,       gold, bishop,   rook, king,
+       pro_pawn, pro_lance, pro_knight, pro_silver, piece_null,  horse, dragon };
 
 enum { npawn_max = 18,  nlance_max  = 4,  nknight_max = 4,  nsilver_max = 4,
        ngold_max = 4,   nbishop_max = 2,  nrook_max   = 2,  nking_max   = 2 };
@@ -767,6 +768,7 @@ struct tree {
   int history_in_check[REP_HIST_LEN];	// 王手がかかっているか
   uint64_t sequence_hash;
   uint64_t keep_sequence_hash[REP_HIST_LEN];
+  uint64_t rand2_hash;	// position依存の2つめのハッシュ。合計128bitにするため
   int reached_ply;
   int max_reached_ply;
   int sum_reached_ply;
@@ -972,6 +974,11 @@ extern uint64_t w_hand_silver_rand[ nsilver_max ];
 extern uint64_t w_hand_gold_rand[ ngold_max ];
 extern uint64_t w_hand_bishop_rand[ nbishop_max ];
 extern uint64_t w_hand_rook_rand[ nrook_max ];
+
+extern uint64_t rand2_move_table[32][nsquare];
+extern uint64_t rand2_hand_table[2][8][npawn_max+1];
+extern uint64_t root_rand2_hash;
+
 extern unsigned int move_evasion_pchk;
 extern int easy_abs;
 extern int easy_min;
@@ -1152,6 +1159,8 @@ int next_cmdline( int is_wait );
 int CONV procedure( tree_t * restrict ptree );
 int CONV get_cputime( unsigned int *ptime );
 int CONV get_elapsed( unsigned int *ptime );
+int interpret_CSA_move_turn( tree_t * restrict ptree, unsigned int *pmove,
+		    const char *str, int sideToMove );
 int interpret_CSA_move( tree_t * restrict ptree, unsigned int *pmove,
 			const char *str );
 int in_CSA( tree_t * restrict ptree, record_t *pr, unsigned int *pmove,
@@ -1228,6 +1237,10 @@ int CONV is_move_check_b( const tree_t * restrict ptree, unsigned int move );
 int CONV is_move_check_w( const tree_t * restrict ptree, unsigned int move );
 uint64_t CONV hash_func( const tree_t * restrict ptree );
 uint64_t rand64( void );
+void rand2_update(tree_t * restrict ptree, int sideToMove, int move);
+void set_root_rand2_hash(tree_t * restrict ptree, int sideToMove);
+void copy_rand2_hash(tree_t * restrict ptree);
+
 FILE *file_open( const char *str_file, const char *str_mode );
 bitboard_t CONV attacks_to_piece( const tree_t * restrict ptree, int sq );
 bitboard_t CONV b_attacks_to_piece( const tree_t * restrict ptree, int sq );
@@ -1518,6 +1531,14 @@ extern int nHandicap;
 extern float average_winrate;
 int is_stop_search();
 int is_limit_sec_or_stop_input();
+
+void debug_set(const char *file, int line);
+void debug_print(const char *fmt, ... );
+#define DEBUG_PRT (debug_set(__FILE__,__LINE__), debug_print)	
+void PRT(const char *fmt, ...);
+
+// yss_net.cpp
+int get_motigoma(int m, int hand);
 
 #endif
 

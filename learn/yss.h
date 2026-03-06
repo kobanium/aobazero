@@ -445,6 +445,8 @@ public:
 	void sum_pwv(double z, bool bGoteTurn, double sumd[]);
 	void same_pos_check();
 	int is_koshikake_gin(ZERO_DB *p);
+	void count_furi();
+	void set_keep_pos();
 
 	// fish´ØÏ¢
 	bool is_pseudo_legalYSS(Move m, Color sideToMove);
