@@ -143,7 +143,9 @@ extern unsigned char ailast_one[512];
 //#define BNZ_VER                 "43"	// 20240225 OpenCL now works even with the 11th generation Intel Iris Xe graphics built into the CPU
 //#define BNZ_VER                 "44"	// 20240525 time_left_msec, go btime 310000 wtime 300000 binc 10000 winc 10000
 //#define BNZ_VER                 "45"	// 20251212 selfplay from aoba26523.sfen
-#define BNZ_VER                 "46"	// 20260304 rand2_hash. delete sequence_hash. Same positions (from different sequences) are not distinguished.
+//#define BNZ_VER                 "46"	// 20260304 rand2_hash. delete sequence_hash. Same positions (from different sequences) are not distinguished.
+#define BNZ_VER                 "47"	// 20260315 err_oute_num. sequence dependant exact_value is off. root perpetual check is not right still...
+
 
 #define BNZ_NAME                "AobaZero"
 

@@ -842,6 +842,10 @@ char *prt_pv_from_hash(tree_t * restrict ptree, int ply, int sideToMove, int fus
 	if ( max_i >= 0 ) {
 		CHILD *pc = &phg->child[max_i];
 		if ( ply > 1 ) strcat(str," ");
+		if ( ! is_move_valid( ptree, pc->move, sideToMove ) ) {
+			PRT("illegal move. ply=%d,%s\n",ply,str_CSA_move(pc->move));
+			return str;
+		}
 
 		if ( fusi_str ) {
 			char buf[7];
@@ -1313,7 +1317,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 			fSwap = false;
 			if ( fabs(pbest->value - pc->value) < 0.04 && pc->games*5 > pbest->games ) fSwap = true;	// 0.04 で勝率2%。1%だとelmo相手に同棋譜が800局で15局、2%で4局。
 		}
-
+/*
 		if ( average_winrate ) {
 			for (i=0;i<sort_n;i++) {
 				SORT_LCB *p = &sort_lcb[i];
@@ -1323,7 +1327,7 @@ int uct_search_start(tree_t * restrict ptree, int sideToMove, int ply, char *buf
 				}
 			}
 		}
-
+*/
 		if ( fSwap ) {
 			best_move = sort_lcb[select_index].move;
 			PRT("rand select:%s,%3d,%6.3f,bias=%6.3f,r=%d/%d,softmax_temp=%.3f(rate=%d),select_rand_prob=%.3f\n",str_CSA_move(pc->move),pc->games,pc->value,pc->bias,r,sum_games,softmax_temp,rate,select_rand_prob);
@@ -1806,6 +1810,10 @@ double uct_tree(tree_t * restrict ptree, int sideToMove, int ply, int *pExactVal
 	int select = -1;
 	int loop;
 	double max_value = -10000;
+	const int OUTE_MOVE_MAX = 10; // 実際はSHOGI_MOVES_MAXだが
+	int oute_move_num = 0;
+	int oute_move[OUTE_MOVE_MAX];
+	uint64_t keep_rand2_hash = ptree->rand2_hash;
 
 	double init_v = -1.0;	// 基本の勝率初期値は「負け」fpu (first play urgency)とも。
 /*
@@ -1934,7 +1942,7 @@ double uct_tree(tree_t * restrict ptree, int sideToMove, int ply, int *pExactVal
 		}
 	}
 */
-
+/*
 	if ( ply==1 && ptree->sum_reached_ply==0 && average_winrate && ptree->nrep < nVisitCount ) {
  		for (loop=0; loop<child_num; loop++) {
 			CHILD *pc  = &phg->child[loop];
@@ -1945,25 +1953,23 @@ double uct_tree(tree_t * restrict ptree, int sideToMove, int ply, int *pExactVal
 			}
 		}
 	}
-
+*/
 select_again:
 	for (loop=0; loop<child_num; loop++) {
 		CHILD *pc  = &phg->child[loop];
 		if ( pc->value == ILLEGAL_MOVE ) continue;
 		if ( is_use_exact() && pc->exact_value == EX_LOSS ) continue;
-		if ( is_use_exact() && pc->exact_value == EX_WIN  ) { select = loop; break; }
+		if ( is_use_exact() && pc->exact_value == EX_WIN  ) { select = loop; break; }	// 連続王手の千日手で別の手で5手詰だが、無限に王手する時にバグる
 
+//		if ( 1 &&(pc->value > +1.0 || pc->value < -1.0) ) DEBUG_PRT("%2d:ply=%2d:tid=%d:%s,v=%f,bias=%f,(%3d/%5d):select=%3d,max_v=%6.3f\n",loop,ply,get_thread_id(ptree),string_CSA_move(pc->move).c_str(),pc->value,pc->bias,pc->games,phg->games_sum,select,max_value);
 		const double cBASE = 19652.0;
 //		const double cINIT = 1.25;
-		// cBASE has little effect on the value of c if games_sum is
-		// sufficiently smaller than x.
-		double c = std::log((1.0 + phg->games_sum + cBASE) / cBASE) + cINIT;
+		// cBASE has little effect on the value of c if games_sum is sufficiently smaller than x.
+		double c = log((1.0 + phg->games_sum + cBASE) / cBASE) + cINIT;
 		
-		// The number of visits to the parent is games_sum + 1.
-		// There may by a bug in pseudocode.py regarding this.
-		double puct = c * pc->bias     * std::sqrt(static_cast<double>(phg->games_sum + 1))
-//		double puct = c * c_bias[loop] * std::sqrt(static_cast<double>(phg->games_sum + 1))
-			       / static_cast<double>(pc->games + 1);
+		// The number of visits to the parent is games_sum + 1. There may be a bug in pseudocode.py regarding this.
+		double puct = c * pc->bias     * sqrt((double)(phg->games_sum + 1)) / (double)(pc->games + 1);
+//		double puct = c * c_bias[loop] * sqrt((double)(phg->games_sum + 1)) / (double)(pc->games + 1);
 		// all values are initialized to loss value.  http://talkchess.com/forum3/viewtopic.php?f=2&t=69175&start=70#p781765
 		double mean_action_value = (pc->games == 0) ? init_v : pc->value;
 
@@ -1973,6 +1979,12 @@ select_again:
 
 //		if ( ply==1 ) PRT("%3d:v=%5.3f,bias=%5.3f,p=%5.3f,u=%6.3f,g=%4d/%5d\n",loop,pc->value,pc->bias,puct,uct_value,pc->games,phg->games_sum);
 		if ( uct_value > max_value ) {
+			if ( oute_move_num ) {	// 連続王手の千日手のみ。まず来ない
+				int i;
+				for (i=0;i<oute_move_num;i++) if ( oute_move[i] == pc->move ) break;
+//				PRT("ply=%d:loop=%d,i=%d,oute_move_num=%d,%08x,select=%d\n",ply,loop,i,oute_move_num,pc->move,select);
+				if ( i != oute_move_num ) continue;
+			}
 			max_value = uct_value;
 			select = loop;
 		}
@@ -1983,7 +1995,7 @@ select_again:
 		*pExactValue = EX_WIN;	// 1手前に指された手で勝
 		return -1;
 	}
-skip_select:
+//skip_select:
 	// 実際に着手
 	CHILD *pc = &phg->child[select];
 	if ( ! is_move_valid( ptree, pc->move, sideToMove ) ) {
@@ -2064,7 +2076,12 @@ skip_select:
 
 	if ( flag_illegal_move ) {
 		UnMakeMove( sideToMove, pc->move, ply );
-		pc->value = ILLEGAL_MOVE;
+		ptree->rand2_hash = keep_rand2_hash;
+//		pc->value = ILLEGAL_MOVE;	// 手順ハッシュを廃止したので、違法手に書き換えるのはダメ。2つの王手がどちらも連続王手になることはある？ありうるかも。
+		pc->exact_value = EX_NONE;
+		if ( oute_move_num >= OUTE_MOVE_MAX ) DEBUG_PRT("ply=%d:%d,%08x,%08x,select=%d\n",ply,oute_move_num,oute_move[0],pc->move,select);
+//		PRT("ply=%d:oute_move_num=%d,%08x,select=%d\n",ply,oute_move_num,pc->move,select);
+		oute_move[oute_move_num++] = pc->move;
 		select = -1;
 		max_value = -10000;
 		goto select_again;
@@ -2075,10 +2092,10 @@ skip_select:
 	if ( flag_sennitite != SENNITITE_NONE ) {
 		// 先手なら 勝=+1 負=-1,  後手なら 勝=+1 負=-1
 		win = 0;
-		pc->exact_value = EX_DRAW;
+//		pc->exact_value = EX_DRAW;
 		if ( flag_sennitite == SENNITITE_WIN ) {
 			win = +1.0;
-			pc->exact_value = EX_WIN;
+//			pc->exact_value = EX_WIN;	// 手順ハッシュ廃止なので、この書き換えも危険
 		}
 		skip_search = 1;
 //		PRT("flag_sennitite=%d, win=%.1f, ply=%d\n",flag_sennitite,win,ply);
@@ -2087,7 +2104,7 @@ skip_select:
 	if ( !now_in_check ) {	// root(ply=1)では判定しない。自己対局では宣言勝ちはautousi、"-i" では最後に行う。
 		if ( is_declare_win(ptree, Flip(sideToMove)) ) {
 			win = -1.0;	// 宣言されて負け
-			pc->exact_value = EX_LOSS;
+//			pc->exact_value = EX_LOSS;
 			skip_search = 1;
 		}
 	}
@@ -2118,7 +2135,7 @@ skip_select:
 		int d = ptree->nrep + ply - 1 + 1 + sfen_current_move_number;
 		if ( d >= nDrawMove ) {
 			win = 0;
-			pc->exact_value = EX_DRAW;
+//			pc->exact_value = EX_DRAW;
 			skip_search = 1;
 //			PRT("nDrawMove=%d over. ply=%d,moves=%d,%s\n",nDrawMove,ply,d,str_CSA_move(pc->move));
 		}
