@@ -346,9 +346,14 @@ int YssZero_com_turn_start( tree_t * restrict ptree )
 	} else {
 		sprintf( str_best,"bestmove %s\n",   buf );
 	}
-	if ( fUsiInfo && is_declare_win_root(ptree, root_turn) ) {
+	if ( fUsiInfo && is_declare_win_root(ptree, root_turn) ) {	// 棋譜生成では宣言勝ちはautousiが行う
 		sprintf( str_best,"bestmove win\n");
 	}
+#ifdef USE_JISHOGI24
+	if ( fUsiInfo && is_declare_draw_root(ptree, root_turn) && ptree->nrep > nDrawMove -10 ) {	// 引き分け宣言のタイミングが難しいので最大手数の直前で
+		sprintf( str_best,"bestmove draw\n");
+	}
+#endif
 
 	set_latest_bestmove(str_best);
 
@@ -2737,7 +2742,7 @@ void test_dist_loop()
 	for (int i = 0; i<10; i++) test_dist();
 }
 
-int is_declare_win(tree_t * restrict ptree, int sideToMove)
+int is_declare_win(tree_t * restrict ptree, int sideToMove, int OK)
 {
 	int king_in3[2],sum_in3[2],pieces_in3[2];
 	king_in3[0]   = king_in3[1]   = 0;
@@ -2800,8 +2805,13 @@ int is_declare_win(tree_t * restrict ptree, int sideToMove)
 	if ( nHandicap == 6 ) sum_in3[1] += 14;	// 6mai
 
 	int declare_ok = 0;
+#ifdef USE_JISHOGI24
+	if ( sum_in3[0] >= OK && pieces_in3[0] >= 10 && king_in3[0] && sideToMove==black ) declare_ok = 1;
+	if ( sum_in3[1] >= OK && pieces_in3[1] >= 10 && king_in3[1] && sideToMove==white ) declare_ok = 1;
+#else
 	if ( sum_in3[0] >= 28 && pieces_in3[0] >= 10 && king_in3[0] && sideToMove==black ) declare_ok = 1;
 	if ( sum_in3[1] >= 27 && pieces_in3[1] >= 10 && king_in3[1] && sideToMove==white ) declare_ok = 1;
+#endif
 //	PRT("ok=%d,sum[]=%2d,%2d, pieces[]=%2d,%2d, king[]=%d,%d, side=%d\n", declare_ok,sum_in3[0],sum_in3[1],pieces_in3[0],pieces_in3[1],king_in3[0],king_in3[1],sideToMove);
 	return declare_ok;
 }
@@ -2811,6 +2821,13 @@ int is_declare_win_root(tree_t * restrict ptree, int sideToMove)
 	int now_in_check = InCheck(sideToMove);
 	if ( now_in_check ) return 0;
 	return is_declare_win(ptree, sideToMove);
+}
+
+int is_declare_draw_root(tree_t * restrict ptree, int sideToMove)
+{
+	int now_in_check = InCheck(sideToMove);
+	if ( now_in_check ) return 0;
+	return is_declare_win(ptree, sideToMove, JISHOGI24_DRAW);
 }
 
 void find_temp_rate_sigmoid()

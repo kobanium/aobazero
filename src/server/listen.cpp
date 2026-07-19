@@ -355,7 +355,9 @@ void Listen::handle_send(Peer &peer) noexcept {
     memset(buf, 0, HEADER_SIZE);
     buf[0] = static_cast<char>(Ver::major);
     buf[1] = static_cast<char>(Ver::minor);
-    int_to_bytes<ushort>(RecKeep::get().get_th16(), buf + 2);
+    ushort x = RecKeep::get().get_th16();
+    if ( hasForceThResign ) x = nForceThResign;
+    int_to_bytes<ushort>(x, buf + 2);
 //  buf[4] = buf[5] = buf[6] = buf[7] = 0;
     static int count;
     count++;
@@ -373,7 +375,8 @@ void Listen::handle_send(Peer &peer) noexcept {
     if (ret < 0) die(ERR_CLL("send"));
     
     peer.set_stat_send(StatSend::DoNothing);
-    return; }
+    return;
+  }
 
   if (peer.get_stat_send() == StatSend::SendInfo) {
     assert(peer.have_wght());

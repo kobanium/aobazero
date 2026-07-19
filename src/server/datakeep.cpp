@@ -56,6 +56,10 @@ int nHandicapRate[HANDICAP_TYPE];
 const char AVERAGE_WINRATE_SYN[] = "./handicap/average_winrate.txt";
 int nAverageWinrate;
 
+const char FORCE_TH_RESIGN_SYN[] = "./handicap/force_th_resign.txt";
+int nForceThResign;
+bool hasForceThResign = false;
+
 void load_hadicap() {
 /*
 	FILE *fp = fopen(HANDICAP_SYN,"r");
@@ -84,6 +88,19 @@ void load_hadicap() {
 		std::cout << "fail read AVERAGE_WINRATE_SYN " << std::endl;
 	}
 	fclose(fp);
+
+	fp = fopen(FORCE_TH_RESIGN_SYN,"r");
+	if ( fp==NULL ) {
+		hasForceThResign = false;
+	} else {
+		hasForceThResign = true;
+		if ( fgets( str, 255, fp ) == NULL ) die(ERR_INT("FORCE_TH_RESIGN ERROR"));
+		int ret = sscanf(str,"%d",&nForceThResign);
+		if ( ret != 1 ) {
+			std::cout << "fail read FORCE_TH_RESIGN " << std::endl;
+		}
+		fclose(fp);
+	}
 }
 
 static bool

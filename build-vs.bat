@@ -13,6 +13,10 @@ set USE_CPUBLAS_AOBA=OpenBLAS
 @rem uncomment if you want to use POLICY2187
 set USE_POLICY2187=1
 
+@rem uncomment if you want to use USE_JISHOGI24
+set USE_JISHOGI24=1
+
+
 @cd /d %~dp0
 @del /q *~ bin\*.dll bin\*.exe src\common\tbl_*.inc 2> nul
 @rmdir /s /q objs 2> nul
@@ -52,6 +56,9 @@ set USE_POLICY2187=1
 )
 @if "%USE_POLICY2187%"=="1" (
     set CPPFLAGS=%CPPFLAGS% /DUSE_POLICY2187
+)
+@if "%USE_JISHOGI24%"=="1" (
+    set CPPFLAGS=%CPPFLAGS% /DUSE_JISHOGI24
 )
 
 cl %CPPFLAGS% %CXXFLAGS% src\gencode\gencode.cpp

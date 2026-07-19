@@ -17,6 +17,8 @@ namespace OSI { class IAddr; }
 
 extern int nHandicapRate[HANDICAP_TYPE];
 extern int nAverageWinrate;
+extern int nForceThResign;
+extern bool hasForceThResign;
 
 class Wght {
   int64_t _no;
