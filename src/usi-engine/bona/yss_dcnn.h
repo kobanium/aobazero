@@ -74,6 +74,8 @@ const int MATE_DFPN_2 = 8;
 const int MATE_DFPN_3 = 16;
 const int MATE_DFPN_4 = 32;
 
+const int JISHOGI24_DRAW = 24;
+const int JISHOGI24_WIN  = 31;
 
 extern int fAddNoise;
 extern int fVisitCount;
@@ -110,8 +112,9 @@ int is_send_usi_info();
 void send_usi_info(tree_t * restrict ptree, int sideToMove, int ply, int nodes, int nps);
 void usi_newgame(tree_t * restrict ptree);
 void usi_position(tree_t * restrict ptree);
-int is_declare_win(tree_t * restrict ptree, int sideToMove);
+int is_declare_win(tree_t * restrict ptree, int sideToMove, int OK = JISHOGI24_WIN);
 int is_declare_win_root(tree_t * restrict ptree, int sideToMove);
+int is_declare_draw_root(tree_t * restrict ptree, int sideToMove);
 int get_thread_id(tree_t * restrict ptree);
 bool is_selfplay();
 double get_sigmoid_temperature_from_rate(int rate);

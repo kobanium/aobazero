@@ -53,6 +53,11 @@ ifeq ($(USE_POLICY2187), 1)
 	CPPFLAGS += -DUSE_POLICY2187
 endif
 
+USE_JISHOGI24 ?= 0
+ifeq ($(USE_JISHOGI24), 1)
+	CPPFLAGS += -DUSE_JISHOGI24
+endif
+
 CXXFLAGS += -std=c++11 -Wextra -Ofast -march=native -mtune=native
 CPPFLAGS += -MD -MP -Isrc/common -DUSE_SSE4
 LDFLAGS  += -llzma -lpthread -lrt

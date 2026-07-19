@@ -478,6 +478,9 @@ public:
     _record_handicap = string(", average_winrate ") + buf;
     sprintf(buf,", sfen %d/%d, moves %d",_sfen_index,SFEN_MAX,_sfen_moves);
     _record_handicap += buf;
+#ifdef USE_JISHOGI24
+    _record_handicap += ", JISHOGI24";
+#endif
 
     engine_out("usinewgame");
   }

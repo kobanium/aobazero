@@ -326,7 +326,11 @@ bool Board::is_nyugyoku(const Color &turn, const uint handicap) const noexcept {
     if ( handicap == 5 ) { add = 12; }	// 4mai
     if ( handicap == 6 ) { add = 14; }	// 6mai
   }
+#ifdef USE_JISHOGI24
+  if (nall + 4U * nbig +                    + add < 32U) return false;	// nall includes king. 24 draw, 31 win.
+#else
   if (nall + 4U * nbig + bonus[turn.to_u()] + add < 29U) return false;	// nall includes king.
+#endif
   if (is_incheck(turn)) return false;
   return true; }
 
